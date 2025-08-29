@@ -82,7 +82,7 @@ export function DashboardNav() {
         <div className="flex items-center justify-between p-2">
             <div className="flex items-center gap-3">
                 <Avatar className="h-9 w-9">
-                    <AvatarImage src="https://placehold.co/40x40.png" alt="@abogado" />
+                    <AvatarImage src="https://picsum.photos/40/40" alt="@abogado" data-ai-hint="professional headshot" />
                     <AvatarFallback>JP</AvatarFallback>
                 </Avatar>
                 {state === 'expanded' && (
@@ -94,7 +94,7 @@ export function DashboardNav() {
             </div>
             {state === 'expanded' && (
                 <Button variant="ghost" size="icon" className="h-8 w-8 text-sidebar-foreground" asChild>
-                    <Link href="/"><LogOut size={16} /></Link>
+                    <Link href="/login"><LogOut size={16} /></Link>
                 </Button>
             )}
         </div>

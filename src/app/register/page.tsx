@@ -157,7 +157,7 @@ export default function RegisterPage() {
             </Form>
             <div className="mt-4 text-center text-sm">
               ¿Ya tienes una cuenta?{' '}
-              <Link href="/" className="underline">
+              <Link href="/login" className="underline">
                 Inicia sesión
               </Link>
             </div>
@@ -166,7 +166,7 @@ export default function RegisterPage() {
       </div>
       <div className="hidden bg-muted lg:block">
         <Image
-          src="https://placehold.co/1200x900.png"
+          src="https://picsum.photos/1200/900"
           alt="Image"
           width="1920"
           height="1080"
