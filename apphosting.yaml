@@ -12,9 +12,9 @@ env:
     secret: FIREBASE_CLIENT_EMAIL
   - variable: APP_PRIVATE_KEY
     secret: FIREBASE_PRIVATE_KEY
-  # Bucket: secret garantiza inyección en runtime (value: no siempre llega en App Hosting)
+  # Bucket (no es sensible; FIREBASE_CONFIG también lo inyecta; firebase-admin tiene fallback)
   - variable: APP_STORAGE_BUCKET
-    secret: APP_STORAGE_BUCKET
+    value: caseclarity-hij0x.firebasestorage.app
   - variable: GOOGLE_GENAI_API_KEY
     secret: GOOGLE_GENAI_API_KEY
 
