@@ -1,60 +1,125 @@
+import { initializeApp, getApps, getApp, cert } from 'firebase-admin/app';
+import { getFirestore } from 'firebase-admin/firestore';
+import { getAuth as getAdminAuth } from 'firebase-admin/auth';
+import { getStorage } from 'firebase-admin/storage';
+import * as fs from 'fs';
+import * as path from 'path';
 
-'use server';
-import * as admin from 'firebase-admin';
-
-// --- INSTRUCCIÓN IMPORTANTE ---
-// PEGA TU CLAVE DE CUENTA DE SERVICIO DE FIREBASE AQUÍ
-// Reemplaza el objeto `null` de abajo con el contenido completo de tu archivo JSON de clave de servicio.
-const serviceAccount = null;
-// Ejemplo:
-// const serviceAccount = {
-//   "type": "service_account",
-//   "project_id": "tu-project-id",
-//   ...
-// };
-// --------------------------
-
-let db: admin.firestore.Firestore | null = null;
-let auth: admin.auth.Auth | null = null;
-
-if (process.env.NODE_ENV === 'development' && !admin.apps.length) {
-    console.log("Initializing Firebase Admin SDK for DEVELOPMENT...");
+function getCredentialFromEnv() {
+  // App Hosting no permite vars que empiecen con FIREBASE_, usamos APP_*
+  const projectId = process.env.APP_PROJECT_ID ?? process.env.FIREBASE_PROJECT_ID;
+  const clientEmail = process.env.APP_CLIENT_EMAIL ?? process.env.FIREBASE_CLIENT_EMAIL;
+  const privateKey = (process.env.APP_PRIVATE_KEY ?? process.env.FIREBASE_PRIVATE_KEY)?.replace(/\\n/g, '\n');
+  const storageBucket = process.env.APP_STORAGE_BUCKET ?? process.env.FIREBASE_STORAGE_BUCKET;
+  if (projectId && clientEmail && privateKey) {
+    return { projectId, clientEmail, privateKey, storageBucket };
+  }
+  return null;
 }
 
-if (!admin.apps.length) {
-  if (serviceAccount && serviceAccount.project_id) {
-    try {
-      admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount),
-      });
-      console.log('Firebase Admin SDK inicializado correctamente.');
-      db = admin.firestore();
-      auth = admin.auth();
-    } catch (error: any) {
-      console.error('ERROR CRÍTICO: Fallo al inicializar Firebase Admin SDK.', error.message);
-      // Dejar db y auth como null si falla.
+function getCredentialFromFile() {
+  const envPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+  const paths = [
+    envPath && path.isAbsolute(envPath) ? envPath : envPath ? path.join(process.cwd(), envPath) : null,
+    path.join(process.cwd(), 'caseclarity-hij0x-firebase-adminsdk-fbsvc-18fc24b926.json'),
+  ].filter(Boolean) as string[];
+  for (const p of paths) {
+    if (fs.existsSync(p)) {
+      try {
+        const data = JSON.parse(fs.readFileSync(p, 'utf-8'));
+        return {
+          projectId: data.project_id,
+          clientEmail: data.client_email,
+          privateKey: data.private_key,
+          storageBucket: data.project_id + '.firebasestorage.app',
+        };
+      } catch {
+        continue;
+      }
     }
-  } else {
-    console.error('ERROR CRÍTICO: La clave de servicio (serviceAccount) no está configurada en src/lib/firebase-admin.ts.');
   }
-} else {
-    // Si ya está inicializado, simplemente obtén las instancias.
-    db = admin.firestore();
-    auth = admin.auth();
+  return null;
 }
 
-function getDb() {
-  if (!db) {
-    throw new Error('La base de datos de Firebase Admin no está disponible. Revisa los registros del servidor para ver el error de inicialización.');
+const ADMIN_APP_NAME = 'caseclarity-admin';
+let adminApp: ReturnType<typeof initializeApp> | null = null;
+
+/** Inicialización diferida: solo al primer uso. Usa app con nombre para no chocar con app por defecto del framework. */
+function ensureInitialized() {
+  if (adminApp) return adminApp;
+  const cred = getCredentialFromEnv() ?? getCredentialFromFile();
+  if (!cred) {
+    throw new Error('Firebase Admin no inicializado. Configurá APP_PROJECT_ID, APP_CLIENT_EMAIL, APP_PRIVATE_KEY (o FIREBASE_* en .env.local)');
   }
-  return db;
+  // Firebase Storage: APP_STORAGE_BUCKET → FIREBASE_CONFIG (App Hosting) → projectId.firebasestorage.app
+  // FIREBASE_CONFIG es auto-inyectado por App Hosting en runtime con storageBucket correcto
+  const fromFirebaseConfig = ((): string | null => {
+    try {
+      const cfg = process.env.FIREBASE_CONFIG;
+      if (cfg && typeof cfg === 'string' && cfg.trim().startsWith('{')) {
+        const parsed = JSON.parse(cfg) as { storageBucket?: string };
+        return parsed?.storageBucket?.trim() || null;
+      }
+    } catch {
+      /* ignorar */
+    }
+    return null;
+  })();
+  // Prioridad: env correcto → FIREBASE_CONFIG (tiene firebasestorage.app) → fallback
+  // Si apphosting.yaml tiene appspot.com (bucket inexistente), FIREBASE_CONFIG lo corrige
+  let storageBucket =
+    cred.storageBucket?.trim() || fromFirebaseConfig || `${cred.projectId}.firebasestorage.app`;
+  if (storageBucket.endsWith('.appspot.com') && fromFirebaseConfig) {
+    storageBucket = fromFirebaseConfig; // FIREBASE_CONFIG tiene el bucket real
+  }
+  if (!storageBucket.endsWith('.firebasestorage.app') && !storageBucket.endsWith('.appspot.com')) {
+    storageBucket = `${cred.projectId}.firebasestorage.app`; // forzar formato nuevo
+  }
+
+  if (typeof process !== 'undefined' && process.env?.NODE_ENV !== 'test') {
+    console.log('[firebase-admin] storageBucket resolved:', storageBucket);
+  }
+
+  const firebaseAdminConfig = {
+    credential: cert({
+      projectId: cred.projectId,
+      clientEmail: cred.clientEmail,
+      privateKey: cred.privateKey,
+    }),
+    storageBucket,
+  };
+  try {
+    adminApp = getApp(ADMIN_APP_NAME) as ReturnType<typeof initializeApp>;
+  } catch {
+    adminApp = initializeApp(firebaseAdminConfig, ADMIN_APP_NAME);
+  }
+  return adminApp;
 }
 
-function getAuth() {
-  if (!auth) {
-    throw new Error('El servicio de autenticación de Firebase Admin no está disponible. Revisa los registros del servidor para ver el error de inicialización.');
-  }
-  return auth;
+export function getAdminApp() {
+  return ensureInitialized();
 }
 
-export { getDb, getAuth };
+/** Lazy: inicializa y retorna Firestore */
+export function getAdminDb() {
+  return getFirestore(ensureInitialized());
+}
+
+/** Lazy: inicializa y retorna Storage */
+export function getAdminStorage() {
+  return getStorage(ensureInitialized());
+}
+
+/** Nombre del bucket resuelto (para pasar explícitamente a bucket()) */
+export function getStorageBucketName(): string {
+  const app = ensureInitialized();
+  return getStorage(app).bucket().name;
+}
+
+/** Wrappers para compatibilidad con settings/actions y otros que usan getDb/getAuth */
+export function getDb() {
+  return getAdminDb();
+}
+export function getAuth() {
+  return getAdminAuth(getAdminApp());
+}

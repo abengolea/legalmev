@@ -1,7 +1,11 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
+import { auth, db } from '@/lib/firebase';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { signOut } from 'firebase/auth';
 import {
   Sidebar,
   SidebarHeader,
@@ -14,17 +18,37 @@ import {
 import { Separator } from './ui/separator';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Button } from './ui/button';
-import { LayoutDashboard, Gavel, Settings, LogOut, ChevronRight, Briefcase, Shield } from 'lucide-react';
+import { LayoutDashboard, LogOut, Shield } from 'lucide-react';
 import { Logo } from './Logo';
 import { useSidebar } from '@/components/ui/sidebar';
 
 export function DashboardNav() {
   const pathname = usePathname();
+  const router = useRouter();
   const { state } = useSidebar();
+  const [userData, setUserData] = useState<{ name?: string; email?: string; role?: string } | null>(null);
+
+  useEffect(() => {
+    const unsubAuth = auth.onAuthStateChanged((user) => {
+      if (!user) return;
+      const unsubDoc = onSnapshot(doc(db, 'users', user.uid), (snap) => {
+        setUserData((snap.data() as { name?: string; email?: string; role?: string }) ?? null);
+      });
+      return () => unsubDoc();
+    });
+    return () => unsubAuth();
+  }, []);
 
   const isActive = (path: string) => {
     return pathname.startsWith(path) && (path !== '/' || pathname === '/');
   };
+
+  const initials = userData?.name
+    ?.split(' ')
+    .map((n) => n[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2) || 'U';
 
   return (
     <Sidebar>
@@ -45,36 +69,18 @@ export function DashboardNav() {
               <Link href="/dashboard">Panel</Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              asChild
-              isActive={isActive('/cases')} 
-              icon={<Briefcase />}
-              tooltip={{ children: 'Casos' }}
-            >
-              <Link href="/cases">Casos</Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-           <SidebarMenuItem>
-            <SidebarMenuButton
-              asChild
-              isActive={isActive('/admin')} 
-              icon={<Shield />}
-              tooltip={{ children: 'Admin' }}
-            >
-              <Link href="/admin">Admin</Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              asChild
-              isActive={isActive('/settings')} 
-              icon={<Settings />}
-              tooltip={{ children: 'Configuración' }}
-            >
-              <Link href="/settings">Configuración</Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
+          {userData?.role === 'admin' && (
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                isActive={isActive('/admin')}
+                icon={<Shield />}
+                tooltip={{ children: 'Admin' }}
+              >
+                <Link href="/admin">Admin</Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          )}
         </SidebarMenu>
       </SidebarContent>
       <SidebarFooter>
@@ -82,19 +88,23 @@ export function DashboardNav() {
         <div className="flex items-center justify-between p-2">
             <div className="flex items-center gap-3">
                 <Avatar className="h-9 w-9">
-                    <AvatarImage src="https://picsum.photos/40/40" alt="@abogado" data-ai-hint="professional headshot" />
-                    <AvatarFallback>JP</AvatarFallback>
+                    <AvatarFallback>{initials}</AvatarFallback>
                 </Avatar>
                 {state === 'expanded' && (
-                    <div className="flex flex-col">
-                        <span className="text-sm font-medium text-sidebar-foreground">Juan Pérez</span>
-                        <span className="text-xs text-muted-foreground">juan.perez@bufete.com</span>
+                    <div className="flex flex-col min-w-0">
+                        <span className="text-sm font-medium text-sidebar-foreground truncate">{userData?.name || 'Usuario'}</span>
+                        <span className="text-xs text-muted-foreground truncate">{userData?.email || ''}</span>
                     </div>
                  )}
             </div>
             {state === 'expanded' && (
-                <Button variant="ghost" size="icon" className="h-8 w-8 text-sidebar-foreground" asChild>
-                    <Link href="/login"><LogOut size={16} /></Link>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-sidebar-foreground shrink-0"
+                  onClick={() => signOut(auth).then(() => router.push('/login'))}
+                >
+                  <LogOut size={16} />
                 </Button>
             )}
         </div>

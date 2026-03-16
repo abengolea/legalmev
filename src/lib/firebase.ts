@@ -1,16 +1,17 @@
 // Import the functions you need from the SDKs you need
-import {initializeApp} from 'firebase/app';
-import {getFirestore} from 'firebase/firestore';
-import {getAuth} from 'firebase/auth';
+import { initializeApp } from 'firebase/app';
+import { getFirestore } from 'firebase/firestore';
+import { getAuth } from 'firebase/auth';
 
-// Your web app's Firebase configuration
+// Placeholder para build cuando NEXT_PUBLIC_* no están (ej. Firebase App Hosting build)
+// En runtime deben estar configuradas en apphosting.yaml / env
 const firebaseConfig = {
-  apiKey: "AIzaSyBptmLosuoD6k1jQFduYc_eQET3DCjPQFA",
-  authDomain: "caseclarity-hij0x.firebaseapp.com",
-  projectId: "caseclarity-hij0x",
-  storageBucket: "caseclarity-hij0x.appspot.com",
-  messagingSenderId: "911388046994",
-  appId: "1:911388046994:web:1918aa59a91a004365984b"
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || 'AIzaSy000000000000000000000000000000000',
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || 'localhost',
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'demo-project',
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || 'demo-project.appspot.com',
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || '000000000000',
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || '1:000000000000:web:0000000000000000000000',
 };
 
 // Initialize Firebase

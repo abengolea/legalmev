@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { collection, onSnapshot } from 'firebase/firestore';
+import { collection, onSnapshot, doc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import {
   Card,
@@ -27,7 +27,7 @@ import {
 } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Cpu, Database, Edit, Trash2, Users, CheckCircle, XCircle, FileText, Shield, MessageSquare, Bot, Send, PlusCircle } from 'lucide-react';
+import { Cpu, Database, Users, XCircle, FileText, MessageSquare, Bot, Send, PlusCircle, Zap, CreditCard, BarChart3 } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { clientIntakeAutomation } from '@/ai/flows/client-intake-automation';
@@ -35,6 +35,7 @@ import { cn } from '@/lib/utils';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Label } from '@/components/ui/label';
+import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
 
 type User = {
@@ -43,6 +44,9 @@ type User = {
   email: string;
   role: string;
   status: string;
+  tier?: 'free' | 'premium';
+  freeDownloadsUsed?: number;
+  downloadsThisMonth?: number;
   phone?: string;
 };
 
@@ -69,6 +73,8 @@ const getStatusBadge = (status: string) => {
     switch(status.toLowerCase()) {
         case 'activo':
             return <Badge className="bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300 border-green-300">Activo</Badge>;
+        case 'pendiente':
+            return <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300 border-amber-300">Pendiente</Badge>;
         case 'inactivo':
             return <Badge className="bg-gray-100 text-gray-800 dark:bg-gray-900/50 dark:text-gray-300 border-gray-300">Inactivo</Badge>;
         case 'bloqueado':
@@ -218,12 +224,14 @@ function AITestChat() {
 function UserManagement() {
   const [users, setUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const { toast } = useToast();
 
   useEffect(() => {
     setIsLoading(true);
     const usersCollection = collection(db, 'users');
     const unsubscribe = onSnapshot(usersCollection, (snapshot) => {
-      const userList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
+      const userList = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as User));
       setUsers(userList);
       setIsLoading(false);
     }, (error) => {
@@ -231,16 +239,33 @@ function UserManagement() {
       setIsLoading(false);
     });
 
-    // Cleanup subscription on unmount
     return () => unsubscribe();
   }, []);
+
+  const handleUpgradePremium = async (userId: string) => {
+    setUpdatingId(userId);
+    try {
+      const userRef = doc(db, 'users', userId);
+      await updateDoc(userRef, {
+        tier: 'premium',
+        downloadsThisMonth: 0,
+        monthlyResetAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      });
+      toast({ title: 'Usuario actualizado a Premium', description: '100 expedientes/mes disponibles.' });
+    } catch (e) {
+      console.error(e);
+      toast({ variant: 'destructive', title: 'Error', description: 'No se pudo actualizar.' });
+    } finally {
+      setUpdatingId(null);
+    }
+  };
 
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
         <div>
           <CardTitle>Gestión de Usuarios</CardTitle>
-          <CardDescription>Ver y gestionar todos los usuarios en el sistema.</CardDescription>
+          <CardDescription>Asigná tier y gestioná descargas (5 free / 100 premium/mes). Los usuarios se verifican por email al registrarse.</CardDescription>
         </div>
         <Button asChild>
           <Link href="/admin/users/new">
@@ -261,6 +286,7 @@ function UserManagement() {
                 <TableHead>Teléfono</TableHead>
                 <TableHead>Rol</TableHead>
                 <TableHead>Estado</TableHead>
+                <TableHead>Plan</TableHead>
                 <TableHead className="text-right">Acciones</TableHead>
               </TableRow>
             </TableHeader>
@@ -272,9 +298,27 @@ function UserManagement() {
                   <TableCell>{user.phone || '-'}</TableCell>
                   <TableCell><Badge variant="outline">{user.role}</Badge></TableCell>
                   <TableCell>{getStatusBadge(user.status)}</TableCell>
-                  <TableCell className="text-right">
-                    <Button variant="ghost" size="icon"><Edit className="h-4 w-4" /></Button>
-                    <Button variant="ghost" size="icon" className="text-red-500 hover:text-red-600"><Trash2 className="h-4 w-4" /></Button>
+                  <TableCell>
+                    <Badge variant={user.tier === 'premium' ? 'default' : 'secondary'}>
+                      {user.tier === 'premium' ? 'Premium' : 'Gratis'}
+                    </Badge>
+                    {user.tier === 'free' && user.status === 'activo' && (
+                      <span className="ml-1 text-xs text-muted-foreground">
+                        ({user.freeDownloadsUsed ?? 0}/5)
+                      </span>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-right space-x-1">
+                    {user.tier !== 'premium' && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleUpgradePremium(user.id)}
+                        disabled={updatingId === user.id}
+                      >
+                        <Zap className="h-4 w-4 mr-1" /> Premium
+                      </Button>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}
@@ -286,6 +330,166 @@ function UserManagement() {
   );
 }
 
+function PaymentsConfig() {
+  const { toast } = useToast();
+  const [settings, setSettings] = useState({
+    stripePublishableKey: '',
+    premiumPriceId: '',
+    premiumPriceAmount: 0,
+    currency: 'ARS',
+    contactEmail: 'contacto@legalmev.com',
+  });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    async function fetchSettings() {
+      try {
+        const { auth } = await import('@/lib/firebase');
+        const user = auth.currentUser;
+        if (!user) return;
+        const token = await user.getIdToken();
+        const res = await fetch('/api/admin/settings/payments', { headers: { Authorization: `Bearer ${token}` } });
+        const json = await res.json();
+        if (json.ok && json.settings) setSettings(json.settings);
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoading(false);
+      }
+    }
+    void fetchSettings();
+  }, []);
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      const { auth } = await import('@/lib/firebase');
+      const user = auth.currentUser;
+      if (!user) throw new Error('No autenticado');
+      const token = await user.getIdToken();
+      const res = await fetch('/api/admin/settings/payments', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(settings),
+      });
+      const json = await res.json();
+      if (json.ok) toast({ title: 'Guardado', description: 'Configuración de pagos actualizada.' });
+      else toast({ variant: 'destructive', title: 'Error', description: json.error ?? 'No se pudo guardar.' });
+    } catch (err) {
+      toast({ variant: 'destructive', title: 'Error', description: 'No se pudo guardar.' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) return <p className="text-muted-foreground">Cargando...</p>;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Configuración de Pagos</CardTitle>
+        <CardDescription>Stripe y datos de contacto para solicitudes premium. Las claves secretas se configuran en variables de entorno.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={handleSave} className="space-y-4">
+          <div>
+            <Label htmlFor="stripePk">Stripe Publishable Key</Label>
+            <Input id="stripePk" value={settings.stripePublishableKey} onChange={(e) => setSettings((s) => ({ ...s, stripePublishableKey: e.target.value }))} placeholder="pk_live_..." />
+          </div>
+          <div>
+            <Label htmlFor="priceId">Premium Price ID (Stripe)</Label>
+            <Input id="priceId" value={settings.premiumPriceId} onChange={(e) => setSettings((s) => ({ ...s, premiumPriceId: e.target.value }))} placeholder="price_..." />
+          </div>
+          <div>
+            <Label htmlFor="amount">Monto Premium (mostrar)</Label>
+            <Input id="amount" type="number" value={settings.premiumPriceAmount || ''} onChange={(e) => setSettings((s) => ({ ...s, premiumPriceAmount: Number(e.target.value) || 0 }))} placeholder="9999" />
+          </div>
+          <div>
+            <Label htmlFor="currency">Moneda</Label>
+            <Input id="currency" value={settings.currency} onChange={(e) => setSettings((s) => ({ ...s, currency: e.target.value }))} placeholder="ARS" />
+          </div>
+          <div>
+            <Label htmlFor="contact">Email de contacto (premium)</Label>
+            <Input id="contact" type="email" value={settings.contactEmail} onChange={(e) => setSettings((s) => ({ ...s, contactEmail: e.target.value }))} placeholder="contacto@legalmev.com" />
+          </div>
+          <Button type="submit" disabled={saving}>{saving ? 'Guardando...' : 'Guardar'}</Button>
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
+
+function Stats() {
+  const [stats, setStats] = useState<{
+    totalUsers?: number;
+    premiumUsers?: number;
+    freeUsers?: number;
+    totalExportaciones?: number;
+    exportacionesEsteMes?: number;
+  } | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchStats() {
+      try {
+        const { auth } = await import('@/lib/firebase');
+        const user = auth.currentUser;
+        if (!user) return;
+        const token = await user.getIdToken();
+        const res = await fetch('/api/admin/stats', { headers: { Authorization: `Bearer ${token}` } });
+        const json = await res.json();
+        if (json.ok && json.stats) setStats(json.stats);
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoading(false);
+      }
+    }
+    void fetchStats();
+  }, []);
+
+  if (loading) return <p className="text-muted-foreground">Cargando...</p>;
+  if (!stats) return <p className="text-muted-foreground">No se pudieron cargar las estadísticas.</p>;
+
+  return (
+    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-medium">Usuarios totales</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-3xl font-bold">{stats.totalUsers ?? 0}</p>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-medium">Usuarios Premium</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-3xl font-bold">{stats.premiumUsers ?? 0}</p>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-medium">Exportaciones totales</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-3xl font-bold">{stats.totalExportaciones ?? 0}</p>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-medium">Exportaciones este mes</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-3xl font-bold">{stats.exportacionesEsteMes ?? 0}</p>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
 
 export default function AdminPage() {
   return (
@@ -296,8 +500,10 @@ export default function AdminPage() {
       </div>
 
       <Tabs defaultValue="users" className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="users"><Users className="mr-2"/> Usuarios</TabsTrigger>
+          <TabsTrigger value="stats"><BarChart3 className="mr-2"/> Estadísticas</TabsTrigger>
+          <TabsTrigger value="payments"><CreditCard className="mr-2"/> Pagos</TabsTrigger>
           <TabsTrigger value="system"><Cpu className="mr-2"/> Sistema</TabsTrigger>
           <TabsTrigger value="logs"><FileText className="mr-2"/> Registros</TabsTrigger>
           <TabsTrigger value="ai-test"><Bot className="mr-2"/> Test IA</TabsTrigger>
@@ -305,6 +511,14 @@ export default function AdminPage() {
 
         <TabsContent value="users">
           <UserManagement />
+        </TabsContent>
+
+        <TabsContent value="stats">
+          <Stats />
+        </TabsContent>
+
+        <TabsContent value="payments">
+          <PaymentsConfig />
         </TabsContent>
 
         <TabsContent value="system">

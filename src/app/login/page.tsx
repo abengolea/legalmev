@@ -2,7 +2,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -27,6 +27,8 @@ type LoginFormValues = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirectTo = searchParams.get('redirect');
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
 
@@ -45,12 +47,15 @@ export default function LoginPage() {
       toast({
         title: '¡Bienvenido de nuevo!',
       });
-      router.push('/dashboard');
+      const dest = redirectTo && redirectTo.startsWith('/') && !redirectTo.startsWith('//') ? redirectTo : '/dashboard';
+      router.push(dest);
     } catch (error: any) {
       console.error('Error signing in:', error);
       let description = 'Ocurrió un error inesperado.';
       if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
         description = 'El correo electrónico o la contraseña son incorrectos.';
+      } else if (error.code === 'auth/network-request-failed' || error.code === 'auth/invalid-api-key') {
+        description = 'Revisa tu conexión y la configuración de Firebase (variables de entorno).';
       }
       toast({
         variant: 'destructive',
@@ -95,7 +100,7 @@ export default function LoginPage() {
                   <FormItem>
                     <div className="flex items-center">
                       <FormLabel>Contraseña</FormLabel>
-                      <Link href="#" className="ml-auto inline-block text-sm underline">
+                      <Link href="/forgot-password" className="ml-auto inline-block text-sm underline">
                         ¿Olvidaste tu contraseña?
                       </Link>
                     </div>

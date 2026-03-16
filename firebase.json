@@ -1,0 +1,34 @@
+{
+  "firestore": {
+    "rules": "firestore.rules"
+  },
+  "hosting": {
+    "source": ".",
+    "ignore": [
+      "firebase.json",
+      "**/node_modules/**",
+      ".git",
+      ".env",
+      ".env.local",
+      ".env.development"
+    ]
+  },
+  "apphosting": [
+    {
+      "backendId": "legalmev",
+      "rootDir": ".",
+      "ignore": [
+        "node_modules",
+        "**/node_modules",
+        ".git",
+        ".next",
+        ".firebase",
+        "mev_descarga",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        ".genkit"
+      ],
+      "alwaysDeployFromSource": true
+    }
+  ]
+}

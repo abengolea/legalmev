@@ -1,27 +1,22 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import { Toaster } from '@/components/ui/toaster';
-import Link from 'next/link';
+
+// Evita prerender durante build cuando NEXT_PUBLIC_FIREBASE_* no están disponibles
+export const dynamic = 'force-dynamic';
+
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.legalmev.com.ar';
 
 export const metadata: Metadata = {
-  title: 'CaseClarity',
-  description: 'El filtro inteligente para bufetes de abogados modernos.',
+  metadataBase: new URL(SITE_URL.replace(/\/$/, '')),
+  title: 'LegalMev',
+  description: 'Sistema de gestión legal',
 };
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="es" suppressHydrationWarning>
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-        <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet" />
-      </head>
-      <body className="font-body antialiased">
+    <html lang="es">
+      <body>
         {children}
         <Toaster />
       </body>

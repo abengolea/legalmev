@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { createUserWithEmailAndPassword, sendEmailVerification } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 
@@ -54,14 +54,19 @@ export default function RegisterPage() {
       await setDoc(doc(db, 'users', user.uid), {
         name: `${data.firstName} ${data.lastName}`,
         email: data.email,
-        role: 'abogado', // Default role for self-registration
-        status: 'activo', // Default status for new users
-        phone: '', // Phone can be added later from their profile settings
+        role: 'abogado',
+        status: 'activo',
+        tier: 'free',
+        freeDownloadsUsed: 0,
+        phone: '',
       });
 
+      // Step 3: Enviar email de verificación (requerido para habilitar descargas)
+      await sendEmailVerification(user);
+
       toast({
-        title: '¡Registro Exitoso!',
-        description: 'Tu cuenta ha sido creada. Bienvenido.',
+        title: '¡Registro exitoso!',
+        description: 'Te enviamos un correo para verificar tu email. Hacé clic en el enlace para habilitar las descargas.',
       });
       router.push('/dashboard');
     } catch (error: any) {
@@ -91,7 +96,7 @@ export default function RegisterPage() {
           <CardHeader>
             <Logo />
             <CardTitle className="text-2xl font-headline mt-4">Crea tu Cuenta</CardTitle>
-            <CardDescription>Introduce tu información para crear una cuenta y empezar a filtrar casos.</CardDescription>
+            <CardDescription>Creá tu cuenta para solicitar acceso a la exportación de expedientes (MEV/PJN) a PDF.</CardDescription>
           </CardHeader>
           <CardContent>
             <Form {...form}>

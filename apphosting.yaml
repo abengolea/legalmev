@@ -12,8 +12,9 @@ env:
     secret: FIREBASE_CLIENT_EMAIL
   - variable: APP_PRIVATE_KEY
     secret: FIREBASE_PRIVATE_KEY
+  # Bucket: secret garantiza inyección en runtime (value: no siempre llega en App Hosting)
   - variable: APP_STORAGE_BUCKET
-    value: caseclarity-hij0x.appspot.com
+    secret: APP_STORAGE_BUCKET
   - variable: GOOGLE_GENAI_API_KEY
     secret: GOOGLE_GENAI_API_KEY
 
