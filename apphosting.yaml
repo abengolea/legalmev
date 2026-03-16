@@ -18,9 +18,10 @@ env:
     secret: GOOGLE_GENAI_API_KEY
 
   # Firebase Cliente (NEXT_PUBLIC_* = build time, necesarias para Auth en producción)
-  # Valores de: Firebase Console > Project Settings > General > Your apps (Web app)
+  # Crear secrets con: firebase apphosting:secrets:set NOMBRE_SECRETO
+  # Valores en: Firebase Console > Project Settings > General > Your apps (Web app)
   - variable: NEXT_PUBLIC_FIREBASE_API_KEY
-    value: AIzaSyBptmLosuoD6k1jQFduYc_eQET3DCjPQFA
+    secret: NEXT_PUBLIC_FIREBASE_API_KEY
   - variable: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
     value: caseclarity-hij0x.firebaseapp.com
   - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID
@@ -30,7 +31,7 @@ env:
   - variable: NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
     value: "911388046994"
   - variable: NEXT_PUBLIC_FIREBASE_APP_ID
-    value: "1:911388046994:web:b903def19407f61965984b"
+    secret: NEXT_PUBLIC_FIREBASE_APP_ID
 
 # Variables de entorno: configurarlas en Firebase Console (Build > App Hosting > Settings > Environment)
 # o aquí usando secret: para datos sensibles (crear con: firebase apphosting:secrets:set NOMBRE_SECRETO)
