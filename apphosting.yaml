@@ -2,6 +2,49 @@
 # https://firebase.google.com/docs/app-hosting/configure
 
 runConfig:
-  # Increase this value if you'd like to automatically spin up
-  # more instances in response to increased traffic.
-  maxInstances: 1
+  minInstances: 0
+  maxInstances: 3
+env:
+  # Firebase Admin (servidor)
+  - variable: APP_PROJECT_ID
+    secret: FIREBASE_PROJECT_ID
+  - variable: APP_CLIENT_EMAIL
+    secret: FIREBASE_CLIENT_EMAIL
+  - variable: APP_PRIVATE_KEY
+    secret: FIREBASE_PRIVATE_KEY
+  - variable: APP_STORAGE_BUCKET
+    value: caseclarity-hij0x.appspot.com
+  - variable: GOOGLE_GENAI_API_KEY
+    secret: GOOGLE_GENAI_API_KEY
+
+  # Firebase Cliente (NEXT_PUBLIC_* = build time, necesarias para Auth en producción)
+  # Valores de: Firebase Console > Project Settings > General > Your apps (Web app)
+  - variable: NEXT_PUBLIC_FIREBASE_API_KEY
+    value: AIzaSyBptmLosuoD6k1jQFduYc_eQET3DCjPQFA
+  - variable: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+    value: caseclarity-hij0x.firebaseapp.com
+  - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID
+    value: caseclarity-hij0x
+  - variable: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+    value: caseclarity-hij0x.firebasestorage.app
+  - variable: NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
+    value: "911388046994"
+  - variable: NEXT_PUBLIC_FIREBASE_APP_ID
+    value: "1:911388046994:web:b903def19407f61965984b"
+
+# Variables de entorno: configurarlas en Firebase Console (Build > App Hosting > Settings > Environment)
+# o aquí usando secret: para datos sensibles (crear con: firebase apphosting:secrets:set NOMBRE_SECRETO)
+#
+# Variables necesarias (ver .env.example):
+#   NEXT_PUBLIC_FIREBASE_* (públicas)
+#   FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_STORAGE_BUCKET
+#   FIREBASE_PRIVATE_KEY (usar secret:)
+#   GOOGLE_GENAI_API_KEY (usar secret: si aplica)
+#   WHATSAPP_VERIFY_TOKEN, WHATSAPP_PHONE_NUMBER_ID, WHATSAPP_ACCESS_TOKEN (usar secret:)
+#
+# Ejemplo con secrets:
+# env:
+#   - variable: FIREBASE_PROJECT_ID
+#     value: caseclarity-hij0x
+#   - variable: FIREBASE_PRIVATE_KEY
+#     secret: FIREBASE_PRIVATE_KEY
