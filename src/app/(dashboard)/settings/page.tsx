@@ -32,6 +32,118 @@ import { Loader2, Terminal, ShieldCheck, ShieldAlert, Zap } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { updateUserCredentials, getUserCredentials } from './actions';
 import { monitorMev } from '@/ai/flows/monitor-mev-flow';
+import { auth } from '@/lib/firebase';
+import { safeResJson } from '@/lib/utils';
+
+const profileSchema = z.object({
+  name: z.string().min(1, 'El nombre es requerido'),
+  cuit: z.string().optional(),
+});
+type ProfileFormValues = z.infer<typeof profileSchema>;
+
+function ProfileForm() {
+  const { toast } = useToast();
+  const [loading, setLoading] = useState(true);
+  const [saving, startSaveTransition] = useTransition();
+  const form = useForm<ProfileFormValues>({
+    resolver: zodResolver(profileSchema),
+    defaultValues: { name: '', cuit: '' },
+  });
+
+  useEffect(() => {
+    const user = auth.currentUser;
+    if (!user) { setLoading(false); return; }
+    (async () => {
+      try {
+        const token = await user.getIdToken();
+        const res = await fetch('/api/user/me', { headers: { Authorization: `Bearer ${token}` } });
+        const json = await safeResJson<{ ok?: boolean; user?: { name?: string; email?: string; cuit?: string } }>(res);
+        if (json.ok && json.user) {
+          form.reset({ name: json.user.name ?? '', cuit: json.user.cuit ?? '' });
+        }
+      } catch { /* ignore */ }
+      finally { setLoading(false); }
+    })();
+  }, [form]);
+
+  const onSubmit = (data: ProfileFormValues) => {
+    startSaveTransition(async () => {
+      try {
+        const user = auth.currentUser;
+        if (!user) throw new Error('No autenticado');
+        const token = await user.getIdToken();
+        const cuitClean = (data.cuit ?? '').trim().replace(/\D/g, '');
+        const res = await fetch('/api/user/me', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ name: data.name.trim(), cuit: cuitClean || '' }),
+        });
+        const json = await safeResJson<{ ok?: boolean; error?: string }>(res);
+        if (json.ok) toast({ title: 'Guardado', description: 'Perfil actualizado.' });
+        else toast({ variant: 'destructive', title: 'Error', description: json.error ?? 'No se pudo guardar.' });
+      } catch {
+        toast({ variant: 'destructive', title: 'Error', description: 'No se pudo guardar.' });
+      }
+    });
+  };
+
+  if (loading) {
+    return (
+      <Card>
+        <CardContent className="flex items-center justify-center h-48">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Perfil Profesional</CardTitle>
+        <CardDescription>Actualiza tu información para pagos y facturación.</CardDescription>
+      </CardHeader>
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(onSubmit)}>
+          <CardContent className="space-y-4">
+            <FormField
+              control={form.control}
+              name="name"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Nombre completo</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Tu nombre" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="cuit"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>CUIT/CUIL (para facturación)</FormLabel>
+                  <FormControl>
+                    <Input placeholder="20-12345678-9 o 11 dígitos" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </CardContent>
+          <CardFooter>
+            <Button type="submit" disabled={saving}>
+              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {saving ? 'Guardando...' : 'Guardar'}
+            </Button>
+          </CardFooter>
+        </form>
+      </Form>
+    </Card>
+  );
+}
 
 const judicialCredentialsSchema = z.object({
     mevUser: z.string().optional(),
@@ -275,40 +387,7 @@ export default function SettingsPage() {
         </TabsList>
 
         <TabsContent value="profile">
-          <Card>
-            <CardHeader>
-              <CardTitle>Perfil Profesional</CardTitle>
-              <CardDescription>Actualiza tu información personal y profesional.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="first-name">Nombre</Label>
-                  <Input id="first-name" defaultValue="Juan" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="last-name">Apellido</Label>
-                  <Input id="last-name" defaultValue="Pérez" />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input id="email" type="email" defaultValue="juan.perez@bufete.com" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="license">Número de Licencia</Label>
-                <Input id="license" defaultValue="P1234567" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="specialization">Especializaciones</Label>
-                 <Input id="specializations" defaultValue="Civil, Familiar, Laboral" placeholder="ej. Civil, Penal"/>
-                 <p className="text-sm text-muted-foreground">Lista de tus especializaciones separadas por comas.</p>
-              </div>
-            </CardContent>
-            <CardFooter>
-              <Button>Guardar Cambios</Button>
-            </CardFooter>
-          </Card>
+          <ProfileForm />
         </TabsContent>
 
         <TabsContent value="whatsapp">

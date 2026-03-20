@@ -43,7 +43,16 @@ export default function LoginPage() {
   const onSubmit = async (data: LoginFormValues) => {
     setIsLoading(true);
     try {
-      await signInWithEmailAndPassword(auth, data.email, data.password);
+      const userCredential = await signInWithEmailAndPassword(auth, data.email, data.password);
+      const user = userCredential.user;
+      if (!user.emailVerified) {
+        toast({
+          title: 'Verificá tu email',
+          description: 'Tu cuenta aún no está verificada. Revisá tu correo y hacé clic en el link.',
+        });
+        router.push('/verifica-email');
+        return;
+      }
       toast({
         title: '¡Bienvenido de nuevo!',
       });
@@ -76,7 +85,13 @@ export default function LoginPage() {
             <div className="flex justify-center">
               <Logo />
             </div>
-            <p className="text-balance text-muted-foreground">Introduce tu email para iniciar sesión en tu cuenta</p>
+            {redirectTo === '/extension-connect' ? (
+              <p className="text-balance text-muted-foreground">
+                Para descargar expedientes desde la extensión en MEV o PJN, iniciá sesión primero en la web.
+              </p>
+            ) : (
+              <p className="text-balance text-muted-foreground">Introduce tu email para iniciar sesión en tu cuenta</p>
+            )}
           </div>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4">

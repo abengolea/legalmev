@@ -24,25 +24,76 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ ok: false, error: 'Solo administradores' }, { status: 403 });
     }
 
-    const [usersSnap, exportacionesSnap] = await Promise.all([
+    const [usersSnap, exportacionesSnap, colegiosSnap, pagosSnap] = await Promise.all([
       adminDb.collection('users').get(),
       adminDb.collection('exportaciones').get(),
+      adminDb.collection('colegios').get(),
+      adminDb.collection('pagos').orderBy('createdAt', 'desc').limit(20).get(),
     ]);
 
     const users = usersSnap.docs.map((d) => d.data());
-    const exportaciones = exportacionesSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const exportaciones = exportacionesSnap.docs.map((d) => {
+      const data = d.data();
+      return { id: d.id, ...data, creadoEn: data?.creadoEn as string | undefined };
+    });
+    const colegios = colegiosSnap.docs.map((d) => d.data());
+    const pagos = pagosSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as Array<{
+      monto?: number;
+      moneda?: string;
+      estado?: string;
+      tipo?: string;
+      createdAt?: string;
+      colegioName?: string;
+    }>;
 
     const totalUsers = users.length;
     const totalExportaciones = exportaciones.length;
     const premiumUsers = users.filter((u) => u.tier === 'premium').length;
     const freeUsers = users.filter((u) => (u.tier ?? 'free') === 'free').length;
+    const totalColegios = colegios.length;
+    const colegiosConConvenioActivo = colegios.filter((c) => c.convenioActivo === true).length;
 
     const now = new Date();
     const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const exportacionesEsteMes = exportaciones.filter((e: { creadoEn?: string }) => {
+    const exportacionesEsteMes = exportaciones.filter((e) => {
       const t = e.creadoEn ? new Date(e.creadoEn) : null;
       return t && t >= firstDayOfMonth;
     }).length;
+
+    const pagosCompletados = pagos.filter((p) => p.estado === 'completado');
+    const ingresosEsteMes = pagosCompletados
+      .filter((p) => {
+        const t = p.createdAt ? new Date(p.createdAt) : null;
+        return t && t >= firstDayOfMonth;
+      })
+      .reduce((sum, p) => sum + (p.monto ?? 0), 0);
+    const ingresosTotales = pagosCompletados.reduce((sum, p) => sum + (p.monto ?? 0), 0);
+
+    const days: string[] = [];
+    const exportacionesPorDia: number[] = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now);
+      d.setDate(d.getDate() - i);
+      d.setHours(0, 0, 0, 0);
+      const next = new Date(d);
+      next.setDate(next.getDate() + 1);
+      const count = exportaciones.filter((e) => {
+        const t = e.creadoEn ? new Date(e.creadoEn) : null;
+        return t && t >= d && t < next;
+      }).length;
+      days.push(d.toLocaleDateString('es-AR', { weekday: 'short', day: 'numeric' }));
+      exportacionesPorDia.push(count);
+    }
+
+    const ultimosPagos = pagos.slice(0, 5).map((p) => ({
+      id: p.id,
+      monto: p.monto ?? 0,
+      moneda: p.moneda ?? 'ARS',
+      tipo: p.tipo ?? '-',
+      estado: p.estado ?? '-',
+      colegioName: p.colegioName,
+      createdAt: p.createdAt,
+    }));
 
     return NextResponse.json({
       ok: true,
@@ -52,6 +103,12 @@ export async function GET(request: NextRequest) {
         freeUsers,
         totalExportaciones,
         exportacionesEsteMes,
+        totalColegios,
+        colegiosConConvenioActivo,
+        ingresosEsteMes,
+        ingresosTotales,
+        exportacionesPorDia: days.map((d, i) => ({ dia: d, count: exportacionesPorDia[i] })),
+        ultimosPagos,
       },
     });
   } catch (err) {

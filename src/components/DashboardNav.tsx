@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { auth, db } from '@/lib/firebase';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { signOut } from 'firebase/auth';
@@ -13,30 +13,59 @@ import {
   SidebarMenu,
   SidebarMenuItem,
   SidebarMenuButton,
+  SidebarMenuSub,
+  SidebarMenuSubItem,
+  SidebarMenuSubButton,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarFooter,
 } from '@/components/ui/sidebar';
 import { Separator } from './ui/separator';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Button } from './ui/button';
-import { LayoutDashboard, LogOut, Shield } from 'lucide-react';
+import { LayoutDashboard, LogOut, Shield, Users, Building2, BarChart3, CreditCard, Settings, Landmark } from 'lucide-react';
 import { Logo } from './Logo';
 import { useSidebar } from '@/components/ui/sidebar';
 
 export function DashboardNav() {
   const pathname = usePathname();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { state } = useSidebar();
+  const adminTab = pathname === '/admin' ? (searchParams.get('tab') || 'dashboard') : null;
   const [userData, setUserData] = useState<{ name?: string; email?: string; role?: string } | null>(null);
+  const [isColegioAdmin, setIsColegioAdmin] = useState(false);
 
   useEffect(() => {
+    let unsubDoc: (() => void) | undefined;
     const unsubAuth = auth.onAuthStateChanged((user) => {
+      unsubDoc?.();
+      unsubDoc = undefined;
+      setIsColegioAdmin(false);
       if (!user) return;
-      const unsubDoc = onSnapshot(doc(db, 'users', user.uid), (snap) => {
-        setUserData((snap.data() as { name?: string; email?: string; role?: string }) ?? null);
+      user.getIdToken().then(() => {
+        unsubDoc = onSnapshot(
+          doc(db, 'users', user.uid),
+          (snap) => {
+            setUserData((snap.data() as { name?: string; email?: string; role?: string }) ?? null);
+          },
+          (err) => {
+            console.warn('[DashboardNav] Firestore snapshot error:', err.message);
+          }
+        );
+        user.getIdToken().then((token) => {
+          fetch('/api/colegio/me', { headers: { Authorization: `Bearer ${token}` } })
+            .then((r) => r.json())
+            .then((j) => setIsColegioAdmin(!!j?.ok && !!j?.colegio))
+            .catch(() => setIsColegioAdmin(false));
+        });
       });
-      return () => unsubDoc();
     });
-    return () => unsubAuth();
+    return () => {
+      unsubAuth();
+      unsubDoc?.();
+    };
   }, []);
 
   const isActive = (path: string) => {
@@ -69,17 +98,66 @@ export function DashboardNav() {
               <Link href="/dashboard">Panel</Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
-          {userData?.role === 'admin' && (
+          {isColegioAdmin && (
             <SidebarMenuItem>
               <SidebarMenuButton
                 asChild
-                isActive={isActive('/admin')}
-                icon={<Shield />}
-                tooltip={{ children: 'Admin' }}
+                isActive={isActive('/dashboard/colegio')}
+                icon={<Landmark />}
+                tooltip={{ children: 'Mi colegio' }}
               >
-                <Link href="/admin">Admin</Link>
+                <Link href="/dashboard/colegio">Mi colegio</Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
+          )}
+          {userData?.role === 'admin' && (
+            <SidebarGroup>
+              <SidebarGroupLabel>Administración</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={isActive('/admin')}
+                    icon={<Shield />}
+                    tooltip={{ children: 'Admin' }}
+                  >
+                    <Link href="/admin">Admin</Link>
+                  </SidebarMenuButton>
+                  <SidebarMenuSub>
+                    <SidebarMenuSubItem>
+                      <SidebarMenuSubButton asChild isActive={adminTab === 'dashboard'}>
+                        <Link href="/admin?tab=dashboard"><LayoutDashboard className="size-4" /> Dashboard</Link>
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
+                    <SidebarMenuSubItem>
+                      <SidebarMenuSubButton asChild isActive={adminTab === 'users'}>
+                        <Link href="/admin?tab=users"><Users className="size-4" /> Usuarios</Link>
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
+                    <SidebarMenuSubItem>
+                      <SidebarMenuSubButton asChild isActive={adminTab === 'colegios'}>
+                        <Link href="/admin?tab=colegios"><Building2 className="size-4" /> Colegios</Link>
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
+                    <SidebarMenuSubItem>
+                      <SidebarMenuSubButton asChild isActive={adminTab === 'stats'}>
+                        <Link href="/admin?tab=stats"><BarChart3 className="size-4" /> Estadísticas</Link>
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
+                    <SidebarMenuSubItem>
+                      <SidebarMenuSubButton asChild isActive={adminTab === 'payments'}>
+                        <Link href="/admin?tab=payments"><CreditCard className="size-4" /> Pagos</Link>
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
+                    <SidebarMenuSubItem>
+                      <SidebarMenuSubButton asChild isActive={adminTab === 'config'}>
+                        <Link href="/admin?tab=config&configTab=payments"><Settings className="size-4" /> Configuración</Link>
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
+                  </SidebarMenuSub>
+                </SidebarMenuItem>
+              </SidebarGroupContent>
+            </SidebarGroup>
           )}
         </SidebarMenu>
       </SidebarContent>

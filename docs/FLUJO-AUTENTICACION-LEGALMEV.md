@@ -1,5 +1,40 @@
 # Flujo de Autenticación LegalMev
 
+## Regla crítica: verificar sesión ANTES de cualquier acción
+
+**La extensión DEBE detectar si el usuario está logueado PRIMERO, antes de hacer búsqueda, detección de expediente o exportación.**
+
+- Si NO está logueado → pedir "Conectar cuenta" / abrir extension-connect.
+- Si SÍ está logueado → continuar con detección de expediente y exportación.
+
+**INCORRECTO:** Hacer la búsqueda/detección → intentar exportar → recibir 401 → recién ahí pedir login.  
+**INCORRECTO:** Mostrar "Conectada" o iniciar la descarga del PDF y luego pedir login cuando falle.  
+**CORRECTO:** Al iniciar (popup o content script en MEV/PJN), verificar authToken → si falta, mostrar "Conectá tu cuenta" de inmediato, sin scrapear ni exportar nada. El usuario debe saber desde el principio que necesita iniciar sesión en la web.
+
+### Gestión de sesión (cambio de cuenta)
+
+**NUNCA confiar en caché local.** Cuando el usuario cambia de cuenta (logout + login con otra), la extensión debe detectarlo y limpiar toda la sesión anterior.
+
+- Usar `GET /api/extension/session` para validar sesión contra el backend.
+- Si `userId` cambia → limpiar todo (`chrome.storage.local` + `chrome.storage.sync`).
+- Ver [EXTENSION-SESSION.md](./EXTENSION-SESSION.md) para la implementación completa del Session Manager.
+
+En **popup.js** y en cualquier **content script** que maneje "Exportar":
+
+1. Obtener `authToken` de `chrome.storage.local.get('authToken')`.
+2. Si `!authToken` → `showState(NO_AUTH)` / abrir extension-connect. **No continuar.**
+3. Solo si existe token → proceder con detección de expediente y exportación.
+
+### Dónde aplicar el cambio
+
+| Ubicación | Qué verificar |
+|-----------|---------------|
+| `popup.js` — `init()` | Antes de mostrar DETECTADO o botón Exportar, comprobar `authToken`. Si falta → `showState(NO_AUTH)`. |
+| Content script en MEV/PJN | Antes de scrapear actuaciones o llamar a `/api/export`, pedir token al background (`chrome.runtime.sendMessage`) y verificar. Si no hay token → mostrar "Conectá tu cuenta" y abrir extension-connect; **no scrapear ni exportar**. |
+| Botón "Exportar a PDF" | El handler del clic debe comprobar auth **antes** de recopilar datos y hacer el fetch. |
+
+---
+
 ## Diagrama de flujo completo
 
 ```
@@ -93,6 +128,28 @@
 | `src/app/extension-connect/page.tsx` | Página que obtiene token y postMessage |
 | `src/app/api/extension/me/route.ts` | GET con Bearer, devuelve `{ ok, user: { id, email, plan } }` |
 | `src/app/login/page.tsx` | Soporte `?redirect=` para volver a extension-connect |
+
+## Controlador de acciones de correo electrónico (Firebase)
+
+Los emails de Firebase (verificación de email, restablecer contraseña, revertir cambio de email) usan un controlador personalizado en lugar del dominio por defecto de Firebase.
+
+**Página:** `/auth/action` — maneja `mode=verifyEmail`, `mode=resetPassword`, `mode=recoverEmail`.
+
+### Configurar en Firebase Console
+
+1. Ir a **Authentication** → **Templates**.
+2. En cada plantilla (Verificación de email, Restablecer contraseña, etc.) → clic en editar.
+3. **Personalizar URL de acción** e ingresar:
+   ```
+   https://www.legalmev.com.ar/auth/action
+   ```
+   (Para local: `http://localhost:9003/auth/action` — solo para pruebas.)
+
+4. Guardar.
+
+Firebase agregará automáticamente los parámetros `mode`, `oobCode`, `apiKey`, `continueUrl`, `lang` a esa URL.
+
+---
 
 ## Seguridad
 

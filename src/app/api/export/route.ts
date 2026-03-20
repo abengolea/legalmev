@@ -7,7 +7,7 @@ const PROVEIDO_REGEX = /^https:\/\/mev\.scba\.gov\.ar\/proveido\.asp\?.*pidJuzga
 const PJN_REGEX = /^https:\/\/scw\.pjn\.gov\.ar/i;
 
 const FREE_QUOTA = 5;
-const PREMIUM_QUOTA_PER_MONTH = 100;
+const PREMIUM_QUOTA_DEFAULT = 100;
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -32,23 +32,14 @@ export async function POST(request: NextRequest) {
     }
 
     let uid: string;
-    let emailVerified: boolean;
     try {
       const adminAuth = getAuth();
       const decoded = await adminAuth.verifyIdToken(token);
       uid = decoded.uid;
-      emailVerified = !!decoded.email_verified;
     } catch {
       return NextResponse.json(
         { ok: false, error: 'Token inválido o expirado. Volvé a iniciar sesión.' },
         { status: 401, headers: corsHeaders }
-      );
-    }
-
-    if (!emailVerified) {
-      return NextResponse.json(
-        { ok: false, error: 'Verificá tu email antes de descargar. Revisá tu bandeja de entrada y hacé clic en el enlace de verificación.' },
-        { status: 403, headers: corsHeaders }
       );
     }
 
@@ -60,6 +51,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: false, error: 'Usuario no encontrado.' }, { status: 403, headers: corsHeaders });
     }
 
+    const paymentsSnap = await adminDb.doc('settings/payments').get();
+    const payments = paymentsSnap.data();
+    const globalQuota = (payments?.premiumQuotaPerMonth && payments.premiumQuotaPerMonth > 0)
+      ? payments.premiumQuotaPerMonth
+      : PREMIUM_QUOTA_DEFAULT;
+
+    let premiumQuota = globalQuota;
+    if (userData.premiumSource === 'colegio' && userData.colegioId) {
+      const colegioSnap = await adminDb.collection('colegios').doc(userData.colegioId).get();
+      const colegioData = colegioSnap.data();
+      if (colegioData?.cuotaMensual != null && colegioData.cuotaMensual > 0) {
+        premiumQuota = colegioData.cuotaMensual;
+      }
+    }
+
     const tier = userData.tier ?? 'free';
     const now = new Date();
 
@@ -67,7 +73,7 @@ export async function POST(request: NextRequest) {
       const used = userData.freeDownloadsUsed ?? 0;
       if (used >= FREE_QUOTA) {
         return NextResponse.json(
-          { ok: false, error: `Ya usaste tus ${FREE_QUOTA} descargas gratuitas. Contactanos para el plan premium (100/mes).` },
+          { ok: false, error: `Ya usaste tus ${FREE_QUOTA} descargas gratuitas. Contactanos para el plan premium (${premiumQuota}/mes).` },
           { status: 403, headers: corsHeaders }
         );
       }
@@ -81,9 +87,9 @@ export async function POST(request: NextRequest) {
         });
         used = 0;
       }
-      if (used >= PREMIUM_QUOTA_PER_MONTH) {
+      if (used >= premiumQuota) {
         return NextResponse.json(
-          { ok: false, error: `Llegaste al límite de ${PREMIUM_QUOTA_PER_MONTH} expedientes por mes. Se renueva automáticamente.` },
+          { ok: false, error: `Llegaste al límite de ${premiumQuota} expedientes por mes. Se renueva automáticamente.` },
           { status: 403, headers: corsHeaders }
         );
       }

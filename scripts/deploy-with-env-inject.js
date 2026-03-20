@@ -36,7 +36,9 @@ function injectIntoFunctionsEnv(functionsEnvPath, ourVars) {
     APP_CLIENT_EMAIL: ourVars.APP_CLIENT_EMAIL ?? ourVars.FIREBASE_CLIENT_EMAIL,
     APP_PRIVATE_KEY: ourVars.APP_PRIVATE_KEY ?? ourVars.FIREBASE_PRIVATE_KEY,
     APP_STORAGE_BUCKET: ourVars.APP_STORAGE_BUCKET ?? ourVars.FIREBASE_STORAGE_BUCKET,
-    GOOGLE_GENAI_API_KEY: ourVars.GOOGLE_GENAI_API_KEY
+    GOOGLE_GENAI_API_KEY: ourVars.GOOGLE_GENAI_API_KEY,
+    RESEND_API_KEY: ourVars.RESEND_API_KEY,
+    RESEND_FROM: ourVars.RESEND_FROM,
   };
   let extra = '';
   for (const [k, v] of Object.entries(toInject)) {

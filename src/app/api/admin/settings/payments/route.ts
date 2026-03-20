@@ -35,8 +35,10 @@ export async function GET(request: NextRequest) {
         stripePublishableKey: data?.stripePublishableKey ?? '',
         premiumPriceId: data?.premiumPriceId ?? '',
         premiumPriceAmount: data?.premiumPriceAmount ?? 0,
+        premiumQuotaPerMonth: data?.premiumQuotaPerMonth ?? 100,
         currency: data?.currency ?? 'ARS',
         contactEmail: data?.contactEmail ?? 'contacto@legalmev.com',
+        mercadopagoPublicKey: data?.mercadopagoPublicKey ?? '',
       },
     });
   } catch (err) {
@@ -77,8 +79,10 @@ export async function PATCH(request: NextRequest) {
     if (typeof body.stripePublishableKey === 'string') update.stripePublishableKey = body.stripePublishableKey;
     if (typeof body.premiumPriceId === 'string') update.premiumPriceId = body.premiumPriceId;
     if (typeof body.premiumPriceAmount === 'number') update.premiumPriceAmount = body.premiumPriceAmount;
+    if (typeof body.premiumQuotaPerMonth === 'number' && body.premiumQuotaPerMonth > 0) update.premiumQuotaPerMonth = body.premiumQuotaPerMonth;
     if (typeof body.currency === 'string') update.currency = body.currency;
     if (typeof body.contactEmail === 'string') update.contactEmail = body.contactEmail;
+    if (typeof body.mercadopagoPublicKey === 'string') update.mercadopagoPublicKey = body.mercadopagoPublicKey;
 
     await adminDb.doc(SETTINGS_DOC).set(update, { merge: true });
 

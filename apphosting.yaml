@@ -17,6 +17,20 @@ env:
     value: caseclarity-hij0x.firebasestorage.app
   - variable: GOOGLE_GENAI_API_KEY
     secret: GOOGLE_GENAI_API_KEY
+  # Mercado Pago (pagos Premium)
+  - variable: MERCADOPAGO_ACCESS_TOKEN
+    secret: MERCADOPAGO_ACCESS_TOKEN
+  # DLocal Go (Notificas SRL) - Testing: api-sbx.dlocalgo.com | Live: api.dlocalgo.com
+  - variable: DLOCAL_API_KEY
+    secret: DLOCAL_API_KEY
+  - variable: DLOCAL_SECRET_KEY
+    secret: DLOCAL_SECRET_KEY
+
+  # Resend (emails de verificación con botón)
+  - variable: RESEND_API_KEY
+    secret: RESEND_API_KEY
+  - variable: RESEND_FROM
+    value: LegalMev <onboarding@resend.dev>
 
   # Firebase Cliente (NEXT_PUBLIC_* = build time, necesarias para Auth en producción)
   # Crear secrets con: firebase apphosting:secrets:set NOMBRE_SECRETO

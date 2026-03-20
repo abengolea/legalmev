@@ -38,14 +38,22 @@ export async function GET(request: NextRequest) {
     }
 
     const plan = userData.tier ?? 'free';
+    const email = decoded.email ?? userData.email ?? '';
+    const displayName = userData.displayName ?? decoded.name ?? '';
+    const nombre = displayName?.trim()
+      ? displayName.charAt(0).toUpperCase() + displayName.slice(1).toLowerCase()
+      : email?.split('@')[0]
+        ? email.split('@')[0].charAt(0).toUpperCase() + email.split('@')[0].slice(1).toLowerCase()
+        : 'usuario';
 
     return NextResponse.json(
       {
         ok: true,
         user: {
           id: uid,
-          email: decoded.email ?? userData.email ?? '',
+          email,
           plan,
+          nombre,
         },
       },
       { headers: corsHeaders }

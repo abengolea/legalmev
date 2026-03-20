@@ -1,12 +1,15 @@
+import { Inter } from 'next/font/google';
 import { DashboardNav } from '@/components/DashboardNav';
 import { DashboardAuthGuard } from '@/components/DashboardAuthGuard';
 import { SidebarProvider, Sidebar, SidebarInset } from '@/components/ui/sidebar';
+
+const inter = Inter({ subsets: ['latin'], display: 'swap' });
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
     <DashboardAuthGuard>
       <SidebarProvider>
-        <div className="flex min-h-screen">
+        <div className={`legalmev-rebrand ${inter.className} flex min-h-screen`}>
           <DashboardNav />
           <SidebarInset>
             <main className="flex-1 p-4 sm:p-6 lg:p-8 bg-background">

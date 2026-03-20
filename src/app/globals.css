@@ -1,3 +1,27 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -42,6 +66,7 @@ body {
     --sidebar-border: 214.3 31.8% 91.4%;
     --sidebar-ring: 217 91% 60%;
   }
+
   .dark {
     --background: 222.2 47.4% 11.2%;
     --foreground: 210 40% 98%;
@@ -76,6 +101,41 @@ body {
     --sidebar-border: 217.2 32.6% 17.5%;
     --sidebar-ring: 217 91% 60%;
   }
+}
+
+/* Rebrand LegalMev: paleta teal del logo (#2A6A78 oscuro, #54A6A8 claro) */
+.legalmev-rebrand {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --background: 182 25% 98%;
+  --foreground: 191 45% 18%;
+  --card: 0 0% 100%;
+  --card-foreground: 191 45% 18%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 191 45% 18%;
+  --primary: 191 48% 32%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 182 25% 94%;
+  --secondary-foreground: 191 45% 18%;
+  --muted: 182 20% 94%;
+  --muted-foreground: 191 30% 42%;
+  --accent: 182 37% 49%;
+  --accent-foreground: 0 0% 100%;
+  --border: 182 20% 88%;
+  --input: 182 20% 88%;
+  --ring: 191 48% 32%;
+  --chart-1: 191 48% 32%;
+  --chart-2: 182 37% 49%;
+  --chart-3: 191 40% 40%;
+  --chart-4: 182 30% 55%;
+  --chart-5: 191 35% 45%;
+  --sidebar-background: 191 48% 28%;
+  --sidebar-foreground: 0 0% 98%;
+  --sidebar-primary: 182 37% 55%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 182 37% 40%;
+  --sidebar-accent-foreground: 0 0% 100%;
+  --sidebar-border: 191 35% 35%;
+  --sidebar-ring: 182 37% 55%;
 }
 
 @layer base {

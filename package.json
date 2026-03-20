@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --turbopack -p 9002",
+    "dev": "next dev --turbopack -p 9003",
     "genkit:dev": "genkit start -- tsx src/ai/dev.ts",
     "genkit:watch": "genkit start -- tsx --watch src/ai/dev.ts",
     "build": "next build",
@@ -11,7 +11,6 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "create-admin": "node scripts/create-admin.js",
-    "check-credentials": "node scripts/check-firebase-credentials.js",
     "check-credentials": "node scripts/check-firebase-credentials.js",
     "predeploy": "node scripts/predeploy-env.js",
     "cleandeploy": "node -e \"const fs=require('fs');const p='.next';if(fs.existsSync(p)){fs.rmSync(p,{recursive:true});console.log('✓ .next eliminado');}\"",
@@ -53,6 +52,7 @@
     "firebase-admin": "^12.2.0",
     "genkit": "^1.14.1",
     "lucide-react": "^0.475.0",
+    "mercadopago": "^2.12.0",
     "next": "15.5.7",
     "patch-package": "^8.0.0",
     "pdf-lib": "^1.17.1",
@@ -61,8 +61,10 @@
     "react-dom": "^18.3.1",
     "react-hook-form": "^7.54.2",
     "recharts": "^2.15.1",
+    "resend": "^6.9.4",
     "tailwind-merge": "^3.0.1",
     "tailwindcss-animate": "^1.0.7",
+    "xlsx": "^0.18.5",
     "zod": "^3.24.2"
   },
   "devDependencies": {

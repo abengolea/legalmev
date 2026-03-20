@@ -13,10 +13,18 @@ const LEGALMEV_MSG_TYPE = 'LEGALMEV_AUTH_TOKEN';
  * Verifica sesión del usuario, obtiene Firebase ID Token y lo envía a la extensión
  * mediante postMessage. El content script de la extensión recibe y guarda el token.
  */
+
+/** Obtiene un nombre amigable para el saludo (displayName, o primera parte del email) */
+function getNombreSaludo(user: { displayName?: string | null; email?: string | null }): string {
+  const base = user.displayName?.trim() || user.email?.split('@')[0] || 'usuario';
+  return base.charAt(0).toUpperCase() + base.slice(1).toLowerCase();
+}
+
 export default function ExtensionConnectPage() {
   const router = useRouter();
   const [status, setStatus] = useState<'loading' | 'sent' | 'redirect' | 'error'>('loading');
   const [message, setMessage] = useState('Verificando sesión...');
+  const [nombre, setNombre] = useState<string>('');
 
   useEffect(() => {
     const run = async () => {
@@ -25,6 +33,11 @@ export default function ExtensionConnectPage() {
       if (!user) {
         const redirect = encodeURIComponent('/extension-connect');
         router.replace(`/login?redirect=${redirect}`);
+        return;
+      }
+
+      if (!user.emailVerified) {
+        router.replace('/verifica-email');
         return;
       }
 
@@ -37,11 +50,13 @@ export default function ExtensionConnectPage() {
         }
 
         const baseUrl = window.location.origin;
+        const nombreSaludo = getNombreSaludo(user);
         window.postMessage(
-          { type: LEGALMEV_MSG_TYPE, token, baseUrl },
+          { type: LEGALMEV_MSG_TYPE, token, baseUrl, nombre: nombreSaludo },
           baseUrl
         );
 
+        setNombre(getNombreSaludo(user));
         setStatus('sent');
         setMessage('¡Cuenta conectada! Podés cerrar esta pestaña y volver a la extensión.');
       } catch (err) {
@@ -52,11 +67,13 @@ export default function ExtensionConnectPage() {
     };
 
     const unsub = auth.onAuthStateChanged((user) => {
-      if (user) {
-        run();
-      } else {
+      if (!user) {
         const redirect = encodeURIComponent('/extension-connect');
         router.replace(`/login?redirect=${redirect}`);
+      } else if (!user.emailVerified) {
+        router.replace('/verifica-email');
+      } else {
+        run();
       }
     });
 
@@ -76,7 +93,7 @@ export default function ExtensionConnectPage() {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-background">
         <CheckCircle2 className="h-16 w-16 text-green-600 mb-4" />
-        <h1 className="text-xl font-semibold mb-2">¡Listo!</h1>
+        <h1 className="text-xl font-semibold mb-2">¡Hola{nombre ? `, ${nombre}` : ''}!</h1>
         <p className="text-muted-foreground text-center mb-6">{message}</p>
         <Link
           href="/dashboard"

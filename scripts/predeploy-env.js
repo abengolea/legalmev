@@ -36,7 +36,7 @@ if (!vars.APP_STORAGE_BUCKET && vars.FIREBASE_STORAGE_BUCKET) vars.APP_STORAGE_B
 
 // Cloud Functions reserva FIREBASE_*, X_GOOGLE_*, EXT_* - solo incluir vars permitidas
 const reserved = /^(FIREBASE_|X_GOOGLE_|EXT_)/;
-const allowedKeys = ['APP_PROJECT_ID', 'APP_CLIENT_EMAIL', 'APP_PRIVATE_KEY', 'APP_STORAGE_BUCKET', 'GOOGLE_GENAI_API_KEY'];
+const allowedKeys = ['APP_PROJECT_ID', 'APP_CLIENT_EMAIL', 'APP_PRIVATE_KEY', 'APP_STORAGE_BUCKET', 'GOOGLE_GENAI_API_KEY', 'RESEND_API_KEY', 'RESEND_FROM'];
 for (const k of Object.keys(vars)) {
   if (vars[k] && (allowedKeys.includes(k) || (k.startsWith('NEXT_PUBLIC_') && !reserved.test(k))))
     allowedKeys.push(k);
@@ -48,6 +48,8 @@ for (const k of ['APP_PROJECT_ID', 'APP_CLIENT_EMAIL', 'APP_PRIVATE_KEY', 'APP_S
   if (v) outLines.push(`${k}=${v.includes('\n') || v.includes(' ') ? `"${v}"` : v}`);
 }
 if (vars.GOOGLE_GENAI_API_KEY) outLines.push(`GOOGLE_GENAI_API_KEY=${vars.GOOGLE_GENAI_API_KEY}`);
+if (vars.RESEND_API_KEY) outLines.push(`RESEND_API_KEY=${vars.RESEND_API_KEY}`);
+if (vars.RESEND_FROM) outLines.push(`RESEND_FROM=${vars.RESEND_FROM}`);
 for (const k of Object.keys(vars)) {
   if (k.startsWith('NEXT_PUBLIC_') && vars[k]) outLines.push(`${k}=${vars[k]}`);
 }

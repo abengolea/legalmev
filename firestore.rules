@@ -16,5 +16,10 @@ service cloud.firestore {
     match /users/{userId}/credentials/{credId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
+
+    // Tokens de verificación: solo backend (Admin SDK). Cliente no debe acceder.
+    match /verificationTokens/{tokenId} {
+      allow read, write: if false;
+    }
   }
 }

@@ -2,7 +2,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -17,31 +17,42 @@ import Image from 'next/image';
 import { Logo } from '@/components/Logo';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useToast } from '@/hooks/use-toast';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { safeResJson } from '@/lib/utils';
 
 const registerSchema = z.object({
   firstName: z.string().min(1, 'El nombre es requerido'),
   lastName: z.string().min(1, 'El apellido es requerido'),
   email: z.string().email('El email no es válido'),
   password: z.string().min(6, 'La contraseña debe tener al menos 6 caracteres'),
+  cuit: z.string().optional(),
 });
 
 type RegisterFormValues = z.infer<typeof registerSchema>;
 
 export default function RegisterPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
+
+  const prefilledEmail = searchParams.get('email') || '';
+  const isInvite = searchParams.get('invite') === 'colegio';
 
   const form = useForm<RegisterFormValues>({
     resolver: zodResolver(registerSchema),
     defaultValues: {
       firstName: '',
       lastName: '',
-      email: '',
+      email: prefilledEmail,
       password: '',
+      cuit: '',
     },
   });
+
+  useEffect(() => {
+    if (prefilledEmail) form.setValue('email', prefilledEmail);
+  }, [prefilledEmail, form]);
 
   const onSubmit = async (data: RegisterFormValues) => {
     setIsLoading(true);
@@ -51,6 +62,7 @@ export default function RegisterPage() {
       const user = userCredential.user;
 
       // Step 2: Save the user's profile information in Firestore
+      const cuitClean = (data.cuit ?? '').replace(/\D/g, '');
       await setDoc(doc(db, 'users', user.uid), {
         name: `${data.firstName} ${data.lastName}`,
         email: data.email,
@@ -59,16 +71,45 @@ export default function RegisterPage() {
         tier: 'free',
         freeDownloadsUsed: 0,
         phone: '',
+        cuit: cuitClean || '',
       });
 
-      // Step 3: Enviar email de verificación (requerido para habilitar descargas)
-      await sendEmailVerification(user);
-
-      toast({
-        title: '¡Registro exitoso!',
-        description: 'Te enviamos un correo para verificar tu email. Hacé clic en el enlace para habilitar las descargas.',
+      // Step 3: Enviar email de verificación. Resend (botón bonito) o Firebase como fallback
+      const token = await user.getIdToken();
+      const emailRes = await fetch('/api/auth/send-verification-email', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
       });
-      router.push('/dashboard');
+      if (!emailRes.ok) {
+        // Fallback: Firebase (link largo, pero funciona sin configurar Resend)
+        await sendEmailVerification(user);
+      }
+
+      // Step 4: Si el email está en un colegio con convenio, asignar premium automáticamente
+      try {
+        const res = await fetch('/api/user/check-colegio', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const json = await safeResJson<{ ok?: boolean; premiumFromColegio?: boolean; colegioName?: string }>(res);
+        if (json.ok && json.premiumFromColegio) {
+          toast({
+            title: '¡Cuenta creada!',
+            description: `Revisá tu correo y hacé clic en el link para verificar. Tu colegio "${json.colegioName}" tiene convenio.`,
+          });
+        } else {
+          toast({
+            title: '¡Cuenta creada!',
+            description: 'Te enviamos un correo. Hacé clic en el link para verificar tu email y activar tu cuenta.',
+          });
+        }
+      } catch {
+        toast({
+          title: '¡Cuenta creada!',
+          description: 'Te enviamos un correo. Hacé clic en el link para verificar tu email y activar tu cuenta.',
+        });
+      }
+      router.push('/verifica-email');
     } catch (error: any) {
       console.error('Error creating user:', error);
       let description = 'Ocurrió un error inesperado.';
@@ -95,8 +136,12 @@ export default function RegisterPage() {
         <Card className="mx-auto w-full max-w-lg">
           <CardHeader>
             <Logo />
-            <CardTitle className="text-2xl font-headline mt-4">Crea tu Cuenta</CardTitle>
-            <CardDescription>Creá tu cuenta para solicitar acceso a la exportación de expedientes (MEV/PJN) a PDF.</CardDescription>
+            <CardTitle className="text-2xl font-headline mt-4">Crear cuenta</CardTitle>
+            <CardDescription>
+              {isInvite
+                ? 'Completá tus datos para crear tu cuenta como responsable de colegio.'
+                : 'Creá tu cuenta para solicitar acceso a la exportación de expedientes (MEV/PJN) a PDF.'}
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <Form {...form}>
@@ -137,6 +182,19 @@ export default function RegisterPage() {
                       <FormLabel>Email</FormLabel>
                       <FormControl>
                         <Input type="email" placeholder="m@ejemplo.com" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="cuit"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>CUIT/CUIL (opcional)</FormLabel>
+                      <FormControl>
+                        <Input placeholder="20-12345678-9 o 11 dígitos" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
