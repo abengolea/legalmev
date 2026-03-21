@@ -8,6 +8,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
+import { getDeviceId } from '@/lib/deviceId';
 import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -53,6 +54,14 @@ export default function LoginPage() {
         router.push('/verifica-email');
         return;
       }
+      // Registrar este dispositivo como el único autorizado (evita compartir cuenta)
+      const token = await user.getIdToken(true);
+      const deviceId = getDeviceId();
+      await fetch('/api/auth/claim-device', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ deviceId }),
+      }).catch(() => {}); // No bloquear si falla
       toast({
         title: '¡Bienvenido de nuevo!',
       });

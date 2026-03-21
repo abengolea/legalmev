@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { auth } from '@/lib/firebase';
+import { getDeviceId } from '@/lib/deviceId';
 import { Loader2, CheckCircle2 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -49,10 +50,17 @@ export default function ExtensionConnectPage() {
           return;
         }
 
+        const deviceId = getDeviceId();
+        await fetch('/api/auth/claim-device', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ deviceId }),
+        }).catch(() => {});
+
         const baseUrl = window.location.origin;
         const nombreSaludo = getNombreSaludo(user);
         window.postMessage(
-          { type: LEGALMEV_MSG_TYPE, token, baseUrl, nombre: nombreSaludo },
+          { type: LEGALMEV_MSG_TYPE, token, baseUrl, nombre: nombreSaludo, deviceId },
           baseUrl
         );
 

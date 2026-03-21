@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAuth, getAdminDb } from '@/lib/firebase-admin';
+import { requireAuthWithDevice } from '@/lib/require-auth-device';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Device-Id',
 };
 
 export async function OPTIONS() {
@@ -18,28 +18,18 @@ export async function OPTIONS() {
  */
 export async function GET(request: NextRequest) {
   try {
-    const authHeader = request.headers.get('Authorization');
-    const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
-
-    if (!token) {
-      return NextResponse.json({ ok: false }, { status: 401, headers: corsHeaders });
+    const authResult = await requireAuthWithDevice(request);
+    if (!authResult.ok) {
+      return NextResponse.json(
+        { ok: false, error: authResult.error },
+        { status: authResult.status, headers: corsHeaders }
+      );
     }
 
-    const adminAuth = getAuth();
-    const decoded = await adminAuth.verifyIdToken(token);
-    const uid = decoded.uid;
-
-    const adminDb = getAdminDb();
-    const userSnap = await adminDb.collection('users').doc(uid).get();
-    const userData = userSnap.data();
-
-    if (!userSnap.exists || !userData) {
-      return NextResponse.json({ ok: false }, { status: 401, headers: corsHeaders });
-    }
-
+    const { uid, userData } = authResult;
     const plan = userData.tier ?? 'free';
-    const email = decoded.email ?? userData.email ?? '';
-    const displayName = userData.displayName ?? decoded.name ?? '';
+    const email = (userData.email as string) ?? '';
+    const displayName = (userData.displayName as string) ?? '';
     const nombre = displayName?.trim()
       ? displayName.charAt(0).toUpperCase() + displayName.slice(1).toLowerCase()
       : email?.split('@')[0]

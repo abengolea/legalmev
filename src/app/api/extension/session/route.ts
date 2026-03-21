@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAuth, getAdminDb } from '@/lib/firebase-admin';
+import { getAdminDb } from '@/lib/firebase-admin';
+import { requireAuthWithDevice } from '@/lib/require-auth-device';
 
 const FREE_QUOTA = 5;
 const PREMIUM_QUOTA_DEFAULT = 100;
@@ -7,7 +8,7 @@ const PREMIUM_QUOTA_DEFAULT = 100;
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Device-Id',
 };
 
 export type ExtensionSessionPlan = 'free' | 'pro' | 'unlimited';
@@ -27,38 +28,30 @@ export async function OPTIONS() {
 /**
  * GET /api/extension/session
  * Valida el token Bearer y devuelve la sesión actual del usuario.
- * Usado por la extensión para validar sesión antes de cualquier acción.
- * NUNCA confiar en caché local: siempre validar contra este endpoint.
+ * Requiere un solo dispositivo autorizado por cuenta.
  */
 export async function GET(request: NextRequest) {
   try {
-    const authHeader = request.headers.get('Authorization');
-    const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
-
-    if (!token) {
+    const authResult = await requireAuthWithDevice(request);
+    if (!authResult.ok) {
+      const status = authResult.status === 403 ? 403 : 401;
       return NextResponse.json(
-        { authenticated: false, userId: '', email: '', plan: 'free' as const, remainingQueries: null },
-        { status: 200, headers: corsHeaders }
+        {
+          authenticated: false,
+          userId: '',
+          email: '',
+          plan: 'free' as const,
+          remainingQueries: null,
+          error: authResult.error,
+        },
+        { status, headers: corsHeaders }
       );
     }
 
-    const adminAuth = getAuth();
-    const decoded = await adminAuth.verifyIdToken(token);
-    const uid = decoded.uid;
-
+    const { uid, userData } = authResult;
     const adminDb = getAdminDb();
-    const userSnap = await adminDb.collection('users').doc(uid).get();
-    const userData = userSnap.data();
-
-    if (!userSnap.exists || !userData) {
-      return NextResponse.json(
-        { authenticated: false, userId: '', email: '', plan: 'free' as const, remainingQueries: null },
-        { status: 200, headers: corsHeaders }
-      );
-    }
-
     const tier = userData.tier ?? 'free';
-    const email = decoded.email ?? userData.email ?? '';
+    const email = (userData.email as string) ?? '';
     const now = new Date();
 
     // Obtener cuota premium (global o por colegio)

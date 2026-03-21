@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAdminDb, getAdminStorage, getStorageBucketName, getAuth } from '@/lib/firebase-admin';
+import { getAdminDb, getAdminStorage, getStorageBucketName } from '@/lib/firebase-admin';
+import { requireAuthWithDevice } from '@/lib/require-auth-device';
 import { generateExpedientePDF, generateFilename } from '@/lib/pdf-generator';
 import type { ExportRequest, Expediente } from '@/types/expediente';
 
@@ -12,7 +13,7 @@ const PREMIUM_QUOTA_DEFAULT = 100;
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Device-Id',
 };
 
 export async function OPTIONS() {
@@ -21,35 +22,16 @@ export async function OPTIONS() {
 
 export async function POST(request: NextRequest) {
   try {
-    const authHeader = request.headers.get('Authorization');
-    const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
-
-    if (!token) {
+    const authResult = await requireAuthWithDevice(request);
+    if (!authResult.ok) {
       return NextResponse.json(
-        { ok: false, error: 'Se requiere autenticación. Iniciá sesión en LegalMev e instalá la extensión actualizada.' },
-        { status: 401, headers: corsHeaders }
+        { ok: false, error: authResult.error },
+        { status: authResult.status, headers: corsHeaders }
       );
     }
 
-    let uid: string;
-    try {
-      const adminAuth = getAuth();
-      const decoded = await adminAuth.verifyIdToken(token);
-      uid = decoded.uid;
-    } catch {
-      return NextResponse.json(
-        { ok: false, error: 'Token inválido o expirado. Volvé a iniciar sesión.' },
-        { status: 401, headers: corsHeaders }
-      );
-    }
-
+    const { uid, userData } = authResult;
     const adminDb = getAdminDb();
-    const userSnap = await adminDb.collection('users').doc(uid).get();
-    const userData = userSnap.data();
-
-    if (!userSnap.exists || !userData) {
-      return NextResponse.json({ ok: false, error: 'Usuario no encontrado.' }, { status: 403, headers: corsHeaders });
-    }
 
     const paymentsSnap = await adminDb.doc('settings/payments').get();
     const payments = paymentsSnap.data();
