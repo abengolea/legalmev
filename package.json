@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --turbopack -p 9003",
+    "dev": "next dev --turbopack -p 9002",
+    "dev:no-turbo": "next dev -p 9002",
+    "tunnel": "npx ngrok http 9002",
     "genkit:dev": "genkit start -- tsx src/ai/dev.ts",
     "genkit:watch": "genkit start -- tsx --watch src/ai/dev.ts",
     "build": "next build",
@@ -12,6 +14,7 @@
     "typecheck": "tsc --noEmit",
     "create-admin": "node scripts/create-admin.js",
     "check-credentials": "node scripts/check-firebase-credentials.js",
+    "check-env": "node scripts/inspect-env.js",
     "predeploy": "node scripts/predeploy-env.js",
     "cleandeploy": "node -e \"const fs=require('fs');const p='.next';if(fs.existsSync(p)){fs.rmSync(p,{recursive:true});console.log('✓ .next eliminado');}\"",
     "deploy": "npm run cleandeploy && npm run predeploy && node scripts/deploy-with-env-inject.js"

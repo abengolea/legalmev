@@ -11,7 +11,7 @@ import {
   checkActionCode,
 } from 'firebase/auth';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { PasswordInput } from '@/components/ui/password-input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -215,7 +215,7 @@ function ActionHandlerContent() {
                   <FormItem>
                     <FormLabel>Contraseña</FormLabel>
                     <FormControl>
-                      <Input type="password" placeholder="Mínimo 6 caracteres" {...field} />
+                      <PasswordInput placeholder="Mínimo 6 caracteres" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

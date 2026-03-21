@@ -18,17 +18,24 @@ export default function VerificaEmailPage() {
   const router = useRouter();
   const { toast } = useToast();
   const [resending, setResending] = useState(false);
+  const [checking, setChecking] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    const unsub = auth.onAuthStateChanged((u) => {
-      setUser(u);
-      setReady(true);
-      if (u?.emailVerified) {
-        router.replace('/dashboard');
-      } else if (!u) {
+    const unsub = auth.onAuthStateChanged(async (u) => {
+      if (!u) {
+        setUser(null);
+        setReady(true);
         router.replace('/login');
+        return;
+      }
+      await u.reload();
+      const fresh = auth.currentUser;
+      setUser(fresh);
+      setReady(true);
+      if (fresh?.emailVerified) {
+        router.replace('/dashboard');
       }
     });
     return () => unsub();
@@ -71,6 +78,28 @@ export default function VerificaEmailPage() {
     }
   };
 
+  const handleAlreadyVerified = async () => {
+    if (!user) return;
+    setChecking(true);
+    try {
+      await user.reload();
+      const fresh = auth.currentUser;
+      if (fresh?.emailVerified) {
+        router.replace('/dashboard');
+        return;
+      }
+      toast({
+        variant: 'destructive',
+        title: 'Aún no detectamos la verificación',
+        description: 'Revisá que hayas hecho clic en el enlace del correo. Si acabás de hacerlo, esperá unos segundos e intentá de nuevo.',
+      });
+    } catch {
+      toast({ variant: 'destructive', title: 'Error', description: 'Intentá de nuevo.' });
+    } finally {
+      setChecking(false);
+    }
+  };
+
   if (!ready) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -89,7 +118,7 @@ export default function VerificaEmailPage() {
         <div className="space-y-2">
           <h1 className="text-xl font-semibold">Verificá tu correo electrónico</h1>
           <p className="text-muted-foreground text-sm">
-            Te enviamos un correo a <strong>{user?.email}</strong>. Hacé clic en el enlace que aparece en el mensaje para activar tu cuenta.
+            Te enviamos un correo a <strong>{user?.email ?? user?.providerData?.[0]?.email ?? 'tu correo'}</strong>. Hacé clic en el enlace que aparece en el mensaje para activar tu cuenta.
           </p>
           <p className="text-muted-foreground text-xs">
             Si no lo ves, revisá la carpeta de spam o correo no deseado.
@@ -107,8 +136,18 @@ export default function VerificaEmailPage() {
               'Reenviar correo de verificación'
             )}
           </Button>
-          <Button asChild variant="ghost" className="w-full">
-            <Link href="/login">Ya verifiqué, iniciar sesión</Link>
+          <Button variant="ghost" className="w-full" onClick={handleAlreadyVerified} disabled={checking}>
+            {checking ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Verificando...
+              </>
+            ) : (
+              'Ya verifiqué, continuar al dashboard'
+            )}
+          </Button>
+          <Button asChild variant="link" className="w-full text-muted-foreground">
+            <Link href="/login">Cerrar sesión e iniciar de nuevo</Link>
           </Button>
         </div>
       </div>

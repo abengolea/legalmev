@@ -61,15 +61,23 @@ lines.forEach((line, i) => {
 
 console.log('─'.repeat(60));
 
-// Buscar RESEND específicamente
+// Buscar RESEND y DLOCAL
 const resendLines = lines.filter((l) => l.includes('RESEND') || l.includes('resend'));
+const dlocalLines = lines.filter((l) => l.toUpperCase().includes('DLOCAL'));
 console.log('');
-console.log('🔍 Líneas que contienen "RESEND" o "resend":', resendLines.length);
+console.log('🔍 RESEND:', resendLines.length ? '✓ encontrado' : '❌ NO está');
+console.log('🔍 DLocal:', dlocalLines.length ? `✓ ${dlocalLines.length} vars` : '❌ NO está');
+const hasDlocalApi = lines.some((l) => /^DLOCAL_API_KEY\s*=/i.test(l.trim()));
+const hasDlocalSecret = lines.some((l) => /^DLOCAL_SECRET_KEY\s*=/i.test(l.trim()));
+if (!hasDlocalApi || !hasDlocalSecret) {
+  console.log('');
+  console.log('⚠️ DLocal: para probar pagos en local necesitás en .env.local:');
+  if (!hasDlocalApi) console.log('   DLOCAL_API_KEY=tu-api-key-sandbox');
+  if (!hasDlocalSecret) console.log('   DLOCAL_SECRET_KEY=tu-secret-sandbox');
+  console.log('   Luego reiniciá: npm run dev');
+}
 if (resendLines.length === 0) {
+  console.log('');
   console.log('   La variable RESEND_API_KEY NO está en este archivo.');
   console.log('   Verificá que estés editando el .env.local de legalmev-main.');
-  console.log('   Si usás Cursor, el proyecto puede estar en:');
-  console.log('   C:\\Users\\Adrian\\.cursor\\projects\\c-Users-Adrian-Documents-mis-proyectos-legalmev-main');
-  console.log('   Pero el script Node lee desde:');
-  console.log('   ' + root);
 }

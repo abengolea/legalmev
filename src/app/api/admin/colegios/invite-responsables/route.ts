@@ -1,43 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuth, getAdminDb } from '@/lib/firebase-admin';
 import { resend, canSendEmail, getFromAddress } from '@/lib/resend';
+import { buildInviteEmailHtml } from '@/lib/email-templates';
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.legalmev.com.ar';
-
-function buildInviteEmailHtml(params: {
-  colegioName: string;
-  actionUrl: string;
-  isNewUser: boolean;
-}): string {
-  const { colegioName, actionUrl, isNewUser } = params;
-  const ctaText = isNewUser
-    ? 'Crear mi cuenta y contraseña'
-    : 'Configurar mi contraseña';
-  const intro = isNewUser
-    ? `Fuiste designado responsable del Colegio de Abogados "${colegioName}". Creá tu cuenta y contraseña para acceder al panel y administrar la lista de colegiados autorizados.`
-    : `Fuiste designado responsable del Colegio de Abogados "${colegioName}". Configurá tu contraseña para acceder al panel y administrar la lista de colegiados autorizados.`;
-
-  return `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-</head>
-<body style="margin:0;padding:0;font-family:'Inter','Segoe UI',Arial,sans-serif;font-size:16px;line-height:1.6;color:#333;background-color:#f5f5f5;">
-  <div style="max-width:480px;margin:32px auto;padding:32px;background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-    <p style="margin:0 0 16px;font-size:16px;">Hola,</p>
-    <p style="margin:0 0 24px;">${intro}</p>
-    <p style="margin:0 0 24px;text-align:center;">
-      <a href="${actionUrl}" style="display:inline-block;padding:14px 28px;background-color:#2A6A78;color:#fff !important;text-decoration:none;font-weight:600;font-size:15px;border-radius:6px;">${ctaText}</a>
-    </p>
-    <p style="margin:0;font-size:14px;color:#666;">Si no esperabas este correo, ignorá este mensaje.</p>
-    <p style="margin:24px 0 0;font-size:14px;color:#999;">— El equipo de LegalMev</p>
-  </div>
-</body>
-</html>
-`;
-}
 
 /**
  * POST /api/admin/colegios/invite-responsables

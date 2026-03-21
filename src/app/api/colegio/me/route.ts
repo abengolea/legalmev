@@ -43,14 +43,20 @@ export async function GET(request: NextRequest) {
     const doc = colegiosSnap.docs[0];
     const data = doc.data();
 
+    const members = (data.members || []) as { email: string; name?: string; estado?: string }[];
+    const activos = members.filter((m) => m?.estado !== 'suspendido');
+    const suspendidos = members.filter((m) => m?.estado === 'suspendido');
+
     return NextResponse.json({
       ok: true,
       colegio: {
         id: doc.id,
         name: data.name,
         convenioActivo: data.convenioActivo ?? true,
-        membersCount: (data.members || []).length,
-        members: data.members || [],
+        membersCount: members.length,
+        membersActivos: activos.length,
+        membersSuspendidos: suspendidos.length,
+        members,
         montoConvenio: data.montoConvenio ?? null,
         moneda: data.moneda ?? 'ARS',
       },

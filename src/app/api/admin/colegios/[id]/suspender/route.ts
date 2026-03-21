@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuth, getAdminDb } from '@/lib/firebase-admin';
+import { sendConvenioSuspendedEmail } from '@/lib/payment-notifications';
 
 /** Verifica que el usuario sea admin */
 async function requireAdmin(request: NextRequest) {
@@ -36,10 +37,16 @@ export async function POST(
       updatedAt: new Date().toISOString(),
     });
 
+    const colegioData = colegioSnap.data();
+    const colegioName = (colegioData?.name as string) || 'tu Colegio';
+
     const usersSnap = await adminDb.collection('users').where('colegioId', '==', colegioId).get();
     let suspendidos = 0;
     const batch = adminDb.batch();
+    const emailsToNotify: { email: string }[] = [];
     for (const doc of usersSnap.docs) {
+      const email = (doc.data()?.email as string) || '';
+      if (email) emailsToNotify.push({ email });
       batch.update(doc.ref, {
         tier: 'free',
         colegioId: null,
@@ -50,6 +57,15 @@ export async function POST(
       suspendidos++;
     }
     await batch.commit();
+
+    // Notificar por email a los usuarios afectados
+    for (const { email } of emailsToNotify) {
+      try {
+        await sendConvenioSuspendedEmail({ to: email, colegioName });
+      } catch (e) {
+        console.warn('[suspender] No se pudo enviar email a', email, e);
+      }
+    }
 
     return NextResponse.json({
       ok: true,

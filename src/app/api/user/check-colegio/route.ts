@@ -35,9 +35,9 @@ export async function POST(request: NextRequest) {
 
     for (const doc of colegiosSnap.docs) {
       const data = doc.data();
-      const members = (data.members || []) as { email: string; name: string }[];
-      const found = members.some((m) => String(m?.email || '').toLowerCase() === email);
-      if (found) {
+      const members = (data.members || []) as { email: string; name?: string; estado?: string }[];
+      const found = members.find((m) => String(m?.email || '').toLowerCase() === email);
+      if (found && found.estado !== 'suspendido') {
         await adminDb.collection('users').doc(uid).update({
           tier: 'premium',
           colegioId: doc.id,

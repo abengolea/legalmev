@@ -6,13 +6,14 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import { signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { getDeviceId } from '@/lib/deviceId';
 import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { PasswordInput } from '@/components/ui/password-input';
 import { Gavel } from 'lucide-react';
 import Image from 'next/image';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
@@ -32,6 +33,7 @@ export default function LoginPage() {
   const redirectTo = searchParams.get('redirect');
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -46,14 +48,6 @@ export default function LoginPage() {
     try {
       const userCredential = await signInWithEmailAndPassword(auth, data.email, data.password);
       const user = userCredential.user;
-      if (!user.emailVerified) {
-        toast({
-          title: 'Verificá tu email',
-          description: 'Tu cuenta aún no está verificada. Revisá tu correo y hacé clic en el link.',
-        });
-        router.push('/verifica-email');
-        return;
-      }
       // Registrar este dispositivo como el único autorizado (evita compartir cuenta)
       const token = await user.getIdToken(true);
       const deviceId = getDeviceId();
@@ -85,6 +79,39 @@ export default function LoginPage() {
     }
   };
 
+  const onGoogleSignIn = async () => {
+    setIsGoogleLoading(true);
+    try {
+      const provider = new GoogleAuthProvider();
+      const userCredential = await signInWithPopup(auth, provider);
+      const user = userCredential.user;
+      const token = await user.getIdToken(true);
+      const deviceId = getDeviceId();
+      await fetch('/api/auth/claim-device', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ deviceId }),
+      }).catch(() => {});
+      toast({ title: '¡Bienvenido de nuevo!' });
+      const dest = redirectTo && redirectTo.startsWith('/') && !redirectTo.startsWith('//') ? redirectTo : '/dashboard';
+      window.location.href = dest;
+      return;
+    } catch (error: any) {
+      if (error.code === 'auth/popup-closed-by-user' || error.code === 'auth/cancelled-popup-request') {
+        return;
+      }
+      console.error('Error signing in with Google:', error);
+      let description = 'No se pudo iniciar sesión con Google. Intentá de nuevo.';
+      if (error.code === 'auth/popup-blocked') {
+        description = 'El navegador bloqueó la ventana. Permití ventanas emergentes para este sitio.';
+      } else if (error.code === 'auth/network-request-failed' || error.code === 'auth/invalid-api-key') {
+        description = 'Revisá tu conexión y la configuración de Firebase.';
+      }
+      toast({ variant: 'destructive', title: 'Error al Iniciar Sesión', description });
+    } finally {
+      setIsGoogleLoading(false);
+    }
+  };
 
   return (
     <div className="w-full lg:grid lg:min-h-screen lg:grid-cols-2 xl:min-h-screen">
@@ -129,7 +156,7 @@ export default function LoginPage() {
                       </Link>
                     </div>
                     <FormControl>
-                      <Input type="password" {...field} />
+                      <PasswordInput {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -140,8 +167,8 @@ export default function LoginPage() {
               </Button>
             </form>
           </Form>
-           <Button variant="outline" className="w-full">
-              Iniciar Sesión con Google
+           <Button variant="outline" type="button" className="w-full" onClick={onGoogleSignIn} disabled={isGoogleLoading}>
+              {isGoogleLoading ? 'Conectando...' : 'Iniciar Sesión con Google'}
             </Button>
           <div className="mt-4 text-center text-sm">
             ¿No tienes una cuenta?{' '}

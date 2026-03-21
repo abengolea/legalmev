@@ -143,7 +143,7 @@ Los emails de Firebase (verificación de email, restablecer contraseña, reverti
    ```
    https://www.legalmev.com.ar/auth/action
    ```
-   (Para local: `http://localhost:9003/auth/action` — solo para pruebas.)
+   (Para local: `http://localhost:9002/auth/action` — solo para pruebas.)
 
 4. Guardar.
 

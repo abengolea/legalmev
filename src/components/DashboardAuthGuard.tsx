@@ -16,8 +16,6 @@ export function DashboardAuthGuard({ children }: { children: React.ReactNode }) 
     const unsubAuth = auth.onAuthStateChanged((user) => {
       if (!user) {
         router.replace('/login');
-      } else if (!user.emailVerified) {
-        router.replace('/verifica-email');
       } else {
         setReady(true);
       }

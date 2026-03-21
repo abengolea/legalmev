@@ -28,7 +28,7 @@ import {
 } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Cpu, Database, Users, XCircle, FileText, MessageSquare, Bot, Send, PlusCircle, Zap, CreditCard, BarChart3, Building2, Upload, AlertTriangle, Receipt, Link2, UserPlus, LayoutDashboard, TrendingUp, DollarSign, FileOutput, ArrowRight, Settings } from 'lucide-react';
+import { Cpu, Database, Users, XCircle, FileText, MessageSquare, Bot, Send, PlusCircle, Zap, CreditCard, BarChart3, Building2, Upload, AlertTriangle, Receipt, Link2, UserPlus, LayoutDashboard, TrendingUp, DollarSign, FileOutput, ArrowRight, Settings, Mail, MoreHorizontal, Ban, Unlock, RefreshCw, History, StickyNote } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { clientIntakeAutomation } from '@/ai/flows/client-intake-automation';
@@ -45,6 +45,24 @@ import {
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from 'recharts';
 
 type User = {
@@ -59,7 +77,19 @@ type User = {
   phone?: string;
   colegioId?: string | null;
   colegioName?: string | null;
-  premiumSource?: 'payment' | 'colegio' | null;
+  premiumSource?: 'payment' | 'colegio' | 'admin' | null;
+  premiumForever?: boolean;
+  adminNotes?: string | null;
+};
+
+type Exportacion = {
+  id: string;
+  expedienteNumero: string;
+  cantidadActuaciones: number;
+  caratula: string;
+  juzgado: string;
+  filename: string;
+  creadoEn: string;
 };
 
 type Colegio = {
@@ -254,7 +284,23 @@ function UserManagement() {
   const [users, setUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [filterTier, setFilterTier] = useState<string>('all');
+  const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [filterColegio, setFilterColegio] = useState<string>('all');
+  const [exportacionesUserId, setExportacionesUserId] = useState<string | null>(null);
+  const [exportaciones, setExportaciones] = useState<Exportacion[]>([]);
+  const [exportacionesLoading, setExportacionesLoading] = useState(false);
+  const [notesUserId, setNotesUserId] = useState<string | null>(null);
+  const [notesValue, setNotesValue] = useState('');
   const { toast } = useToast();
+
+  useEffect(() => {
+    import('@/lib/firebase').then(({ auth }) => {
+      const unsub = auth.onAuthStateChanged((u) => setCurrentUserId(u?.uid ?? null));
+      return () => unsub();
+    });
+  }, []);
 
   useEffect(() => {
     setIsLoading(true);
@@ -271,19 +317,56 @@ function UserManagement() {
     return () => unsubscribe();
   }, []);
 
-  const handleUpgradePremium = async (userId: string) => {
+  const handleSetPremium = async (userId: string, type: 'monthly' | 'forever') => {
     setUpdatingId(userId);
     try {
-      const userRef = doc(db, 'users', userId);
-      await updateDoc(userRef, {
-        tier: 'premium',
-        downloadsThisMonth: 0,
-        monthlyResetAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      const { auth } = await import('@/lib/firebase');
+      const user = auth.currentUser;
+      if (!user) throw new Error('No autenticado');
+      const token = await user.getIdToken();
+      const res = await fetch(`/api/admin/users/${userId}/premium`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ type }),
       });
-      toast({ title: 'Usuario actualizado a Premium', description: 'El límite mensual se aplica según la configuración en Pagos.' });
+      const json = await safeResJson<{ ok?: boolean; message?: string; error?: string }>(res);
+      if (json.ok) {
+        toast({
+          title: json.message ?? 'Premium asignado',
+          description: type === 'monthly' ? '30 días con cuota mensual estándar' : 'Sin límite de descargas',
+        });
+      } else {
+        toast({ variant: 'destructive', title: 'Error', description: json.error ?? 'No se pudo actualizar.' });
+      }
     } catch (e) {
       console.error(e);
       toast({ variant: 'destructive', title: 'Error', description: 'No se pudo actualizar.' });
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const handleRevokePremium = async (userId: string) => {
+    if (!confirm('¿Quitar el acceso premium a este usuario?')) return;
+    setUpdatingId(userId);
+    try {
+      const { auth } = await import('@/lib/firebase');
+      const user = auth.currentUser;
+      if (!user) throw new Error('No autenticado');
+      const token = await user.getIdToken();
+      const res = await fetch(`/api/admin/users/${userId}/premium`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await safeResJson<{ ok?: boolean; message?: string; error?: string }>(res);
+      if (json.ok) {
+        toast({ title: 'Premium revocado', description: 'El usuario volvió a plan gratuito.' });
+      } else {
+        toast({ variant: 'destructive', title: 'Error', description: json.error ?? 'No se pudo revocar.' });
+      }
+    } catch (e) {
+      console.error(e);
+      toast({ variant: 'destructive', title: 'Error', description: 'No se pudo revocar.' });
     } finally {
       setUpdatingId(null);
     }
@@ -303,6 +386,162 @@ function UserManagement() {
     }
   };
 
+  const handleChangeRole = async (userId: string, newRole: string) => {
+    if (userId === currentUserId) {
+      toast({ variant: 'destructive', title: 'Error', description: 'No podés cambiar tu propio rol.' });
+      return;
+    }
+    setUpdatingId(userId);
+    try {
+      const { auth } = await import('@/lib/firebase');
+      const user = auth.currentUser;
+      if (!user) throw new Error('No autenticado');
+      const token = await user.getIdToken();
+      const res = await fetch(`/api/admin/users/${userId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ role: newRole }),
+      });
+      const json = await safeResJson<{ ok?: boolean; error?: string }>(res);
+      if (json.ok) toast({ title: 'Rol actualizado', description: `Ahora es ${newRole}.` });
+      else toast({ variant: 'destructive', title: 'Error', description: json.error ?? 'No se pudo actualizar.' });
+    } catch (e) {
+      console.error(e);
+      toast({ variant: 'destructive', title: 'Error' });
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const handleResendVerification = async (userId: string) => {
+    setUpdatingId(userId);
+    try {
+      const { auth } = await import('@/lib/firebase');
+      const user = auth.currentUser;
+      if (!user) throw new Error('No autenticado');
+      const token = await user.getIdToken();
+      const res = await fetch(`/api/admin/users/${userId}/resend-verification`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await safeResJson<{ ok?: boolean; error?: string }>(res);
+      if (json.ok) toast({ title: 'Email enviado', description: 'Correo de verificación reenviado.' });
+      else toast({ variant: 'destructive', title: 'Error', description: json.error ?? 'No se pudo enviar.' });
+    } catch (e) {
+      console.error(e);
+      toast({ variant: 'destructive', title: 'Error' });
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const handleResetDownloads = async (userId: string) => {
+    setUpdatingId(userId);
+    try {
+      const { auth } = await import('@/lib/firebase');
+      const user = auth.currentUser;
+      if (!user) throw new Error('No autenticado');
+      const token = await user.getIdToken();
+      const res = await fetch(`/api/admin/users/${userId}/reset-downloads`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ type: 'both' }),
+      });
+      const json = await safeResJson<{ ok?: boolean; error?: string }>(res);
+      if (json.ok) toast({ title: 'Descargas reseteadas' });
+      else toast({ variant: 'destructive', title: 'Error', description: json.error });
+    } catch (e) {
+      console.error(e);
+      toast({ variant: 'destructive', title: 'Error' });
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const handleBlock = async (userId: string, disabled: boolean) => {
+    if (userId === currentUserId) {
+      toast({ variant: 'destructive', title: 'No podés bloquear tu propia cuenta.' });
+      return;
+    }
+    if (!confirm(disabled ? '¿Bloquear esta cuenta? El usuario no podrá iniciar sesión.' : '¿Desbloquear esta cuenta?')) return;
+    setUpdatingId(userId);
+    try {
+      const { auth } = await import('@/lib/firebase');
+      const user = auth.currentUser;
+      if (!user) throw new Error('No autenticado');
+      const token = await user.getIdToken();
+      const res = await fetch(`/api/admin/users/${userId}/block`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ disabled }),
+      });
+      const json = await safeResJson<{ ok?: boolean; error?: string }>(res);
+      if (json.ok) toast({ title: disabled ? 'Cuenta bloqueada' : 'Cuenta desbloqueada' });
+      else toast({ variant: 'destructive', title: 'Error', description: json.error });
+    } catch (e) {
+      console.error(e);
+      toast({ variant: 'destructive', title: 'Error' });
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const fetchExportaciones = async (userId: string) => {
+    setExportacionesUserId(userId);
+    setExportacionesLoading(true);
+    setExportaciones([]);
+    try {
+      const { auth } = await import('@/lib/firebase');
+      const user = auth.currentUser;
+      if (!user) throw new Error('No autenticado');
+      const token = await user.getIdToken();
+      const res = await fetch(`/api/admin/users/${userId}/exportaciones?limit=50`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await safeResJson<{ ok?: boolean; exportaciones?: Exportacion[] }>(res);
+      if (json.ok && json.exportaciones) setExportaciones(json.exportaciones);
+    } catch (e) {
+      console.error(e);
+      toast({ variant: 'destructive', title: 'Error', description: 'No se pudieron cargar las exportaciones.' });
+    } finally {
+      setExportacionesLoading(false);
+    }
+  };
+
+  const handleSaveNotes = async (userId: string) => {
+    setUpdatingId(userId);
+    try {
+      const { auth } = await import('@/lib/firebase');
+      const user = auth.currentUser;
+      if (!user) throw new Error('No autenticado');
+      const token = await user.getIdToken();
+      const res = await fetch(`/api/admin/users/${userId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ adminNotes: notesValue }),
+      });
+      const json = await safeResJson<{ ok?: boolean; error?: string }>(res);
+      if (json.ok) {
+        toast({ title: 'Notas guardadas' });
+        setNotesUserId(null);
+      } else toast({ variant: 'destructive', title: 'Error', description: json.error });
+    } catch (e) {
+      console.error(e);
+      toast({ variant: 'destructive', title: 'Error' });
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const filteredUsers = users.filter((u) => {
+    if (filterTier !== 'all' && (u.tier ?? 'free') !== filterTier) return false;
+    if (filterStatus !== 'all' && (u.status || 'activo') !== filterStatus) return false;
+    if (filterColegio !== 'all' && (u.colegioName ?? '') !== filterColegio) return false;
+    return true;
+  });
+
+  const colegiosOptions = Array.from(new Set(users.map((u) => u.colegioName).filter(Boolean))) as string[];
+
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
@@ -317,7 +556,50 @@ function UserManagement() {
           </Link>
         </Button>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-4">
+        {!isLoading && (
+          <div className="flex flex-wrap gap-4 items-center">
+            <div className="flex items-center gap-2">
+              <Label className="text-xs">Plan</Label>
+              <Select value={filterTier} onValueChange={setFilterTier}>
+                <SelectTrigger className="w-28 h-8"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  <SelectItem value="free">Gratis</SelectItem>
+                  <SelectItem value="premium">Premium</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center gap-2">
+              <Label className="text-xs">Estado</Label>
+              <Select value={filterStatus} onValueChange={setFilterStatus}>
+                <SelectTrigger className="w-28 h-8"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  <SelectItem value="activo">Activo</SelectItem>
+                  <SelectItem value="pendiente">Pendiente</SelectItem>
+                  <SelectItem value="inactivo">Inactivo</SelectItem>
+                  <SelectItem value="bloqueado">Bloqueado</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center gap-2">
+              <Label className="text-xs">Colegio</Label>
+              <Select value={filterColegio} onValueChange={setFilterColegio}>
+                <SelectTrigger className="w-44 h-8"><SelectValue placeholder="Todos" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  {colegiosOptions.map((c) => (
+                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <span className="text-sm text-muted-foreground">
+              {filteredUsers.length} de {users.length} usuarios
+            </span>
+          </div>
+        )}
         {isLoading ? (
           <p>Cargando usuarios...</p>
         ) : (
@@ -335,12 +617,40 @@ function UserManagement() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {users.map((user) => (
+              {filteredUsers.map((user) => (
                 <TableRow key={user.id}>
                   <TableCell className="font-medium">{user.name}</TableCell>
-                  <TableCell>{user.email}</TableCell>
+                  <TableCell>
+                    <span className="flex items-center gap-1">
+                      {user.adminNotes && (
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <StickyNote className="h-4 w-4 text-amber-500 shrink-0" />
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-xs"><p className="whitespace-pre-wrap">{user.adminNotes}</p></TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      )}
+                      {user.email}
+                    </span>
+                  </TableCell>
                   <TableCell>{user.phone || '-'}</TableCell>
-                  <TableCell><Badge variant="outline">{user.role}</Badge></TableCell>
+                  <TableCell>
+                    <Select
+                      value={user.role || 'abogado'}
+                      onValueChange={(v) => handleChangeRole(user.id, v)}
+                      disabled={updatingId === user.id || user.id === currentUserId}
+                    >
+                      <SelectTrigger className="w-[100px] h-8">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="abogado">Abogado</SelectItem>
+                        <SelectItem value="admin">Admin</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </TableCell>
                   <TableCell>
                     <Select
                       value={user.status || 'activo'}
@@ -362,8 +672,10 @@ function UserManagement() {
                     <Badge variant={user.tier === 'premium' ? 'default' : 'secondary'}>
                       {user.tier === 'premium' ? 'Premium' : 'Gratis'}
                     </Badge>
-                    {user.premiumSource === 'colegio' && (
-                      <span className="ml-1 text-xs text-muted-foreground">(colegio)</span>
+                    {user.tier === 'premium' && (
+                      <span className="ml-1 text-xs text-muted-foreground">
+                        {user.premiumSource === 'colegio' ? '(colegio)' : user.premiumSource === 'admin' ? (user.premiumForever ? '(admin, siempre)' : '(admin, 1 mes)') : '(pago)'}
+                      </span>
                     )}
                     {user.tier === 'free' && user.status === 'activo' && (
                       <span className="ml-1 text-xs text-muted-foreground">
@@ -372,23 +684,148 @@ function UserManagement() {
                     )}
                   </TableCell>
                   <TableCell>{user.colegioName || '-'}</TableCell>
-                  <TableCell className="text-right space-x-1">
-                    {user.tier !== 'premium' && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleUpgradePremium(user.id)}
-                        disabled={updatingId === user.id}
-                      >
-                        <Zap className="h-4 w-4 mr-1" /> Premium
-                      </Button>
-                    )}
+                  <TableCell className="text-right">
+                    <div className="flex items-center justify-end gap-1 flex-wrap">
+                      {user.tier !== 'premium' ? (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleSetPremium(user.id, 'monthly')}
+                            disabled={updatingId === user.id}
+                            title="Premium por 30 días"
+                          >
+                            <Zap className="h-4 w-4 mr-1" /> 1 mes
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleSetPremium(user.id, 'forever')}
+                            disabled={updatingId === user.id}
+                            title="Premium permanente sin límite"
+                          >
+                            <Zap className="h-4 w-4 mr-1" /> Siempre
+                          </Button>
+                        </>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                          onClick={() => handleRevokePremium(user.id)}
+                          disabled={updatingId === user.id}
+                          title="Quitar acceso premium"
+                        >
+                          Quitar premium
+                        </Button>
+                      )}
+                      {user.status === 'bloqueado' ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleBlock(user.id, false)}
+                          disabled={updatingId === user.id || user.id === currentUserId}
+                          title="Desbloquear cuenta"
+                        >
+                          <Unlock className="h-4 w-4" />
+                        </Button>
+                      ) : user.id !== currentUserId && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-destructive/80 hover:text-destructive"
+                          onClick={() => handleBlock(user.id, true)}
+                          disabled={updatingId === user.id}
+                          title="Bloquear cuenta"
+                        >
+                          <Ban className="h-4 w-4" />
+                        </Button>
+                      )}
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button size="sm" variant="ghost" disabled={updatingId === user.id}>
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => { setNotesUserId(user.id); setNotesValue(user.adminNotes ?? ''); }}>
+                            <StickyNote className="h-4 w-4 mr-2" /> Notas admin
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => fetchExportaciones(user.id)}>
+                            <History className="h-4 w-4 mr-2" /> Ver exportaciones
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleResendVerification(user.id)}>
+                            <Mail className="h-4 w-4 mr-2" /> Reenviar verificación
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleResetDownloads(user.id)}>
+                            <RefreshCw className="h-4 w-4 mr-2" /> Resetear descargas
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         )}
+        <Dialog open={!!exportacionesUserId} onOpenChange={(o) => !o && setExportacionesUserId(null)}>
+          <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
+            <DialogHeader>
+              <DialogTitle>Exportaciones</DialogTitle>
+            </DialogHeader>
+            <ScrollArea className="flex-1 min-h-[200px]">
+              {exportacionesLoading ? (
+                <p className="text-muted-foreground py-4">Cargando...</p>
+              ) : exportaciones.length === 0 ? (
+                <p className="text-muted-foreground py-4">Sin exportaciones</p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Fecha</TableHead>
+                      <TableHead>Expediente</TableHead>
+                      <TableHead>Actuaciones</TableHead>
+                      <TableHead>Carátula</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {exportaciones.map((e) => (
+                      <TableRow key={e.id}>
+                        <TableCell className="text-sm">{e.creadoEn ? new Date(e.creadoEn).toLocaleString('es-AR') : '-'}</TableCell>
+                        <TableCell>{e.expedienteNumero || '-'}</TableCell>
+                        <TableCell>{e.cantidadActuaciones}</TableCell>
+                        <TableCell className="max-w-[200px] truncate" title={e.caratula}>{e.caratula || '-'}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </ScrollArea>
+          </DialogContent>
+        </Dialog>
+        <Dialog open={!!notesUserId} onOpenChange={(o) => { if (!o) setNotesUserId(null); }}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Notas del admin</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <Textarea
+                placeholder="Notas internas (solo visibles para admins)"
+                value={notesValue}
+                onChange={(e) => setNotesValue(e.target.value)}
+                rows={4}
+                className="resize-none"
+              />
+              <Button
+                onClick={() => notesUserId && handleSaveNotes(notesUserId)}
+                disabled={updatingId === notesUserId}
+              >
+                {updatingId === notesUserId ? 'Guardando...' : 'Guardar'}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </CardContent>
     </Card>
   );
@@ -898,6 +1335,107 @@ function ColegiosSection() {
   );
 }
 
+function ResendTestCard() {
+  const { toast } = useToast();
+  const [email, setEmail] = useState('');
+  const [sending, setSending] = useState(false);
+  const [status, setStatus] = useState<{ configured: boolean; from: string | null } | null>(null);
+
+  const fetchStatus = async () => {
+    try {
+      const { auth } = await import('@/lib/firebase');
+      const user = auth.currentUser;
+      if (!user) return;
+      const token = await user.getIdToken();
+      const res = await fetch('/api/admin/settings/test-resend', { headers: { Authorization: `Bearer ${token}` } });
+      const json = await safeResJson<{ ok?: boolean; configured?: boolean; from?: string | null }>(res);
+      if (json.ok) {
+        setStatus({ configured: json.configured ?? false, from: json.from ?? null });
+        if (!email && user.email) setEmail(user.email);
+      }
+    } catch (e) {
+      console.error(e);
+      setStatus({ configured: false, from: null });
+    }
+  };
+
+  useEffect(() => { void fetchStatus(); }, []);
+
+  const handleSend = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim() || sending) return;
+    setSending(true);
+    try {
+      const { auth } = await import('@/lib/firebase');
+      const user = auth.currentUser;
+      if (!user) throw new Error('No autenticado');
+      const token = await user.getIdToken();
+      const res = await fetch('/api/admin/settings/test-resend', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ email: email.trim() }),
+      });
+      const json = await safeResJson<{ ok?: boolean; error?: string; message?: string }>(res);
+      if (json.ok) {
+        toast({ title: 'Enviado', description: json.message ?? `Correo enviado a ${email}` });
+      } else {
+        toast({ variant: 'destructive', title: 'Error', description: json.error ?? 'No se pudo enviar' });
+      }
+    } catch {
+      toast({ variant: 'destructive', title: 'Error', description: 'No se pudo enviar el correo de prueba.' });
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><Mail className="h-5 w-5" /> Prueba de Resend</CardTitle>
+          <CardDescription>Enviá un correo de prueba para verificar que Resend (emails de verificación, invitaciones) está funcionando. Variables: RESEND_API_KEY y RESEND_FROM en .env.local</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {status !== null && (
+            <div className={cn(
+              'rounded-lg border p-3 text-sm',
+              status.configured
+                ? 'border-emerald-500/50 bg-emerald-950/20 text-emerald-700 dark:text-emerald-300'
+                : 'border-amber-500/50 bg-amber-950/20 text-amber-700 dark:text-amber-300'
+            )}>
+              {status.configured ? (
+                <>
+                  <p className="font-medium">Resend configurado correctamente</p>
+                  <p className="text-muted-foreground mt-1">Remitente: <code className="text-primary">{status.from ?? '—'}</code></p>
+                </>
+              ) : (
+                <p>Resend no está configurado. Agregá RESEND_API_KEY y RESEND_FROM a .env.local</p>
+              )}
+            </div>
+          )}
+          <form onSubmit={handleSend} className="flex flex-wrap gap-3 items-end">
+            <div className="flex-1 min-w-64">
+              <Label htmlFor="resend-test-email">Enviar prueba a</Label>
+              <Input
+                id="resend-test-email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="tu@email.com"
+              />
+            </div>
+            <Button type="submit" disabled={sending || !status?.configured}>
+              {sending ? 'Enviando...' : (
+                <> <Send className="mr-2 h-4 w-4" /> Enviar correo de prueba</>
+              )}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 function PaymentsConfig() {
   const { toast } = useToast();
   const [settings, setSettings] = useState({
@@ -908,6 +1446,7 @@ function PaymentsConfig() {
     currency: 'ARS',
     contactEmail: 'contacto@legalmev.com',
     mercadopagoPublicKey: '',
+    dlocalSubscriptionLink: '',
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -931,6 +1470,7 @@ function PaymentsConfig() {
             currency: (s.currency as string) ?? 'ARS',
             contactEmail: (s.contactEmail as string) ?? 'contacto@legalmev.com',
             mercadopagoPublicKey: (s.mercadopagoPublicKey as string) ?? '',
+            dlocalSubscriptionLink: (s.dlocalSubscriptionLink as string) ?? '',
           });
         }
       } catch (e) {
@@ -976,6 +1516,14 @@ function PaymentsConfig() {
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSave} className="space-y-4">
+          <div className="rounded-lg border border-teal-500/30 bg-teal-950/10 p-4 space-y-2">
+            <h4 className="font-medium">DLocal Go - Suscripción abogado particular</h4>
+            <div>
+              <Label htmlFor="dlocalLink">Link de suscripción mensual (checkout.dlocalgo.com)</Label>
+              <Input id="dlocalLink" value={settings.dlocalSubscriptionLink} onChange={(e) => setSettings((s) => ({ ...s, dlocalSubscriptionLink: e.target.value }))} placeholder="https://checkout.dlocalgo.com/validate/subscription/..." />
+              <p className="text-xs text-muted-foreground mt-1">Link creado en el panel de DLocal para cobro recurrente mensual. Si existe, el botón &quot;Pagar con DLocal&quot; redirige aquí (se pasa user_reference=uid).</p>
+            </div>
+          </div>
           <div className="rounded-lg border border-emerald-500/30 bg-emerald-950/10 p-4 space-y-2">
             <h4 className="font-medium">Mercado Pago</h4>
             <div>
@@ -1452,7 +2000,7 @@ function AdminDashboard() {
 
 const VALID_TABS = ['dashboard', 'users', 'colegios', 'stats', 'payments', 'config'] as const;
 const VALID_COLEGIO_SUB = ['convenios', 'responsables'] as const;
-const VALID_CONFIG_TABS = ['payments', 'system', 'logs', 'ai-test'] as const;
+const VALID_CONFIG_TABS = ['payments', 'email', 'system', 'logs', 'ai-test'] as const;
 
 function ConfigTabs() {
   const searchParams = useSearchParams();
@@ -1471,6 +2019,7 @@ function ConfigTabs() {
     <Tabs value={activeConfigTab} onValueChange={setConfigTab} className="w-full">
       <TabsList className="mb-4">
         <TabsTrigger value="payments"><CreditCard className="mr-2 h-4 w-4"/> Pagos</TabsTrigger>
+        <TabsTrigger value="email"><Mail className="mr-2 h-4 w-4"/> Email (Resend)</TabsTrigger>
         <TabsTrigger value="system"><Cpu className="mr-2 h-4 w-4"/> Sistema</TabsTrigger>
         <TabsTrigger value="logs"><FileText className="mr-2 h-4 w-4"/> Registros</TabsTrigger>
         <TabsTrigger value="ai-test"><Bot className="mr-2 h-4 w-4"/> Test IA</TabsTrigger>
@@ -1478,6 +2027,10 @@ function ConfigTabs() {
 
       <TabsContent value="payments">
         <PaymentsConfig />
+      </TabsContent>
+
+      <TabsContent value="email">
+        <ResendTestCard />
       </TabsContent>
 
       <TabsContent value="system">

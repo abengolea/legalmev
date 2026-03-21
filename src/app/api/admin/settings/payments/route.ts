@@ -39,6 +39,7 @@ export async function GET(request: NextRequest) {
         currency: data?.currency ?? 'ARS',
         contactEmail: data?.contactEmail ?? 'contacto@legalmev.com',
         mercadopagoPublicKey: data?.mercadopagoPublicKey ?? '',
+        dlocalSubscriptionLink: data?.dlocalSubscriptionLink ?? '',
       },
     });
   } catch (err) {
@@ -83,6 +84,7 @@ export async function PATCH(request: NextRequest) {
     if (typeof body.currency === 'string') update.currency = body.currency;
     if (typeof body.contactEmail === 'string') update.contactEmail = body.contactEmail;
     if (typeof body.mercadopagoPublicKey === 'string') update.mercadopagoPublicKey = body.mercadopagoPublicKey;
+    if (typeof body.dlocalSubscriptionLink === 'string') update.dlocalSubscriptionLink = body.dlocalSubscriptionLink;
 
     await adminDb.doc(SETTINGS_DOC).set(update, { merge: true });
 

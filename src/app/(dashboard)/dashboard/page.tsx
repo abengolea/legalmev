@@ -20,7 +20,7 @@ import {
   ExternalLink,
   CreditCard,
   Loader2,
-  LayoutGrid,
+  Crown,
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import Link from 'next/link';
@@ -35,6 +35,11 @@ type UserData = {
   freeDownloadsUsed?: number;
   downloadsThisMonth?: number;
   monthlyResetAt?: string;
+  premiumSource?: 'payment' | 'colegio' | 'admin' | null;
+  premiumForever?: boolean;
+  colegioName?: string | null;
+  colegioSuspended?: boolean;
+  subscriptionLapsed?: boolean;
 };
 
 export default function DashboardPage() {
@@ -43,6 +48,7 @@ export default function DashboardPage() {
   const [premiumLimit, setPremiumLimit] = useState(100);
   const [mercadopagoEnabled, setMercadopagoEnabled] = useState(false);
   const [dlocalEnabled, setDlocalEnabled] = useState(false);
+  const [dlocalSubscriptionLink, setDlocalSubscriptionLink] = useState('');
   const [premiumPriceAmount, setPremiumPriceAmount] = useState(0);
   const [contactEmail, setContactEmail] = useState('contacto@legalmev.com');
   const [payingWithMp, setPayingWithMp] = useState(false);
@@ -86,6 +92,12 @@ export default function DashboardPage() {
     if (!user) return;
     setPayingWithDlocal(true);
     try {
+      // Si hay link de suscripción configurado, redirigir directamente (cobro recurrente mensual)
+      if (dlocalSubscriptionLink) {
+        const sep = dlocalSubscriptionLink.includes('?') ? '&' : '?';
+        window.location.href = `${dlocalSubscriptionLink}${sep}user_reference=${user.uid}`;
+        return;
+      }
       const token = await user.getIdToken();
       const res = await fetch('/api/payments/create-dlocal-order', {
         method: 'POST',
@@ -135,6 +147,7 @@ export default function DashboardPage() {
         if (json.ok) {
           setMercadopagoEnabled(!!json.mercadopagoEnabled);
           setDlocalEnabled(!!json.dlocalEnabled);
+          setDlocalSubscriptionLink(json.dlocalSubscriptionLink ?? '');
           setPremiumPriceAmount(json.premiumPriceAmount ?? 0);
           if (json.contactEmail) setContactEmail(json.contactEmail);
         }
@@ -198,6 +211,10 @@ export default function DashboardPage() {
           <Skeleton className="h-8 w-48" />
           <Skeleton className="h-4 w-56" />
         </div>
+        <div className="rounded-lg border bg-card p-6 space-y-2">
+          <Skeleton className="h-6 w-24" />
+          <Skeleton className="h-4 w-48" />
+        </div>
         <div className="rounded-lg border bg-card p-6 space-y-4">
           <Skeleton className="h-6 w-40" />
           <Skeleton className="h-4 w-full" />
@@ -217,9 +234,33 @@ export default function DashboardPage() {
   }
 
   const tier = userData?.tier ?? 'free';
+  const subscriptionLapsed = userData?.subscriptionLapsed === true;
   const freeUsed = userData?.freeDownloadsUsed ?? 0;
   const monthUsed = userData?.downloadsThisMonth ?? 0;
-  const freeLimit = 5;
+  const freeLimit = subscriptionLapsed ? 0 : 5;
+
+  const isColegioUser = userData?.premiumSource === 'colegio' && userData?.colegioName;
+  const isColegioSuspended = Boolean(
+    userData?.colegioName &&
+    userData?.tier === 'free' &&
+    (userData?.colegioSuspended === true || userData?.premiumSource !== 'colegio')
+  );
+  const premiumForever = userData?.premiumForever === true;
+  const monthlyResetAt = userData?.monthlyResetAt;
+  const colegioName = userData?.colegioName ?? '';
+
+  const formatRenewalDate = (isoStr: string) => {
+    try {
+      const d = new Date(isoStr);
+      return d.toLocaleDateString('es-AR', {
+        day: '2-digit',
+        month: 'long',
+        year: 'numeric',
+      });
+    } catch {
+      return isoStr;
+    }
+  };
 
   return (
     <div className="max-w-2xl space-y-10">
@@ -230,6 +271,96 @@ export default function DashboardPage() {
         <p className="text-muted-foreground">{userData?.email}</p>
       </div>
 
+      {/* Tu plan — Siempre visible; contenido según tipo de usuario */}
+      <Card className="border-primary/30 bg-primary/5 shadow-sm">
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2 text-xl">
+            <Crown className="h-6 w-6 text-primary" />
+            Tu plan
+          </CardTitle>
+          <CardDescription>
+            {isColegioUser ? (
+              <>
+                <span className="text-base font-semibold text-primary">
+                  Plan Colegio de Abogados {colegioName}
+                </span>
+                <span className="text-sm">
+                  {' '}· Al día con la matrícula
+                </span>
+              </>
+            ) : isColegioSuspended ? (
+              <>
+                <span className="text-base font-semibold text-muted-foreground">
+                  Plan Gratuito
+                </span>
+                <span className="text-sm">
+                  {' '}· Tu colegio ({colegioName}) tiene convenio con LegalMev, pero informó que no estás al día con la matrícula. Perdés el beneficio premium y quedás con plan gratuito.
+                </span>
+              </>
+            ) : subscriptionLapsed ? (
+              <>
+                <span className="text-base font-semibold text-destructive">
+                  Suscripción vencida
+                </span>
+                <span className="text-sm">
+                  {' '}· Tu pago fue rechazado y no renovaste. Renová para seguir exportando expedientes.
+                </span>
+              </>
+            ) : (
+              <>
+                <span
+                  className={`text-base font-semibold ${tier === 'premium' ? 'text-primary' : 'text-muted-foreground'}`}
+                >
+                  {tier === 'premium' ? 'Plan Premium' : 'Plan Gratuito'}
+                </span>
+                {tier === 'premium' && premiumForever && (
+                  <span className="text-sm">
+                    {' '}· Premium permanente (asignado por administrador)
+                  </span>
+                )}
+                {tier === 'premium' && !premiumForever && monthlyResetAt && (
+                  <span className="text-sm">
+                    {' '}· Próxima renovación de cuota: {formatRenewalDate(monthlyResetAt)}
+                  </span>
+                )}
+                {tier === 'free' && !subscriptionLapsed && (
+                  <span className="text-sm">
+                    {' '}· 5 descargas para probar. Pasá a Premium para más expedientes por mes.
+                  </span>
+                )}
+              </>
+            )}
+          </CardDescription>
+        </CardHeader>
+        {/* Opción de suscripción mensual con cobro automático — solo si hay link configurado */}
+        {tier === 'premium' &&
+          (userData?.premiumSource === 'payment' || (userData?.premiumSource !== 'colegio' && !!monthlyResetAt && !premiumForever)) &&
+          dlocalSubscriptionLink &&
+          (dlocalEnabled || isLocal) && (
+          <CardContent className="pt-0">
+            <div className="rounded-lg border border-primary/20 bg-background p-4">
+              <p className="text-sm text-muted-foreground mb-3">
+                ¿Pagás cada mes manualmente? Pasate a <strong>suscripción con cobro automático</strong> y te debitamos la cuota cada mes sin que tengas que acordarte.
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-primary text-primary hover:bg-primary/10"
+                disabled={payingWithDlocal}
+                onClick={handlePayWithDLocal}
+              >
+                {payingWithDlocal ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <CreditCard className="h-4 w-4 mr-2" />
+                )}
+                Suscribirme con cobro automático
+              </Button>
+            </div>
+          </CardContent>
+        )}
+      </Card>
+
       {/* Contador de descargas — Card principal destacada */}
       <Card className="border-primary/30 bg-primary/5 shadow-sm">
         <CardHeader className="pb-2">
@@ -238,25 +369,27 @@ export default function DashboardPage() {
             Descargas usadas
           </CardTitle>
           <CardDescription>
-            {tier === 'free'
-              ? `Tenés 5 descargas gratuitas. Pasá a premium para ${premiumLimit} por mes.`
-              : `Plan premium: ${premiumLimit} expedientes por mes.`}
+            {subscriptionLapsed
+              ? 'Tu suscripción venció. Renová para seguir exportando.'
+              : tier === 'free'
+                ? `Tenés 5 descargas gratuitas. Pasá a premium para ${premiumLimit} por mes.`
+                : `Plan premium: ${premiumLimit} expedientes por mes.`}
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex items-baseline gap-2">
-            <span className="text-4xl font-bold text-primary">
-              {tier === 'free' ? freeUsed : monthUsed}
+            <span className={`text-4xl font-bold ${subscriptionLapsed ? 'text-destructive' : 'text-primary'}`}>
+              {subscriptionLapsed ? 0 : tier === 'free' ? freeUsed : monthUsed}
             </span>
             <span className="text-muted-foreground text-lg">
-              / {tier === 'free' ? freeLimit : premiumLimit}
+              / {subscriptionLapsed ? 0 : tier === 'free' ? freeLimit : premiumLimit}
             </span>
           </div>
           <div className="mt-3 h-2 bg-muted rounded-full overflow-hidden">
             <div
-              className="h-full bg-primary transition-all"
+              className={`h-full transition-all ${subscriptionLapsed ? 'bg-destructive' : 'bg-primary'}`}
               style={{
-                width: `${Math.min(100, ((tier === 'free' ? freeUsed : monthUsed) / (tier === 'free' ? freeLimit : premiumLimit)) * 100)}%`,
+                width: `${subscriptionLapsed ? 100 : Math.min(100, ((tier === 'free' ? freeUsed : monthUsed) / (tier === 'free' ? freeLimit : premiumLimit || 1)) * 100)}%`,
               }}
             />
           </div>
@@ -266,16 +399,18 @@ export default function DashboardPage() {
 
       {/* Pasar a Premium - en local siempre se muestra aunque no estén configurados los pagos */}
       {tier !== 'premium' && (mercadopagoEnabled || dlocalEnabled || isLocal) && (
-        <Card className="border-primary/30 bg-primary/5">
+        <Card className={subscriptionLapsed ? 'border-destructive/50 bg-destructive/5' : 'border-primary/30 bg-primary/5'}>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Zap className="h-5 w-5 text-primary" />
-              Pasá a Premium
+              <Zap className={`h-5 w-5 ${subscriptionLapsed ? 'text-destructive' : 'text-primary'}`} />
+              {subscriptionLapsed ? 'Renová tu suscripción' : 'Pasá a Premium'}
             </CardTitle>
             <CardDescription>
-              {premiumPriceAmount > 0
-                ? `Pago mensual de $${premiumPriceAmount.toLocaleString()} (IVA incluido). Más expedientes, sin límites para uso intensivo. Elegí tu forma de pago:`
-                : 'Más expedientes por mes, sin límites para uso intensivo. Elegí tu forma de pago:'}
+              {subscriptionLapsed
+                ? 'Tu acceso está suspendido. Renová para seguir exportando expedientes.'
+                : premiumPriceAmount > 0
+                  ? `Pago mensual de $${premiumPriceAmount.toLocaleString()} (IVA incluido). Más expedientes, sin límites para uso intensivo. Elegí tu forma de pago:`
+                  : 'Más expedientes por mes, sin límites para uso intensivo. Elegí tu forma de pago:'}
             </CardDescription>
           </CardHeader>
           <CardContent className="pt-0 space-y-3">

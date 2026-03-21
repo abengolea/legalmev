@@ -26,10 +26,14 @@ export async function GET() {
       : 0;
     const currency = data?.currency ?? 'ARS';
 
+    const dlocalSubscriptionLink = (data?.dlocalSubscriptionLink as string) ?? '';
+    const dlocalSubscriptionEnabled = !!dlocalSubscriptionLink.trim() && dlocalEnabled;
+
     return NextResponse.json({
       ok: true,
       mercadopagoEnabled,
       dlocalEnabled,
+      dlocalSubscriptionLink: dlocalSubscriptionEnabled ? dlocalSubscriptionLink : '',
       premiumPriceAmount,
       currency,
       contactEmail: data?.contactEmail ?? 'contacto@legalmev.com',

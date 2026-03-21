@@ -20,17 +20,25 @@ env:
   # Mercado Pago (pagos Premium)
   - variable: MERCADOPAGO_ACCESS_TOKEN
     secret: MERCADOPAGO_ACCESS_TOKEN
-  # DLocal Go (Notificas SRL) - Testing: api-sbx.dlocalgo.com | Live: api.dlocalgo.com
+  # DLocal Go (Notificas SRL)
+  # Producción: credenciales LIVE de dashboard.dlocalgo.com
+  # Testing: api-sbx.dlocalgo.com + credenciales de dashboard-sbx.dlocalgo.com
   - variable: DLOCAL_API_KEY
     secret: DLOCAL_API_KEY
   - variable: DLOCAL_SECRET_KEY
     secret: DLOCAL_SECRET_KEY
+  - variable: DLOCAL_BASE_URL
+    value: https://api.dlocalgo.com
+  - variable: DLOCAL_WEBHOOK_URL
+    value: https://www.legalmev.com.ar/api/payments/webhook-dlocal
+  - variable: DLOCAL_RETURN_URL
+    value: https://www.legalmev.com.ar/dashboard?dlocal=success
 
   # Resend (emails de verificación con botón)
   - variable: RESEND_API_KEY
     secret: RESEND_API_KEY
   - variable: RESEND_FROM
-    value: LegalMev <onboarding@resend.dev>
+    value: LegalMev <no-reply@legalmev.com.ar>
 
   # Firebase Cliente (NEXT_PUBLIC_* = build time, necesarias para Auth en producción)
   # Crear secrets con: firebase apphosting:secrets:set NOMBRE_SECRETO

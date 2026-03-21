@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuth, getAdminDb } from '@/lib/firebase-admin';
 import { parseMembersFile } from '@/lib/parse-members-file';
+import { normalizeMembers, syncUserTiersForColegio } from '@/lib/colegio-members';
+import type { ColegioMember } from '@/lib/colegio-members';
 
 /**
  * POST /api/colegio/upload
- * Sube Excel o CSV con lista de emails y nombres autorizados.
- * Solo usuarios cuyo email está en colegio.adminEmails.
- * Body: FormData con campo 'file' y opcional 'colegioId' (si administra uno solo, se infiere).
+ * Sube Excel/CSV con los colegiados al día (matrícula pagada).
+ * Los que están en el archivo quedan ACTIVOS; los que no, SUSPENDIDOS.
+ * Body: FormData con campo 'file' y opcional 'colegioId'.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -80,42 +82,52 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    const members: { email: string; name: string }[] = [];
-    let actualizados = 0;
-    let pendientes = 0;
+    const existingMembers = normalizeMembers((data?.members || []) as ColegioMember[]);
+    const emailsEnExcel = new Set(rows.map((r) => r.email.toLowerCase()));
 
+    // Integrar: los del Excel = activo; los que ya estaban y NO están en Excel = suspendido
+    const membersMap = new Map<string, ColegioMember>();
+    for (const m of existingMembers) {
+      membersMap.set(m.email, {
+        ...m,
+        estado: emailsEnExcel.has(m.email) ? 'activo' : 'suspendido',
+      });
+    }
     for (const row of rows) {
-      members.push({ email: row.email, name: row.name });
-
-      const usersSnap = await adminDb.collection('users').where('email', '==', row.email).limit(1).get();
-      if (!usersSnap.empty) {
-        const userDoc = usersSnap.docs[0];
-        await userDoc.ref.update({
-          tier: 'premium',
-          colegioId,
-          premiumSource: 'colegio',
-          colegioName: data.name,
-          downloadsThisMonth: 0,
-          monthlyResetAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-          updatedAt: new Date().toISOString(),
-        });
-        actualizados++;
+      const e = row.email.toLowerCase();
+      if (!membersMap.has(e)) {
+        membersMap.set(e, { email: e, name: row.name, estado: 'activo' });
       } else {
-        pendientes++;
+        const prev = membersMap.get(e)!;
+        membersMap.set(e, { ...prev, name: row.name, estado: 'activo' });
       }
     }
+
+    const members: ColegioMember[] = Array.from(membersMap.values());
+
+    const { activated, suspended } = await syncUserTiersForColegio(
+      adminDb,
+      colegioId,
+      (data?.name as string) || '',
+      members
+    );
 
     await adminDb.collection('colegios').doc(colegioId).update({
       members,
       updatedAt: new Date().toISOString(),
     });
 
+    const activosCount = members.filter((m) => m.estado !== 'suspendido').length;
+    const suspendidosCount = members.filter((m) => m.estado === 'suspendido').length;
+
     return NextResponse.json({
       ok: true,
-      total: rows.length,
-      actualizados,
-      pendientes,
-      message: `${actualizados} usuarios actualizados a premium. ${pendientes} pendientes (se asignará al registrarse).`,
+      total: members.length,
+      activos: activosCount,
+      suspendidos: suspendidosCount,
+      usuariosActivados: activated,
+      usuariosSuspendidos: suspended,
+      message: `${activosCount} al día, ${suspendidosCount} suspendidos por falta de pago. ${activated} usuarios activados, ${suspended} suspendidos.`,
     });
   } catch (err) {
     return NextResponse.json(

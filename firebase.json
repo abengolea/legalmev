@@ -15,6 +15,22 @@
   },
   "apphosting": [
     {
+      "backendId": "legalmev-staging",
+      "rootDir": ".",
+      "ignore": [
+        "node_modules",
+        "**/node_modules",
+        ".git",
+        ".next",
+        ".firebase",
+        "mev_descarga",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        ".genkit"
+      ],
+      "alwaysDeployFromSource": true
+    },
+    {
       "backendId": "legalmev",
       "rootDir": ".",
       "ignore": [

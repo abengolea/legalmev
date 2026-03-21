@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { MercadoPagoConfig, Payment } from 'mercadopago';
 import { getAdminDb } from '@/lib/firebase-admin';
+import { sendPaymentSuccessEmail } from '@/lib/payment-notifications';
 
 /**
  * Extrae topic/type e id del pago desde GET (IPN) o POST (Webhooks).
@@ -85,6 +86,16 @@ async function processPaymentNotification(accessToken: string, id: string): Prom
       estado: 'completado',
       descripcion: 'Plan Premium LegalMev',
     });
+    // Notificar cobro exitoso por email (igual que DLocal)
+    const userEmail = (userData?.email as string) || '';
+    if (userEmail) {
+      await sendPaymentSuccessEmail({
+        to: userEmail,
+        userName: (userData?.name as string) || undefined,
+        amount,
+        currency: moneda,
+      });
+    }
   }
     return { ok: true };
   } catch (err) {

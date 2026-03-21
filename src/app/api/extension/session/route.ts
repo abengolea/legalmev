@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminDb } from '@/lib/firebase-admin';
 import { requireAuthWithDevice } from '@/lib/require-auth-device';
+import { maybeDowngradeLapsedSubscription, canUseFreeDownloads } from '@/lib/subscription-lapse';
 
 const FREE_QUOTA = 5;
 const PREMIUM_QUOTA_DEFAULT = 100;
@@ -50,8 +51,16 @@ export async function GET(request: NextRequest) {
 
     const { uid, userData } = authResult;
     const adminDb = getAdminDb();
-    const tier = userData.tier ?? 'free';
-    const email = (userData.email as string) ?? '';
+    let tier = userData.tier ?? 'free';
+    let effectiveUserData = userData;
+
+    const downgraded = await maybeDowngradeLapsedSubscription(adminDb, uid, userData as import('@/lib/subscription-lapse').UserData);
+    if (downgraded) {
+      tier = 'free';
+      effectiveUserData = { ...userData, tier: 'free', subscriptionLapsed: true };
+    }
+
+    const email = (effectiveUserData.email as string) ?? '';
     const now = new Date();
 
     // Obtener cuota premium (global o por colegio)
@@ -63,7 +72,7 @@ export async function GET(request: NextRequest) {
         : PREMIUM_QUOTA_DEFAULT;
 
     let premiumQuota = globalQuota;
-    const isColegio = userData.premiumSource === 'colegio' && userData.colegioId;
+    const isColegio = effectiveUserData.premiumSource === 'colegio' && effectiveUserData.colegioId;
     if (isColegio) {
       const colegioSnap = await adminDb.collection('colegios').doc(userData.colegioId).get();
       const colegioData = colegioSnap.data();
@@ -77,16 +86,20 @@ export async function GET(request: NextRequest) {
 
     if (tier === 'free') {
       plan = 'free';
-      const used = userData.freeDownloadsUsed ?? 0;
-      remainingQueries = Math.max(0, FREE_QUOTA - used);
+      if (!canUseFreeDownloads(effectiveUserData as import('@/lib/subscription-lapse').UserData)) {
+        remainingQueries = 0;
+      } else {
+        const used = effectiveUserData.freeDownloadsUsed ?? 0;
+        remainingQueries = Math.max(0, FREE_QUOTA - used);
+      }
     } else {
       // premium: pro (pago) o unlimited (colegio convenio)
       plan = isColegio ? 'unlimited' : 'pro';
       if (plan === 'unlimited') {
         remainingQueries = null; // Sin límite práctico para convenios
       } else {
-        let used = userData.downloadsThisMonth ?? 0;
-        const resetAt = userData.monthlyResetAt ? new Date(userData.monthlyResetAt) : null;
+        let used = effectiveUserData.downloadsThisMonth ?? 0;
+        const resetAt = effectiveUserData.monthlyResetAt ? new Date(effectiveUserData.monthlyResetAt) : null;
         if (resetAt && now >= resetAt) {
           used = 0;
         }

@@ -6,7 +6,7 @@ function getBaseUrl(): string {
   const env = process.env.NEXT_PUBLIC_SITE_URL;
   if (env) return env.replace(/\/$/, '');
   if (process.env.NODE_ENV === 'production') return 'https://www.legalmev.com.ar';
-  return process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:9003';
+  return process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:9002';
 }
 
 /**
@@ -187,8 +187,12 @@ export async function POST(request: NextRequest) {
 
       if (!redirectUrl) {
         console.error('[colegio create-payment-link] DLocal:', data);
+        const errMsg = data.message ?? data.error ?? 'No se pudo crear el link';
+        const hint = /invalid credential/i.test(String(errMsg))
+          ? ' Verificá que DLOCAL_BASE_URL coincida con tus credenciales: api-sbx.dlocalgo.com para sandbox, api.dlocalgo.com para live.'
+          : '';
         return NextResponse.json(
-          { ok: false, error: data.message ?? data.error ?? 'No se pudo crear el link' },
+          { ok: false, error: errMsg + hint },
           { status: 500 }
         );
       }

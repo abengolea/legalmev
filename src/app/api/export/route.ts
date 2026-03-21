@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAdminDb, getAdminStorage, getStorageBucketName } from '@/lib/firebase-admin';
 import { requireAuthWithDevice } from '@/lib/require-auth-device';
 import { generateExpedientePDF, generateFilename } from '@/lib/pdf-generator';
+import { maybeDowngradeLapsedSubscription, canUseFreeDownloads } from '@/lib/subscription-lapse';
 import type { ExportRequest, Expediente } from '@/types/expediente';
 
 const PROVEIDO_REGEX = /^https:\/\/mev\.scba\.gov\.ar\/proveido\.asp\?.*pidJuzgado=.*sCodi=.*nPosi=\d+/i;
@@ -48,11 +49,25 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const tier = userData.tier ?? 'free';
+    let tier = userData.tier ?? 'free';
+    let effectiveUserData = userData;
+
+    const downgraded = await maybeDowngradeLapsedSubscription(adminDb, uid, userData as import('@/lib/subscription-lapse').UserData);
+    if (downgraded) {
+      tier = 'free';
+      effectiveUserData = { ...userData, tier: 'free', subscriptionLapsed: true };
+    }
+
     const now = new Date();
 
     if (tier === 'free') {
-      const used = userData.freeDownloadsUsed ?? 0;
+      if (!canUseFreeDownloads(effectiveUserData as import('@/lib/subscription-lapse').UserData)) {
+        return NextResponse.json(
+          { ok: false, error: 'Tu suscripción venció. Renová para seguir exportando expedientes.' },
+          { status: 403, headers: corsHeaders }
+        );
+      }
+      const used = effectiveUserData.freeDownloadsUsed ?? 0;
       if (used >= FREE_QUOTA) {
         return NextResponse.json(
           { ok: false, error: `Ya usaste tus ${FREE_QUOTA} descargas gratuitas. Contactanos para el plan premium (${premiumQuota}/mes).` },
@@ -60,20 +75,24 @@ export async function POST(request: NextRequest) {
         );
       }
     } else {
-      let used = userData.downloadsThisMonth ?? 0;
-      const resetAt = userData.monthlyResetAt ? new Date(userData.monthlyResetAt) : null;
-      if (resetAt && now >= resetAt) {
-        await adminDb.collection('users').doc(uid).update({
-          downloadsThisMonth: 0,
-          monthlyResetAt: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-        });
-        used = 0;
-      }
-      if (used >= premiumQuota) {
-        return NextResponse.json(
-          { ok: false, error: `Llegaste al límite de ${premiumQuota} expedientes por mes. Se renueva automáticamente.` },
-          { status: 403, headers: corsHeaders }
-        );
+      const premiumForever = effectiveUserData.premiumForever === true;
+      if (!premiumForever) {
+        let used = effectiveUserData.downloadsThisMonth ?? 0;
+        const resetAt = effectiveUserData.monthlyResetAt ? new Date(effectiveUserData.monthlyResetAt) : null;
+        if (resetAt && now >= resetAt) {
+          await adminDb.collection('users').doc(uid).update({
+            downloadsThisMonth: 0,
+            monthlyResetAt: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+          });
+          used = 0;
+          (effectiveUserData as Record<string, unknown>).downloadsThisMonth = 0;
+        }
+        if (used >= premiumQuota) {
+          return NextResponse.json(
+            { ok: false, error: `Llegaste al límite de ${premiumQuota} expedientes por mes. Se renueva automáticamente.` },
+            { status: 403, headers: corsHeaders }
+          );
+        }
       }
     }
 
@@ -168,19 +187,22 @@ export async function POST(request: NextRequest) {
 
     const userRef = adminDb.collection('users').doc(uid);
     if (tier === 'free') {
-      const used = userData.freeDownloadsUsed ?? 0;
+      const used = effectiveUserData.freeDownloadsUsed ?? 0;
       await userRef.update({ freeDownloadsUsed: used + 1 });
     } else {
-      const resetAt = userData.monthlyResetAt ? new Date(userData.monthlyResetAt) : null;
-      let monthUsed = userData.downloadsThisMonth ?? 0;
-      let newResetAt = userData.monthlyResetAt;
-      if (resetAt && now >= resetAt) {
-        monthUsed = 0;
-        newResetAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
+      const premiumForever = effectiveUserData.premiumForever === true;
+      let monthUsed = effectiveUserData.downloadsThisMonth ?? 0;
+      let newResetAt = effectiveUserData.monthlyResetAt;
+      if (!premiumForever) {
+        const resetAt = userData.monthlyResetAt ? new Date(userData.monthlyResetAt) : null;
+        if (resetAt && now >= resetAt) {
+          monthUsed = 0;
+          newResetAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
+        }
       }
       await userRef.update({
         downloadsThisMonth: monthUsed + 1,
-        monthlyResetAt: newResetAt || new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        monthlyResetAt: premiumForever ? null : (newResetAt || new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString()),
       });
     }
 

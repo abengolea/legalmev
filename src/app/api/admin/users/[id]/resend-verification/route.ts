@@ -6,7 +6,14 @@ import { randomUUID } from 'crypto';
 
 const VERIFY_EMAIL_EXPIRY_MS = 60 * 60 * 1000; // 1 hora
 
-export async function POST(request: NextRequest) {
+/**
+ * POST /api/admin/users/[id]/resend-verification
+ * Reenvía el email de verificación a un usuario. Solo admins.
+ */
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
     const authHeader = request.headers.get('Authorization');
     const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
@@ -16,32 +23,41 @@ export async function POST(request: NextRequest) {
 
     if (!canSendEmail()) {
       return NextResponse.json(
-        { ok: false, error: 'Servicio de email no configurado. Configurá RESEND_API_KEY y RESEND_FROM.' },
+        { ok: false, error: 'Servicio de email no configurado' },
         { status: 500 }
       );
     }
 
     const adminAuth = getAuth();
     const decoded = await adminAuth.verifyIdToken(token);
-    const uid = decoded.uid;
-    const email = (decoded.email as string) || '';
-
-    if (!email) {
-      return NextResponse.json({ ok: false, error: 'Email no encontrado' }, { status: 400 });
+    const adminDb = getAdminDb();
+    const adminSnap = await adminDb.collection('users').doc(decoded.uid).get();
+    if (adminSnap.data()?.role !== 'admin') {
+      return NextResponse.json({ ok: false, error: 'Solo administradores' }, { status: 403 });
     }
 
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.legalmev.com.ar';
+    const { id: targetUserId } = await params;
+    if (!targetUserId) {
+      return NextResponse.json({ ok: false, error: 'ID requerido' }, { status: 400 });
+    }
+
+    const userSnap = await adminDb.collection('users').doc(targetUserId).get();
+    const userData = userSnap.data();
+    const email = (userData?.email as string) || '';
+    if (!email) {
+      return NextResponse.json({ ok: false, error: 'Usuario sin email' }, { status: 400 });
+    }
+
     const verifyToken = randomUUID();
     const expiresAt = Date.now() + VERIFY_EMAIL_EXPIRY_MS;
-
-    const adminDb = getAdminDb();
     await adminDb.collection('verificationTokens').doc(verifyToken).set({
-      uid,
+      uid: targetUserId,
       email,
       expiresAt,
       createdAt: new Date().toISOString(),
     });
 
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.legalmev.com.ar';
     const verifyUrl = `${siteUrl.replace(/\/$/, '')}/api/verify-email?token=${verifyToken}`;
     const html = buildVerificationEmailHtml(verifyUrl);
 
@@ -53,19 +69,19 @@ export async function POST(request: NextRequest) {
     });
 
     if (error) {
-      console.error('[send-verification-email] Resend error:', error);
+      console.error('[resend-verification] Resend error:', error);
       return NextResponse.json(
         { ok: false, error: 'No se pudo enviar el correo' },
         { status: 500 }
       );
     }
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, message: 'Email enviado' });
   } catch (err) {
-    console.error('[send-verification-email]', err);
+    console.error('[resend-verification]', err);
     return NextResponse.json(
       { ok: false, error: err instanceof Error ? err.message : 'Error' },
-      { status: 401 }
+      { status: 500 }
     );
   }
 }

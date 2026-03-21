@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
+import { PasswordInput } from '@/components/ui/password-input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
@@ -302,7 +303,7 @@ function JudicialIntegrationsForm() {
                                 <FormItem>
                                     <FormLabel>Contraseña</FormLabel>
                                     <FormControl>
-                                        <Input type="password" placeholder="Ingresa una nueva contraseña para actualizar" {...field} />
+                                        <PasswordInput placeholder="Ingresa una nueva contraseña para actualizar" {...field} />
                                     </FormControl>
                                     <FormMessage />
                                 </FormItem>
@@ -333,7 +334,7 @@ function JudicialIntegrationsForm() {
                                 <FormItem>
                                     <FormLabel>Contraseña</FormLabel>
                                     <FormControl>
-                                        <Input type="password" placeholder="Ingresa una nueva contraseña para actualizar" {...field} />
+                                        <PasswordInput placeholder="Ingresa una nueva contraseña para actualizar" {...field} />
                                     </FormControl>
                                     <FormMessage />
                                 </FormItem>
@@ -404,7 +405,7 @@ export default function SettingsPage() {
               </div>
                <div className="space-y-2">
                 <Label htmlFor="whatsapp-token">Token de Acceso</Label>
-                <Input id="whatsapp-token" type="password" placeholder="Pega aquí tu token de acceso permanente"/>
+                <PasswordInput id="whatsapp-token" placeholder="Pega aquí tu token de acceso permanente"/>
               </div>
                 <div className="space-y-2">
                 <Label htmlFor="verify-token">Token de Verificación</Label>

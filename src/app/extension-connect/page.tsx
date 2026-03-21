@@ -37,11 +37,6 @@ export default function ExtensionConnectPage() {
         return;
       }
 
-      if (!user.emailVerified) {
-        router.replace('/verifica-email');
-        return;
-      }
-
       try {
         const token = await user.getIdToken(true);
         if (!token) {
@@ -78,8 +73,6 @@ export default function ExtensionConnectPage() {
       if (!user) {
         const redirect = encodeURIComponent('/extension-connect');
         router.replace(`/login?redirect=${redirect}`);
-      } else if (!user.emailVerified) {
-        router.replace('/verifica-email');
       } else {
         run();
       }
