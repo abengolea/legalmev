@@ -1,6 +1,7 @@
 import { Inter } from 'next/font/google';
 import { DashboardNav } from '@/components/DashboardNav';
 import { DashboardAuthGuard } from '@/components/DashboardAuthGuard';
+import { NotificasColegioPromoDialog } from '@/components/NotificasColegioPromoDialog';
 import { SidebarProvider, Sidebar, SidebarInset } from '@/components/ui/sidebar';
 
 const inter = Inter({ subsets: ['latin'], display: 'swap' });
@@ -8,6 +9,7 @@ const inter = Inter({ subsets: ['latin'], display: 'swap' });
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
     <DashboardAuthGuard>
+      <NotificasColegioPromoDialog />
       <SidebarProvider>
         <div className={`legalmev-rebrand ${inter.className} flex min-h-screen`}>
           <DashboardNav />
