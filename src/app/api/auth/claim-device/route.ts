@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
     const decoded = await adminAuth.verifyIdToken(token);
     const uid = decoded.uid;
 
-    // Revocar todos los refresh tokens anteriores (cierra sesiones en otras PCs)
+    // Revocar sesiones anteriores (otras PCs quedan deslogueadas)
     await adminAuth.revokeRefreshTokens(uid);
 
     // Registrar este dispositivo como el único autorizado
