@@ -56,8 +56,6 @@ export default function LoginPage() {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ deviceId }),
       }).catch(() => {}); // No bloquear si falla
-      // Forzar token fresco post-revocación para que esta sesión quede activa
-      await user.getIdToken(true).catch(() => {});
       toast({
         title: '¡Bienvenido de nuevo!',
       });
@@ -94,8 +92,6 @@ export default function LoginPage() {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ deviceId }),
       }).catch(() => {});
-      // Forzar token fresco post-revocación para que esta sesión quede activa
-      await user.getIdToken(true).catch(() => {});
       toast({ title: '¡Bienvenido de nuevo!' });
       const dest = redirectTo && redirectTo.startsWith('/') && !redirectTo.startsWith('//') ? redirectTo : '/dashboard';
       window.location.href = dest;

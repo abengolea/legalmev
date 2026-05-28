@@ -25,9 +25,6 @@ export async function POST(request: NextRequest) {
     const decoded = await adminAuth.verifyIdToken(token);
     const uid = decoded.uid;
 
-    // Revocar sesiones anteriores (otras PCs quedan deslogueadas)
-    await adminAuth.revokeRefreshTokens(uid);
-
     // Registrar este dispositivo como el único autorizado
     const adminDb = getAdminDb();
     await adminDb.collection('users').doc(uid).set(
