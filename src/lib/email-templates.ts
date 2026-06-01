@@ -3,6 +3,8 @@
  * Colores: #2A6A78 (primary), #54A6A8 (accent).
  */
 
+import { CONTACT_EMAIL } from '@/lib/site-contact';
+
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.legalmev.com.ar';
 
 function escapeHtml(s: string): string {
@@ -72,9 +74,11 @@ function emailFooter(): string {
     <p style="margin:0 0 8px;font-size:13px;color:#6b7280;">
       <a href="${BASE}" style="color:#2A6A78;text-decoration:none;">legalmev.com.ar</a>
       &nbsp;·&nbsp;
+      <a href="${BASE}/landing/bases-y-condiciones" style="color:#6b7280;text-decoration:none;">Bases y condiciones</a>
+      &nbsp;·&nbsp;
       <a href="${BASE}/landing/politica-privacidad" style="color:#6b7280;text-decoration:none;">Política de privacidad</a>
     </p>
-    <p style="margin:0;font-size:12px;color:#9ca3af;">contacto@legalmev.com.ar</p>
+    <p style="margin:0;font-size:12px;color:#9ca3af;"><a href="mailto:${CONTACT_EMAIL}" style="color:#9ca3af;text-decoration:none;">${CONTACT_EMAIL}</a></p>
     <p style="margin:12px 0 0;font-size:11px;color:#9ca3af;">© ${new Date().getFullYear()} LegalMev. Todos los derechos reservados.</p>
   </div>`;
 }

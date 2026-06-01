@@ -1,6 +1,7 @@
 
 import { Logo } from '@/components/Logo';
 import { Button } from '@/components/ui/button';
+import { CONTACT_EMAIL, CONTACT_MAILTO } from '@/lib/site-contact';
 import Link from 'next/link';
 
 export default function LandingLayout({
@@ -35,12 +36,24 @@ export default function LandingLayout({
           <p className="text-center text-sm leading-loose text-muted-foreground md:text-left">
             © {new Date().getFullYear()} LegalMev. Todos los derechos reservados.
           </p>
-          <nav className="flex items-center gap-6">
+          <nav className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 md:justify-end">
+            <a
+              href={CONTACT_MAILTO}
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {CONTACT_EMAIL}
+            </a>
             <Link
               href="/landing/instrucciones"
               className="text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
               Instrucciones
+            </Link>
+            <Link
+              href="/landing/bases-y-condiciones"
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Bases y Condiciones
             </Link>
             <Link
               href="/landing/politica-privacidad"

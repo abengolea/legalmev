@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
+import { CONTACT_EMAIL, CONTACT_MAILTO } from '@/lib/site-contact';
 
 export const metadata = {
   title: 'Política de Privacidad – LegalMEV',
@@ -48,10 +49,10 @@ export default function PoliticaPrivacidadPage() {
             <br />
             Correo electrónico de contacto:{' '}
             <a
-              href="mailto:contacto@notificas.com"
-              className="text-emerald-600 hover:text-emerald-500 hover:underline"
+              href={CONTACT_MAILTO}
+              className="text-primary hover:text-primary/80 hover:underline"
             >
-              contacto@notificas.com
+              {CONTACT_EMAIL}
             </a>
           </address>
         </section>
@@ -202,10 +203,10 @@ export default function PoliticaPrivacidadPage() {
             <br />
             Correo electrónico:{' '}
             <a
-              href="mailto:contacto@notificas.com"
-              className="text-emerald-600 hover:text-emerald-500 hover:underline"
+              href={CONTACT_MAILTO}
+              className="text-primary hover:text-primary/80 hover:underline"
             >
-              contacto@notificas.com
+              {CONTACT_EMAIL}
             </a>
           </address>
         </section>
