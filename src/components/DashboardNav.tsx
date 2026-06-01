@@ -32,10 +32,15 @@ export function DashboardNav() {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { state } = useSidebar();
+  const { state, isMobile, setOpenMobile } = useSidebar();
+  const showSidebarDetails = state === 'expanded' || isMobile;
   const adminTab = pathname === '/admin' ? (searchParams.get('tab') || 'dashboard') : null;
   const [userData, setUserData] = useState<{ name?: string; email?: string; role?: string } | null>(null);
   const [isColegioAdmin, setIsColegioAdmin] = useState(false);
+
+  useEffect(() => {
+    if (isMobile) setOpenMobile(false);
+  }, [pathname, isMobile, setOpenMobile]);
 
   useEffect(() => {
     let unsubDoc: (() => void) | undefined;
@@ -168,14 +173,14 @@ export function DashboardNav() {
                 <Avatar className="h-9 w-9">
                     <AvatarFallback>{initials}</AvatarFallback>
                 </Avatar>
-                {state === 'expanded' && (
+                {showSidebarDetails && (
                     <div className="flex flex-col min-w-0">
                         <span className="text-sm font-medium text-sidebar-foreground truncate">{userData?.name || 'Usuario'}</span>
                         <span className="text-xs text-muted-foreground truncate">{userData?.email || ''}</span>
                     </div>
                  )}
             </div>
-            {state === 'expanded' && (
+            {showSidebarDetails && (
                 <Button
                   variant="ghost"
                   size="icon"
