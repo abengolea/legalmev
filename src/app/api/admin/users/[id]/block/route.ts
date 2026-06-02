@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuth, getAdminDb } from '@/lib/firebase-admin';
+import { requirePlatformAdmin } from '@/lib/api-auth';
 
 /**
  * PATCH /api/admin/users/[id]/block
@@ -14,26 +15,19 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const authHeader = request.headers.get('Authorization');
-    const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
-    if (!token) {
-      return NextResponse.json({ ok: false, error: 'No autenticado' }, { status: 401 });
-    }
+    const auth = await requirePlatformAdmin(request);
+    if (auth instanceof NextResponse) return auth;
 
     const adminAuth = getAuth();
-    const decoded = await adminAuth.verifyIdToken(token);
     const adminDb = getAdminDb();
-    const adminSnap = await adminDb.collection('users').doc(decoded.uid).get();
-    if (adminSnap.data()?.role !== 'admin') {
-      return NextResponse.json({ ok: false, error: 'Solo administradores' }, { status: 403 });
-    }
+    const { uid } = auth;
 
     const { id: targetUserId } = await params;
     if (!targetUserId) {
       return NextResponse.json({ ok: false, error: 'ID requerido' }, { status: 400 });
     }
 
-    if (targetUserId === decoded.uid) {
+    if (targetUserId === uid) {
       return NextResponse.json(
         { ok: false, error: 'No podés bloquear tu propia cuenta' },
         { status: 400 }

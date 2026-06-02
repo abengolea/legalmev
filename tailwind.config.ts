@@ -66,6 +66,14 @@ export default {
         border: 'hsl(var(--border))',
         input: 'hsl(var(--input))',
         ring: 'hsl(var(--ring))',
+        legalmev: {
+          primary: 'var(--legalmev-primary)',
+          'primary-hover': 'var(--legalmev-primary-hover)',
+          accent: 'var(--legalmev-accent)',
+          light: 'var(--legalmev-light)',
+          dark: 'var(--legalmev-dark)',
+          'dark-mid': 'var(--legalmev-dark-mid)',
+        },
         chart: {
           '1': 'hsl(var(--chart-1))',
           '2': 'hsl(var(--chart-2))',

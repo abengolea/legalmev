@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAuth, getAdminDb } from '@/lib/firebase-admin';
+import { getAdminDb } from '@/lib/firebase-admin';
+import { requirePlatformAdmin } from '@/lib/api-auth';
 
 /**
  * GET /api/admin/stats
@@ -7,22 +8,10 @@ import { getAuth, getAdminDb } from '@/lib/firebase-admin';
  */
 export async function GET(request: NextRequest) {
   try {
-    const authHeader = request.headers.get('Authorization');
-    const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
-    if (!token) {
-      return NextResponse.json({ ok: false, error: 'No autenticado' }, { status: 401 });
-    }
-
-    const adminAuth = getAuth();
-    const decoded = await adminAuth.verifyIdToken(token);
-    const uid = decoded.uid;
+    const auth = await requirePlatformAdmin(request);
+    if (auth instanceof NextResponse) return auth;
 
     const adminDb = getAdminDb();
-    const userSnap = await adminDb.collection('users').doc(uid).get();
-    const role = userSnap.data()?.role;
-    if (role !== 'admin') {
-      return NextResponse.json({ ok: false, error: 'Solo administradores' }, { status: 403 });
-    }
 
     const [usersSnap, exportacionesSnap, colegiosSnap, pagosSnap] = await Promise.all([
       adminDb.collection('users').get(),

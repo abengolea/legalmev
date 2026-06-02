@@ -61,6 +61,19 @@ export async function POST(request: NextRequest) {
     });
     const preference = new Preference(client);
 
+    const hubEmit =
+      process.env.MERCADOPAGO_HUB_EMIT_FACTURA === 'true' ||
+      process.env.LEGALMEV_HUB_EMIT_FACTURA === 'true';
+    const userName = (userData.name as string)?.trim();
+    const userCuit = String(userData.cuit ?? '').replace(/\D/g, '').slice(0, 11);
+    const hubMetadata: Record<string, string> = {
+      hub_emit_factura: hubEmit ? 'true' : 'false',
+      hub_app_id: 'legalmev',
+      hub_concepto: 'Plan Premium LegalMev',
+    };
+    if (userCuit.length === 11) hubMetadata.hub_cuit_comprador = userCuit;
+    if (userName) hubMetadata.hub_razon_social = userName.slice(0, 100);
+
     const result = await preference.create({
       body: {
         items: [
@@ -76,6 +89,7 @@ export async function POST(request: NextRequest) {
         payer: {
           email: email || undefined,
         },
+        metadata: hubMetadata,
         external_reference: uid,
         back_urls: {
           success: `${baseUrl}/dashboard?mp=success`,

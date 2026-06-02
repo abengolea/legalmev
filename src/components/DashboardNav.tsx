@@ -3,8 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { auth, db } from '@/lib/firebase';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { auth } from '@/lib/firebase';
 import { signOut } from 'firebase/auth';
 import {
   Sidebar,
@@ -35,7 +34,12 @@ export function DashboardNav() {
   const { state, isMobile, setOpenMobile } = useSidebar();
   const showSidebarDetails = state === 'expanded' || isMobile;
   const adminTab = pathname === '/admin' ? (searchParams.get('tab') || 'dashboard') : null;
-  const [userData, setUserData] = useState<{ name?: string; email?: string; role?: string } | null>(null);
+  const [userData, setUserData] = useState<{
+    name?: string;
+    email?: string;
+    role?: string;
+    isPlatformAdmin?: boolean;
+  } | null>(null);
   const [isColegioAdmin, setIsColegioAdmin] = useState(false);
 
   useEffect(() => {
@@ -43,38 +47,40 @@ export function DashboardNav() {
   }, [pathname, isMobile, setOpenMobile]);
 
   useEffect(() => {
-    let unsubDoc: (() => void) | undefined;
     const unsubAuth = auth.onAuthStateChanged((user) => {
-      unsubDoc?.();
-      unsubDoc = undefined;
       setIsColegioAdmin(false);
-      if (!user) return;
-      user.getIdToken().then(() => {
-        unsubDoc = onSnapshot(
-          doc(db, 'users', user.uid),
-          (snap) => {
-            setUserData((snap.data() as { name?: string; email?: string; role?: string }) ?? null);
-          },
-          (err) => {
-            console.warn('[DashboardNav] Firestore snapshot error:', err.message);
-          }
-        );
-        user.getIdToken().then((token) => {
-          fetch('/api/colegio/me', { headers: { Authorization: `Bearer ${token}` } })
-            .then((r) => r.json())
-            .then((j) => setIsColegioAdmin(!!j?.ok && !!j?.colegio))
-            .catch(() => setIsColegioAdmin(false));
-        });
+      if (!user) {
+        setUserData(null);
+        return;
+      }
+      user.getIdToken().then((token) => {
+        fetch('/api/user/me', { headers: { Authorization: `Bearer ${token}` } })
+          .then((r) => r.json())
+          .then((j) => {
+            if (j?.ok && j.user) {
+              setUserData(j.user);
+              setIsColegioAdmin(!!j.user.isColegioAdmin);
+            } else {
+              setUserData(null);
+              setIsColegioAdmin(false);
+            }
+          })
+          .catch(() => {
+            setUserData(null);
+            setIsColegioAdmin(false);
+          });
       });
     });
-    return () => {
-      unsubAuth();
-      unsubDoc?.();
-    };
+    return () => unsubAuth();
   }, []);
 
+  const isColegioOnly = isColegioAdmin && !userData?.isPlatformAdmin;
+
   const isActive = (path: string) => {
-    return pathname.startsWith(path) && (path !== '/' || pathname === '/');
+    if (path === '/dashboard') {
+      return pathname === '/dashboard' || pathname === '/dashboard/';
+    }
+    return pathname.startsWith(path);
   };
 
   const initials = userData?.name
@@ -93,6 +99,31 @@ export function DashboardNav() {
       </SidebarHeader>
       <SidebarContent>
         <SidebarMenu>
+          {isColegioOnly ? (
+            <>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  isActive={pathname === '/dashboard/colegio'}
+                  icon={<Landmark />}
+                  tooltip={{ children: 'Mi colegio' }}
+                >
+                  <Link href="/dashboard/colegio">Mi colegio</Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  isActive={isActive('/dashboard/pagos')}
+                  icon={<Receipt />}
+                  tooltip={{ children: 'Pagos y facturas' }}
+                >
+                  <Link href="/dashboard/pagos">Pagos y facturas</Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </>
+          ) : (
+            <>
           <SidebarMenuItem>
             <SidebarMenuButton
               asChild
@@ -114,7 +145,6 @@ export function DashboardNav() {
             </SidebarMenuButton>
           </SidebarMenuItem>
           {isColegioAdmin && (
-            <>
               <SidebarMenuItem>
                 <SidebarMenuButton
                   asChild
@@ -125,9 +155,10 @@ export function DashboardNav() {
                   <Link href="/dashboard/colegio">Mi colegio</Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
+          )}
             </>
           )}
-          {userData?.role === 'admin' && (
+          {userData?.isPlatformAdmin && (
             <SidebarGroup>
               <SidebarGroupLabel>Administración</SidebarGroupLabel>
               <SidebarGroupContent>

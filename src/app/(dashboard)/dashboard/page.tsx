@@ -47,12 +47,9 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [premiumLimit, setPremiumLimit] = useState(100);
   const [mercadopagoEnabled, setMercadopagoEnabled] = useState(false);
-  const [dlocalEnabled, setDlocalEnabled] = useState(false);
-  const [dlocalSubscriptionLink, setDlocalSubscriptionLink] = useState('');
   const [premiumPriceAmount, setPremiumPriceAmount] = useState(0);
   const [contactEmail, setContactEmail] = useState('contacto@legalmev.com');
   const [payingWithMp, setPayingWithMp] = useState(false);
-  const [payingWithDlocal, setPayingWithDlocal] = useState(false);
   const [colegiosConvenio, setColegiosConvenio] = useState<string[]>([]);
   const [colegiosConvenioLoaded, setColegiosConvenioLoaded] = useState(false);
   const [isLocal, setIsLocal] = useState(false);
@@ -87,38 +84,8 @@ export default function DashboardPage() {
     }
   };
 
-  const handlePayWithDLocal = async () => {
-    const user = auth.currentUser;
-    if (!user) return;
-    setPayingWithDlocal(true);
-    try {
-      // Si hay link de suscripción configurado, redirigir directamente (cobro recurrente mensual)
-      if (dlocalSubscriptionLink) {
-        const sep = dlocalSubscriptionLink.includes('?') ? '&' : '?';
-        window.location.href = `${dlocalSubscriptionLink}${sep}user_reference=${user.uid}`;
-        return;
-      }
-      const token = await user.getIdToken();
-      const res = await fetch('/api/payments/create-dlocal-order', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const json = await safeResJson<{ ok?: boolean; redirectUrl?: string; error?: string }>(res);
-      if (json.ok && json.redirectUrl) {
-        window.location.href = json.redirectUrl;
-      } else {
-        toast({ variant: 'destructive', title: 'Error', description: json.error ?? 'No se pudo crear el pago.' });
-      }
-    } catch (e) {
-      toast({ variant: 'destructive', title: 'Error', description: 'No se pudo iniciar el pago.' });
-    } finally {
-      setPayingWithDlocal(false);
-    }
-  };
-
   useEffect(() => {
     const mp = searchParams.get('mp');
-    const dlocal = searchParams.get('dlocal');
     if (mp === 'success') {
       toast({ title: '¡Pago exitoso!', description: 'Tu plan premium está activado.' });
       window.history.replaceState({}, '', '/dashboard');
@@ -126,15 +93,6 @@ export default function DashboardPage() {
       toast({ title: 'Pago pendiente', description: 'Te notificaremos cuando se acredite.' });
       window.history.replaceState({}, '', '/dashboard');
     } else if (mp === 'failure') {
-      toast({ variant: 'destructive', title: 'Pago rechazado', description: 'Intentá de nuevo o contactanos.' });
-      window.history.replaceState({}, '', '/dashboard');
-    } else if (dlocal === 'success') {
-      toast({ title: '¡Pago exitoso!', description: 'Tu plan premium está activado.' });
-      window.history.replaceState({}, '', '/dashboard');
-    } else if (dlocal === 'pending') {
-      toast({ title: 'Pago pendiente', description: 'Te notificaremos cuando se acredite.' });
-      window.history.replaceState({}, '', '/dashboard');
-    } else if (dlocal === 'failure') {
       toast({ variant: 'destructive', title: 'Pago rechazado', description: 'Intentá de nuevo o contactanos.' });
       window.history.replaceState({}, '', '/dashboard');
     }
@@ -146,8 +104,6 @@ export default function DashboardPage() {
       .then((json) => {
         if (json.ok) {
           setMercadopagoEnabled(!!json.mercadopagoEnabled);
-          setDlocalEnabled(!!json.dlocalEnabled);
-          setDlocalSubscriptionLink(json.dlocalSubscriptionLink ?? '');
           setPremiumPriceAmount(json.premiumPriceAmount ?? 0);
           if (json.contactEmail) setContactEmail(json.contactEmail);
         }
@@ -332,33 +288,6 @@ export default function DashboardPage() {
             )}
           </CardDescription>
         </CardHeader>
-        {/* Opción de suscripción mensual con cobro automático — solo si hay link configurado */}
-        {tier === 'premium' &&
-          (userData?.premiumSource === 'payment' || (userData?.premiumSource !== 'colegio' && !!monthlyResetAt && !premiumForever)) &&
-          dlocalSubscriptionLink &&
-          (dlocalEnabled || isLocal) && (
-          <CardContent className="pt-0">
-            <div className="rounded-lg border border-primary/20 bg-background p-4">
-              <p className="text-sm text-muted-foreground mb-3">
-                ¿Pagás cada mes manualmente? Pasate a <strong>suscripción con cobro automático</strong> y te debitamos la cuota cada mes sin que tengas que acordarte.
-              </p>
-              <Button
-                variant="outline"
-                size="sm"
-                className="border-primary text-primary hover:bg-primary/10"
-                disabled={payingWithDlocal}
-                onClick={handlePayWithDLocal}
-              >
-                {payingWithDlocal ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <CreditCard className="h-4 w-4 mr-2" />
-                )}
-                Suscribirme con cobro automático
-              </Button>
-            </div>
-          </CardContent>
-        )}
       </Card>
 
       {/* Contador de descargas — Card principal destacada */}
@@ -398,7 +327,7 @@ export default function DashboardPage() {
 
 
       {/* Pasar a Premium - en local siempre se muestra aunque no estén configurados los pagos */}
-      {tier !== 'premium' && (mercadopagoEnabled || dlocalEnabled || isLocal) && (
+      {tier !== 'premium' && (mercadopagoEnabled || isLocal) && (
         <Card className={subscriptionLapsed ? 'border-destructive/50 bg-destructive/5' : 'border-primary/30 bg-primary/5'}>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -409,46 +338,26 @@ export default function DashboardPage() {
               {subscriptionLapsed
                 ? 'Tu acceso está suspendido. Renová para seguir exportando expedientes.'
                 : premiumPriceAmount > 0
-                  ? `Pago mensual de $${premiumPriceAmount.toLocaleString()} (IVA incluido). Más expedientes, sin límites para uso intensivo. Elegí tu forma de pago:`
-                  : 'Más expedientes por mes, sin límites para uso intensivo. Elegí tu forma de pago:'}
+                  ? `Pago mensual de $${premiumPriceAmount.toLocaleString()} (IVA incluido). Más expedientes, sin límites para uso intensivo.`
+                  : 'Más expedientes por mes, sin límites para uso intensivo.'}
             </CardDescription>
           </CardHeader>
-          <CardContent className="pt-0 space-y-3">
-            {(mercadopagoEnabled || isLocal) && (
-              <Button
-                className="w-full justify-center h-12 text-base bg-primary hover:bg-primary/90"
-                disabled={(mercadopagoEnabled && (payingWithMp || payingWithDlocal)) ?? false}
-                onClick={mercadopagoEnabled ? handlePayWithMercadoPago : () => toast({ title: 'En desarrollo', description: 'Los pagos no están configurados aún.' })}
-              >
-                {payingWithMp ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <CreditCard className="h-4 w-4 mr-2" />
-                )}
-                Pagar con Mercado Pago
-                {premiumPriceAmount > 0 && (
-                  <span className="ml-2 font-semibold">${premiumPriceAmount.toLocaleString()}/mes · IVA incluido</span>
-                )}
-              </Button>
-            )}
-            {(dlocalEnabled || isLocal) && (
-              <Button
-                variant="outline"
-                className="w-full justify-center border-primary text-primary hover:bg-primary/10 h-12 text-base"
-                disabled={(dlocalEnabled && (payingWithMp || payingWithDlocal)) ?? false}
-                onClick={dlocalEnabled ? handlePayWithDLocal : () => toast({ title: 'En desarrollo', description: 'Los pagos no están configurados aún.' })}
-              >
-                {payingWithDlocal ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <CreditCard className="h-4 w-4 mr-2" />
-                )}
-                Pagar con DLocal (Notificas SRL)
-                {premiumPriceAmount > 0 && (
-                  <span className="ml-2 font-semibold">${premiumPriceAmount.toLocaleString()}/mes · IVA incluido</span>
-                )}
-              </Button>
-            )}
+          <CardContent className="pt-0">
+            <Button
+              className="w-full justify-center h-12 text-base bg-primary hover:bg-primary/90"
+              disabled={(mercadopagoEnabled && payingWithMp) ?? false}
+              onClick={mercadopagoEnabled ? handlePayWithMercadoPago : () => toast({ title: 'En desarrollo', description: 'Los pagos no están configurados aún.' })}
+            >
+              {payingWithMp ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <CreditCard className="h-4 w-4 mr-2" />
+              )}
+              Pagar con Mercado Pago
+              {premiumPriceAmount > 0 && (
+                <span className="ml-2 font-semibold">${premiumPriceAmount.toLocaleString()}/mes · IVA incluido</span>
+              )}
+            </Button>
           </CardContent>
         </Card>
       )}

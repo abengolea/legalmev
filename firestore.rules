@@ -1,23 +1,64 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Usuarios: solo autenticados pueden leer/escribir
-    // Ajusta según necesites (ej: solo admin lee todos)
-    match /users/{userId} {
-      allow read, write: if request.auth != null;
-    }
-    
-    // Casos: usuarios autenticados pueden leer/escribir
-    match /cases/{caseId} {
-      allow read, write: if request.auth != null;
-    }
-    
-    // Credenciales judiciales: solo el dueño puede acceder
-    match /users/{userId}/credentials/{credId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+
+    function authed() {
+      return request.auth != null;
     }
 
-    // Tokens de verificación: solo backend (Admin SDK). Cliente no debe acceder.
+    function userDocExists() {
+      return authed() && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function userRole() {
+      return userDocExists()
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '')
+        : '';
+    }
+
+    function isAdmin() {
+      return authed() && userRole() == 'admin';
+    }
+
+    function ownsUserDoc(userId) {
+      return authed() && request.auth.uid == userId;
+    }
+
+    /** Caso: lawyerId = uid del abogado; sin lawyerId solo admin (legacy). */
+    function canReadCase() {
+      return isAdmin() ||
+        (resource.data.keys().hasAll(['lawyerId']) && resource.data.lawyerId == request.auth.uid);
+    }
+
+    function canCreateCaseAsOwner() {
+      return request.resource.data.keys().hasAll(['lawyerId']) &&
+        request.resource.data.lawyerId == request.auth.uid;
+    }
+
+    match /users/{userId} {
+      allow read: if authed() && (ownsUserDoc(userId) || isAdmin());
+      allow create: if authed() && (ownsUserDoc(userId) || isAdmin());
+      allow update, delete: if authed() && (ownsUserDoc(userId) || isAdmin());
+    }
+
+    match /users/{userId}/credentials/{credId} {
+      allow read, write: if authed() && request.auth.uid == userId;
+    }
+
+    match /cases/{caseId} {
+      allow read: if authed() && canReadCase();
+      allow create: if authed() && (isAdmin() || canCreateCaseAsOwner());
+      allow update, delete: if authed() && (
+        isAdmin() ||
+        (
+          resource.data.keys().hasAll(['lawyerId']) &&
+          request.resource.data.keys().hasAll(['lawyerId']) &&
+          resource.data.lawyerId == request.auth.uid &&
+          request.resource.data.lawyerId == request.auth.uid
+        )
+      );
+    }
+
     match /verificationTokens/{tokenId} {
       allow read, write: if false;
     }

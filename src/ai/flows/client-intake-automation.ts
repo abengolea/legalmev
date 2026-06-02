@@ -109,12 +109,6 @@ const clientIntakeAutomationFlow = ai.defineFlow(
     outputSchema: ClientIntakeAutomationOutputSchema,
   },
   async (input) => {
-    // Build the prompt history for the model
-    const history = (input.conversationHistory || []).map(entry => ({
-      role: entry.role,
-      content: [{text: entry.content}],
-    }));
-
     // Format the history for the prompt template
     const formattedHistory = (input.conversationHistory || [])
       .map(entry => {
@@ -129,7 +123,7 @@ const clientIntakeAutomationFlow = ai.defineFlow(
         lawyerName: input.lawyerName,
         message: input.message,
         formattedHistory,
-    }, {history});
+    });
 
     return output!;
   }

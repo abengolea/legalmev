@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuth, getAdminDb } from '@/lib/firebase-admin';
+import { isPlatformAdminUser } from '@/lib/platform-admin';
 
 export async function verifyUidFromRequest(
   request: NextRequest
@@ -17,7 +18,7 @@ export async function verifyUidFromRequest(
   }
 }
 
-/** Usuario con role=admin en Firestore (superadmin LegalMev). */
+/** Superadmin LegalMev (role=admin, no responsable de colegio). */
 export async function requirePlatformAdmin(
   request: NextRequest
 ): Promise<{ uid: string } | NextResponse> {
@@ -25,8 +26,7 @@ export async function requirePlatformAdmin(
   if (auth instanceof NextResponse) return auth;
 
   const adminDb = getAdminDb();
-  const userSnap = await adminDb.collection('users').doc(auth.uid).get();
-  if (userSnap.data()?.role !== 'admin') {
+  if (!(await isPlatformAdminUser(adminDb, auth.uid))) {
     return NextResponse.json({ ok: false, error: 'Solo administradores' }, { status: 403 });
   }
   return { uid: auth.uid };

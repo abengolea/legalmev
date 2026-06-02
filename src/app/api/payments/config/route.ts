@@ -11,9 +11,6 @@ const SETTINGS_DOC = 'settings/payments';
 export async function GET() {
   try {
     const accessToken = process.env.MERCADOPAGO_ACCESS_TOKEN;
-    const dlocalApiKey = process.env.DLOCAL_API_KEY;
-    const dlocalSecret = process.env.DLOCAL_SECRET_KEY;
-    const dlocalEnabled = !!(dlocalApiKey?.trim() && dlocalSecret?.trim());
 
     const adminDb = getAdminDb();
     const docSnap = await adminDb.doc(SETTINGS_DOC).get();
@@ -26,14 +23,9 @@ export async function GET() {
       : 0;
     const currency = data?.currency ?? 'ARS';
 
-    const dlocalSubscriptionLink = (data?.dlocalSubscriptionLink as string) ?? '';
-    const dlocalSubscriptionEnabled = !!dlocalSubscriptionLink.trim() && dlocalEnabled;
-
     return NextResponse.json({
       ok: true,
       mercadopagoEnabled,
-      dlocalEnabled,
-      dlocalSubscriptionLink: dlocalSubscriptionEnabled ? dlocalSubscriptionLink : '',
       premiumPriceAmount,
       currency,
       contactEmail: data?.contactEmail ?? 'contacto@legalmev.com',

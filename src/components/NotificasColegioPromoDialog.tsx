@@ -40,6 +40,15 @@ export function NotificasColegioPromoDialog() {
 
     try {
       const token = await user.getIdToken();
+      const meRes = await fetch('/api/user/me', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const meJson = await meRes.json().catch(() => ({}));
+      if (meJson?.ok && meJson.user?.isColegioAdmin && !meJson.user?.isPlatformAdmin) {
+        setPayload(null);
+        return;
+      }
+
       const res = await fetch("/api/user/notificas-promo", {
         headers: { Authorization: `Bearer ${token}` },
       });

@@ -1,20 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAuth, getAdminDb } from '@/lib/firebase-admin';
+import { getAdminDb } from '@/lib/firebase-admin';
+import { requirePlatformAdmin } from '@/lib/api-auth';
 import { parseMembersFile } from '@/lib/parse-members-file';
 import { normalizeMembers, syncUserTiersForColegio } from '@/lib/colegio-members';
 import type { ColegioMember } from '@/lib/colegio-members';
 
-/** Verifica que el usuario sea admin */
+/** Verifica superadmin de plataforma (no responsables de colegio). */
 async function requireAdmin(request: NextRequest) {
-  const authHeader = request.headers.get('Authorization');
-  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
-  if (!token) return { error: 'No autenticado' as const, status: 401 };
-  const adminAuth = getAuth();
-  const decoded = await adminAuth.verifyIdToken(token);
-  const adminDb = getAdminDb();
-  const userSnap = await adminDb.collection('users').doc(decoded.uid).get();
-  if (userSnap.data()?.role !== 'admin') return { error: 'Solo administradores' as const, status: 403 };
-  return { uid: decoded.uid, adminDb };
+  const auth = await requirePlatformAdmin(request);
+  if (auth instanceof NextResponse) {
+    const status = auth.status;
+    const body = await auth.json();
+    return { error: (body as { error?: string }).error ?? 'Solo administradores', status } as const;
+  }
+  return { uid: auth.uid, adminDb: getAdminDb() };
 }
 
 /**

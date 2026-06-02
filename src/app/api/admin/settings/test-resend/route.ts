@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAuth, getAdminDb } from '@/lib/firebase-admin';
+import { requirePlatformAdmin } from '@/lib/api-auth';
 import { resend, canSendEmail, getFromAddress } from '@/lib/resend';
 import { buildTestEmailHtml } from '@/lib/email-templates';
 
@@ -10,22 +10,8 @@ import { buildTestEmailHtml } from '@/lib/email-templates';
  */
 export async function GET(request: NextRequest) {
   try {
-    const authHeader = request.headers.get('Authorization');
-    const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
-
-    if (!token) {
-      return NextResponse.json({ ok: false, error: 'No autenticado' }, { status: 401 });
-    }
-
-    const adminAuth = getAuth();
-    const decoded = await adminAuth.verifyIdToken(token);
-    const uid = decoded.uid;
-
-    const adminDb = getAdminDb();
-    const userSnap = await adminDb.collection('users').doc(uid).get();
-    if (userSnap.data()?.role !== 'admin') {
-      return NextResponse.json({ ok: false, error: 'No autorizado' }, { status: 403 });
-    }
+    const auth = await requirePlatformAdmin(request);
+    if (auth instanceof NextResponse) return auth;
 
     const configured = canSendEmail();
     const from = getFromAddress();
@@ -49,22 +35,8 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    const authHeader = request.headers.get('Authorization');
-    const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
-
-    if (!token) {
-      return NextResponse.json({ ok: false, error: 'No autenticado' }, { status: 401 });
-    }
-
-    const adminAuth = getAuth();
-    const decoded = await adminAuth.verifyIdToken(token);
-    const uid = decoded.uid;
-
-    const adminDb = getAdminDb();
-    const userSnap = await adminDb.collection('users').doc(uid).get();
-    if (userSnap.data()?.role !== 'admin') {
-      return NextResponse.json({ ok: false, error: 'No autorizado' }, { status: 403 });
-    }
+    const auth = await requirePlatformAdmin(request);
+    if (auth instanceof NextResponse) return auth;
 
     if (!canSendEmail()) {
       return NextResponse.json(

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuth, getAdminDb } from '@/lib/firebase-admin';
+import { isColegioAdminUser, isPlatformAdminUser } from '@/lib/platform-admin';
 
 /**
  * GET /api/user/me
@@ -27,6 +28,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ ok: false, error: 'Usuario no encontrado' }, { status: 404 });
     }
 
+    const [isPlatformAdmin, isColegioAdmin] = await Promise.all([
+      isPlatformAdminUser(adminDb, uid),
+      isColegioAdminUser(adminDb, uid),
+    ]);
+
     return NextResponse.json({
       ok: true,
       user: {
@@ -37,6 +43,8 @@ export async function GET(request: NextRequest) {
         status: data.status,
         tier: data.tier ?? 'free',
         cuit: data.cuit ?? '',
+        isPlatformAdmin,
+        isColegioAdmin,
       },
     });
   } catch (err) {

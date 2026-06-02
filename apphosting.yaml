@@ -17,28 +17,26 @@ env:
     value: caseclarity-hij0x.firebasestorage.app
   - variable: GOOGLE_GENAI_API_KEY
     secret: GOOGLE_GENAI_API_KEY
-  # Mercado Pago (pagos Premium)
+  # Mercado Pago (pagos Premium y colegios)
   - variable: MERCADOPAGO_ACCESS_TOKEN
     secret: MERCADOPAGO_ACCESS_TOKEN
-  # DLocal Go (Notificas SRL)
-  # Producción: credenciales LIVE de dashboard.dlocalgo.com
-  # Testing: api-sbx.dlocalgo.com + credenciales de dashboard-sbx.dlocalgo.com
-  - variable: DLOCAL_API_KEY
-    secret: DLOCAL_API_KEY
-  - variable: DLOCAL_SECRET_KEY
-    secret: DLOCAL_SECRET_KEY
-  - variable: DLOCAL_BASE_URL
-    value: https://api.dlocalgo.com
-  - variable: DLOCAL_WEBHOOK_URL
-    value: https://www.legalmev.com.ar/api/payments/webhook-dlocal
-  - variable: DLOCAL_RETURN_URL
-    value: https://www.legalmev.com.ar/dashboard?dlocal=success
+  # Facturación ARCA vía NotificasHub (Notificas S.R.L.)
+  - variable: NOTIFICASHUB_URL
+    value: https://notificashub--studio-3864746689-59018.us-east4.hosted.app
+  - variable: NOTIFICAS_BILLING_SHARED_SECRET
+    secret: NOTIFICAS_BILLING_SHARED_SECRET
+  - variable: MERCADOPAGO_HUB_EMIT_FACTURA
+    value: "true"
 
   # Resend (emails de verificación con botón)
   - variable: RESEND_API_KEY
     secret: RESEND_API_KEY
   - variable: RESEND_FROM
     value: LegalMev <no-reply@legalmev.com.ar>
+
+  # URLs en correos y redirects (www para coincidir con dominio público)
+  - variable: NEXT_PUBLIC_SITE_URL
+    value: https://www.legalmev.com.ar
 
   # Firebase Cliente (NEXT_PUBLIC_* = build time, necesarias para Auth en producción)
   # Crear secrets con: firebase apphosting:secrets:set NOMBRE_SECRETO

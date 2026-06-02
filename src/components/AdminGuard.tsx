@@ -1,14 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { auth, db } from '@/lib/firebase';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { auth } from '@/lib/firebase';
 import { useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 
 /**
- * Solo permite acceso a usuarios con role=admin.
- * Redirige a /dashboard si no es admin.
+ * Solo permite acceso a superadmins de LegalMev.
+ * Los responsables de colegio (adminEmails) usan /dashboard/colegio.
  */
 export function AdminGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -16,39 +15,32 @@ export function AdminGuard({ children }: { children: React.ReactNode }) {
   const [checking, setChecking] = useState(true);
 
   useEffect(() => {
-    let unsubDoc: (() => void) | null = null;
-
-    const unsubAuth = auth.onAuthStateChanged((user) => {
+    const unsubAuth = auth.onAuthStateChanged(async (user) => {
       if (!user) {
         router.replace('/login');
         setChecking(false);
         return;
       }
 
-      unsubDoc = onSnapshot(
-        doc(db, 'users', user.uid),
-        (snap) => {
-          const data = snap.data();
-          const role = data?.role ?? 'abogado';
-          if (role === 'admin') {
-            setAllowed(true);
-          } else {
-            router.replace('/dashboard');
-          }
-          setChecking(false);
-        },
-        () => {
-          setAllowed(false);
+      try {
+        const token = await user.getIdToken();
+        const res = await fetch('/api/user/me', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const json = await res.json();
+        if (json.ok && json.user?.isPlatformAdmin) {
+          setAllowed(true);
+        } else {
           router.replace('/dashboard');
-          setChecking(false);
         }
-      );
+      } catch {
+        router.replace('/dashboard');
+      } finally {
+        setChecking(false);
+      }
     });
 
-    return () => {
-      unsubAuth();
-      unsubDoc?.();
-    };
+    return () => unsubAuth();
   }, [router]);
 
   if (checking || !allowed) {

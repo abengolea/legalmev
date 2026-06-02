@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAuth, getAdminDb } from '@/lib/firebase-admin';
+import { getAdminDb } from '@/lib/firebase-admin';
+import { requirePlatformAdmin } from '@/lib/api-auth';
 
 const SETTINGS_DOC = 'settings/payments';
 
@@ -9,22 +10,10 @@ const SETTINGS_DOC = 'settings/payments';
  */
 export async function GET(request: NextRequest) {
   try {
-    const authHeader = request.headers.get('Authorization');
-    const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
-
-    if (!token) {
-      return NextResponse.json({ ok: false, error: 'No autenticado' }, { status: 401 });
-    }
-
-    const adminAuth = getAuth();
-    const decoded = await adminAuth.verifyIdToken(token);
-    const uid = decoded.uid;
+    const auth = await requirePlatformAdmin(request);
+    if (auth instanceof NextResponse) return auth;
 
     const adminDb = getAdminDb();
-    const userSnap = await adminDb.collection('users').doc(uid).get();
-    if (userSnap.data()?.role !== 'admin') {
-      return NextResponse.json({ ok: false, error: 'No autorizado' }, { status: 403 });
-    }
 
     const docSnap = await adminDb.doc(SETTINGS_DOC).get();
     const data = docSnap.exists ? docSnap.data() : {};
@@ -39,7 +28,6 @@ export async function GET(request: NextRequest) {
         currency: data?.currency ?? 'ARS',
         contactEmail: data?.contactEmail ?? 'contacto@legalmev.com',
         mercadopagoPublicKey: data?.mercadopagoPublicKey ?? '',
-        dlocalSubscriptionLink: data?.dlocalSubscriptionLink ?? '',
       },
     });
   } catch (err) {
@@ -56,22 +44,10 @@ export async function GET(request: NextRequest) {
  */
 export async function PATCH(request: NextRequest) {
   try {
-    const authHeader = request.headers.get('Authorization');
-    const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
-
-    if (!token) {
-      return NextResponse.json({ ok: false, error: 'No autenticado' }, { status: 401 });
-    }
-
-    const adminAuth = getAuth();
-    const decoded = await adminAuth.verifyIdToken(token);
-    const uid = decoded.uid;
+    const auth = await requirePlatformAdmin(request);
+    if (auth instanceof NextResponse) return auth;
 
     const adminDb = getAdminDb();
-    const userSnap = await adminDb.collection('users').doc(uid).get();
-    if (userSnap.data()?.role !== 'admin') {
-      return NextResponse.json({ ok: false, error: 'No autorizado' }, { status: 403 });
-    }
 
     const body = await request.json();
     const update: Record<string, unknown> = {
@@ -84,7 +60,6 @@ export async function PATCH(request: NextRequest) {
     if (typeof body.currency === 'string') update.currency = body.currency;
     if (typeof body.contactEmail === 'string') update.contactEmail = body.contactEmail;
     if (typeof body.mercadopagoPublicKey === 'string') update.mercadopagoPublicKey = body.mercadopagoPublicKey;
-    if (typeof body.dlocalSubscriptionLink === 'string') update.dlocalSubscriptionLink = body.dlocalSubscriptionLink;
 
     await adminDb.doc(SETTINGS_DOC).set(update, { merge: true });
 

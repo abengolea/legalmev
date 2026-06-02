@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { notFound, useRouter } from 'next/navigation';
+import { notFound, useParams, useRouter } from 'next/navigation';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import type { Case } from '@/types';
@@ -20,15 +20,17 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { FileText, Calendar, DollarSign, User, Phone, Mail, MapPin, Check, X, ArrowLeft, Wand2, BrainCircuit, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 
-export default function CaseDetailPage({ params }: { params: { id: string } }) {
+export default function CaseDetailPage() {
+  const params = useParams();
+  const caseId = typeof params.id === 'string' ? params.id : Array.isArray(params.id) ? params.id[0] : '';
   const [caseData, setCaseData] = useState<Case | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
 
   useEffect(() => {
-    if (!params.id) return;
+    if (!caseId) return;
     setIsLoading(true);
-    const caseDocRef = doc(db, 'cases', params.id);
+    const caseDocRef = doc(db, 'cases', caseId);
     const unsubscribe = onSnapshot(caseDocRef, (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
@@ -62,7 +64,7 @@ export default function CaseDetailPage({ params }: { params: { id: string } }) {
     });
 
     return () => unsubscribe();
-  }, [params.id]);
+  }, [caseId]);
 
   if (isLoading) {
     return (

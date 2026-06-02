@@ -2,13 +2,12 @@ import type {NextConfig} from 'next';
 import path from 'path';
 
 const nextConfig: NextConfig = {
-  /* config options here */
   outputFileTracingRoot: path.join(__dirname),
-  typescript: {
-    ignoreBuildErrors: true,
-  },
-  eslint: {
-    ignoreDuringBuilds: true,
+  // App Hosting / `next build`: errores de lint/TS legacy; corregir aparte.
+  eslint: { ignoreDuringBuilds: true },
+  typescript: { ignoreBuildErrors: true },
+  async rewrites() {
+    return [{ source: '/soporte', destination: '/landing/soporte' }];
   },
   images: {
     remotePatterns: [

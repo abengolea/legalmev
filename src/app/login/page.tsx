@@ -9,6 +9,7 @@ import * as z from 'zod';
 import { signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { getDeviceId } from '@/lib/deviceId';
+import { resolvePostLoginPath } from '@/lib/post-login-redirect';
 import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -59,7 +60,7 @@ export default function LoginPage() {
       toast({
         title: '¡Bienvenido de nuevo!',
       });
-      const dest = redirectTo && redirectTo.startsWith('/') && !redirectTo.startsWith('//') ? redirectTo : '/dashboard';
+      const dest = await resolvePostLoginPath(token, redirectTo);
       router.push(dest);
     } catch (error: any) {
       console.error('Error signing in:', error);
@@ -93,7 +94,7 @@ export default function LoginPage() {
         body: JSON.stringify({ deviceId }),
       }).catch(() => {});
       toast({ title: '¡Bienvenido de nuevo!' });
-      const dest = redirectTo && redirectTo.startsWith('/') && !redirectTo.startsWith('//') ? redirectTo : '/dashboard';
+      const dest = await resolvePostLoginPath(token, redirectTo);
       window.location.href = dest;
       return;
     } catch (error: any) {

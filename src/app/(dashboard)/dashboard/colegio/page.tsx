@@ -1,7 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import Link from 'next/link';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { auth } from '@/lib/firebase';
 import {
@@ -30,14 +29,15 @@ import {
   Users,
   UserPlus,
   AlertCircle,
-  CreditCard,
-  ExternalLink,
   Ban,
   CheckCircle,
   List,
+  Search,
+  X,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
+import { ColegioAdminGuard } from '@/components/ColegioAdminGuard';
 
 type ColegioMember = { email: string; name?: string; estado?: 'activo' | 'suspendido' };
 
@@ -54,17 +54,27 @@ type Colegio = {
 };
 
 export default function ColegioPage() {
+  return (
+    <ColegioAdminGuard>
+      <ColegioPageContent />
+    </ColegioAdminGuard>
+  );
+}
+
+function ColegioPageContent() {
   const router = useRouter();
   const { toast } = useToast();
   const [colegio, setColegio] = useState<Colegio | null>(null);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
-  const [payingWith, setPayingWith] = useState(false);
   const [adding, setAdding] = useState(false);
   const [actioningEmail, setActioningEmail] = useState<string | null>(null);
   const [addEmail, setAddEmail] = useState('');
   const [addName, setAddName] = useState('');
+  const [memberSearch, setMemberSearch] = useState('');
+  const [estadoFilter, setEstadoFilter] = useState<'todos' | 'activo' | 'suspendido'>('todos');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const fetchColegio = async () => {
     const user = auth.currentUser;
@@ -214,41 +224,23 @@ export default function ColegioPage() {
     }
   };
 
-  const handlePay = async () => {
-    if (!colegio) return;
-    setPayingWith(true);
-    try {
-      const user = auth.currentUser;
-      if (!user) throw new Error('No autenticado');
-      const token = await user.getIdToken();
-      const res = await fetch('/api/colegio/create-payment-link', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({}),
-      });
-      const json = await res.json();
-      if (json.ok && json.link) {
-        window.location.href = json.link;
-      } else {
-        toast({
-          variant: 'destructive',
-          title: 'Error',
-          description: json.error ?? 'No se pudo crear el link de pago.',
-        });
-      }
-    } catch (err) {
-      toast({
-        variant: 'destructive',
-        title: 'Error',
-        description: err instanceof Error ? err.message : 'Error al crear el pago.',
-      });
-      setPayingWith(false);
-    }
-  };
-
   const members = colegio?.members ?? [];
   const activos = colegio?.membersActivos ?? members.filter((m) => m.estado !== 'suspendido').length;
   const suspendidos = colegio?.membersSuspendidos ?? members.filter((m) => m.estado === 'suspendido').length;
+
+  const filteredMembers = useMemo(() => {
+    const q = memberSearch.trim().toLowerCase();
+    return members.filter((m) => {
+      const estado = m.estado === 'suspendido' ? 'suspendido' : 'activo';
+      if (estadoFilter !== 'todos' && estado !== estadoFilter) return false;
+      if (!q) return true;
+      const email = (m.email ?? '').toLowerCase();
+      const name = (m.name ?? '').toLowerCase();
+      return email.includes(q) || name.includes(q);
+    });
+  }, [members, memberSearch, estadoFilter]);
+
+  const hasActiveFilters = memberSearch.trim().length > 0 || estadoFilter !== 'todos';
 
   if (loading) {
     return (
@@ -311,31 +303,6 @@ export default function ColegioPage() {
             </div>
           </div>
 
-          {(colegio.montoConvenio ?? 0) > 0 && (
-            <div className="space-y-3 border rounded-lg p-4 bg-muted/30">
-              <h4 className="font-medium flex items-center gap-2">
-                <CreditCard className="h-4 w-4" />
-                Pagar suscripción mensual
-              </h4>
-              <p className="text-sm text-muted-foreground">
-                Cuota convenio: <strong>{colegio.moneda === 'USD' ? 'US$ ' : '$ '}{Number(colegio.montoConvenio).toLocaleString()}</strong>
-                {colegio.moneda === 'USD' ? ' USD' : ' ARS'}
-              </p>
-              <div className="flex flex-wrap gap-2">
-                <Button onClick={handlePay} disabled={payingWith}>
-                  {payingWith ? 'Generando...' : (<><ExternalLink className="h-4 w-4 mr-2" />Pagar con Mercado Pago</>)}
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {(!colegio.montoConvenio || colegio.montoConvenio <= 0) && (
-            <p className="flex items-center gap-2 p-3 rounded-lg bg-muted/50 text-sm text-muted-foreground">
-              <CreditCard className="h-4 w-4 shrink-0" />
-              El monto de la suscripción lo define el administrador de LegalMev.
-            </p>
-          )}
-
           <Tabs defaultValue="lista" className="w-full">
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="lista">
@@ -382,9 +349,84 @@ export default function ColegioPage() {
               {members.length === 0 ? (
                 <p className="text-sm text-muted-foreground py-6">No hay colegiados cargados. Agregá manualmente o subí un Excel.</p>
               ) : (
-                <div className="border rounded-lg overflow-hidden">
+                <div className="space-y-3">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="relative flex-1 max-w-md">
+                      <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                      <Input
+                        ref={searchInputRef}
+                        type="search"
+                        placeholder="Buscar por nombre o email..."
+                        value={memberSearch}
+                        onChange={(e) => setMemberSearch(e.target.value)}
+                        className="pl-9 pr-9"
+                        aria-label="Buscar colegiados"
+                      />
+                      {memberSearch && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMemberSearch('');
+                            searchInputRef.current?.focus();
+                          }}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                          aria-label="Limpiar búsqueda"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(
+                        [
+                          { value: 'todos' as const, label: 'Todos' },
+                          { value: 'activo' as const, label: 'Al día' },
+                          { value: 'suspendido' as const, label: 'Suspendidos' },
+                        ] as const
+                      ).map(({ value, label }) => (
+                        <Button
+                          key={value}
+                          type="button"
+                          variant={estadoFilter === value ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => setEstadoFilter(value)}
+                        >
+                          {label}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-muted-foreground">
+                    {hasActiveFilters
+                      ? `${filteredMembers.length} de ${members.length} colegiado${members.length === 1 ? '' : 's'}`
+                      : `${members.length} colegiado${members.length === 1 ? '' : 's'}`}
+                  </p>
+
+                  {filteredMembers.length === 0 ? (
+                    <p className="text-sm text-muted-foreground py-6 text-center border rounded-lg bg-muted/30">
+                      No hay colegiados que coincidan con la búsqueda.
+                      {hasActiveFilters && (
+                        <>
+                          {' '}
+                          <button
+                            type="button"
+                            className="text-primary underline hover:no-underline"
+                            onClick={() => {
+                              setMemberSearch('');
+                              setEstadoFilter('todos');
+                              searchInputRef.current?.focus();
+                            }}
+                          >
+                            Limpiar filtros
+                          </button>
+                        </>
+                      )}
+                    </p>
+                  ) : (
+                <div className="border rounded-lg overflow-hidden max-h-[min(28rem,60vh)] overflow-y-auto">
                   <Table>
-                    <TableHeader>
+                    <TableHeader className="sticky top-0 bg-background z-10">
                       <TableRow>
                         <TableHead>Email</TableHead>
                         <TableHead>Nombre</TableHead>
@@ -393,7 +435,7 @@ export default function ColegioPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {members.map((m) => {
+                      {filteredMembers.map((m) => {
                         const estado = m.estado === 'suspendido' ? 'suspendido' : 'activo';
                         return (
                           <TableRow key={m.email}>
@@ -427,6 +469,8 @@ export default function ColegioPage() {
                       })}
                     </TableBody>
                   </Table>
+                </div>
+                  )}
                 </div>
               )}
             </TabsContent>

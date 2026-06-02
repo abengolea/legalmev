@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuth, getAdminDb } from '@/lib/firebase-admin';
+import { isKnownPlatformAdminEmail } from '@/lib/platform-admin';
 
 /**
  * GET /api/colegio/me
@@ -28,6 +29,10 @@ export async function GET(request: NextRequest) {
     const email = (userData.email || '').toString().toLowerCase();
     if (!email) {
       return NextResponse.json({ ok: false, error: 'Sin email' });
+    }
+
+    if (userData.role === 'admin' || isKnownPlatformAdminEmail(email)) {
+      return NextResponse.json({ ok: false, error: 'No administrás ningún colegio' });
     }
 
     const colegiosSnap = await adminDb

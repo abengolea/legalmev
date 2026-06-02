@@ -41,10 +41,5 @@ next-env.d.ts
 .env*
 
 # firebase
-.firebase/
-
-# chrome/puppeteer binarios (evitar exceder límite GitHub 100MB)
-mev_descarga/
 firebase-debug.log
 firestore-debug.log
-*-firebase-adminsdk-*.json

@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { collection, onSnapshot, doc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -281,6 +281,8 @@ function AITestChat() {
 }
 
 function UserManagement() {
+  const searchParams = useSearchParams();
+  const highlightedUserId = searchParams.get('userId');
   const [users, setUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
@@ -293,6 +295,7 @@ function UserManagement() {
   const [exportacionesLoading, setExportacionesLoading] = useState(false);
   const [notesUserId, setNotesUserId] = useState<string | null>(null);
   const [notesValue, setNotesValue] = useState('');
+  const openedHistorialRef = useRef<string | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -508,6 +511,13 @@ function UserManagement() {
     }
   };
 
+  useEffect(() => {
+    if (!highlightedUserId || isLoading) return;
+    if (openedHistorialRef.current === highlightedUserId) return;
+    openedHistorialRef.current = highlightedUserId;
+    void fetchExportaciones(highlightedUserId);
+  }, [highlightedUserId, isLoading]);
+
   const handleSaveNotes = async (userId: string) => {
     setUpdatingId(userId);
     try {
@@ -618,7 +628,10 @@ function UserManagement() {
             </TableHeader>
             <TableBody>
               {filteredUsers.map((user) => (
-                <TableRow key={user.id}>
+                <TableRow
+                  key={user.id}
+                  className={highlightedUserId === user.id ? 'bg-primary/5' : undefined}
+                >
                   <TableCell className="font-medium">{user.name}</TableCell>
                   <TableCell>
                     <span className="flex items-center gap-1">
@@ -769,10 +782,24 @@ function UserManagement() {
             </TableBody>
           </Table>
         )}
-        <Dialog open={!!exportacionesUserId} onOpenChange={(o) => !o && setExportacionesUserId(null)}>
+        <Dialog
+          open={!!exportacionesUserId}
+          onOpenChange={(o) => {
+            if (!o) {
+              setExportacionesUserId(null);
+              openedHistorialRef.current = null;
+            }
+          }}
+        >
           <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
             <DialogHeader>
-              <DialogTitle>Exportaciones</DialogTitle>
+              <DialogTitle>
+                Historial de exportaciones
+                {exportacionesUserId && (() => {
+                  const u = users.find((x) => x.id === exportacionesUserId);
+                  return u ? ` — ${u.name}` : '';
+                })()}
+              </DialogTitle>
             </DialogHeader>
             <ScrollArea className="flex-1 min-h-[200px]">
               {exportacionesLoading ? (
@@ -971,9 +998,8 @@ function ColegiosManagement() {
   const [generatingLink, setGeneratingLink] = useState<string | null>(null);
   const { toast } = useToast();
 
-  const handleCreateLink = async (colegioId: string, metodo: 'mercadopago' | 'dlocal') => {
-    const key = `${colegioId}:${metodo}`;
-    setGeneratingLink(key);
+  const handleCreateLink = async (colegioId: string) => {
+    setGeneratingLink(colegioId);
     try {
       const { auth } = await import('@/lib/firebase');
       const user = auth.currentUser;
@@ -982,12 +1008,12 @@ function ColegiosManagement() {
       const res = await fetch('/api/admin/payments/create-colegio-link', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ colegioId, metodo }),
+        body: JSON.stringify({ colegioId }),
       });
       const json = await safeResJson<{ ok?: boolean; link?: string; error?: string }>(res);
       if (json.ok && json.link) {
         await navigator.clipboard.writeText(json.link);
-        toast({ title: 'Link copiado', description: `Link de ${metodo === 'mercadopago' ? 'Mercado Pago' : 'DLocal'} copiado al portapapeles.` });
+        toast({ title: 'Link copiado', description: 'Link de Mercado Pago copiado al portapapeles.' });
         window.open(json.link, '_blank');
       } else {
         toast({ variant: 'destructive', title: 'Error', description: json.error ?? 'No se pudo generar el link.' });
@@ -1172,25 +1198,13 @@ function ColegiosManagement() {
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => handleCreateLink(c.id, 'mercadopago')}
+                            onClick={() => handleCreateLink(c.id)}
                             disabled={generatingLink !== null}
                           >
-                            {generatingLink === `${c.id}:mercadopago` ? (
+                            {generatingLink === c.id ? (
                               '...'
                             ) : (
-                              <><Link2 className="h-4 w-4 mr-1" /> Link MP</>
-                            )}
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleCreateLink(c.id, 'dlocal')}
-                            disabled={generatingLink !== null}
-                          >
-                            {generatingLink === `${c.id}:dlocal` ? (
-                              '...'
-                            ) : (
-                              <><Link2 className="h-4 w-4 mr-1" /> Link DLocal</>
+                              <><Link2 className="h-4 w-4 mr-1" /> Link Mercado Pago</>
                             )}
                           </Button>
                         </>
@@ -1277,7 +1291,14 @@ function ColegiosManagement() {
                   value={ev.adminEmails}
                   onChange={(e) => setEditValues((s) => ({ ...s, [c.id]: { ...getDefaults(c), ...(s[c.id] ?? {}), adminEmails: e.target.value } }))}
                 />
-                <p className="text-xs text-muted-foreground mt-0.5">Los admins verán &quot;Mi colegio&quot; en el menú y podrán subir Excel/CSV.</p>
+                {(c.adminEmails?.length ?? 0) > 0 && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Guardados: {(c.adminEmails || []).join(', ')}
+                  </p>
+                )}
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Los admins verán &quot;Mi colegio&quot; en el menú y podrán subir Excel/CSV. Si el email aún no tiene cuenta en LegalMev, guardá acá y luego enviá la invitación desde la pestaña <strong>Responsables</strong> (creación de contraseña).
+                </p>
               </div>
               <Button
                 size="sm"
@@ -1446,7 +1467,6 @@ function PaymentsConfig() {
     currency: 'ARS',
     contactEmail: 'contacto@legalmev.com',
     mercadopagoPublicKey: '',
-    dlocalSubscriptionLink: '',
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -1470,7 +1490,6 @@ function PaymentsConfig() {
             currency: (s.currency as string) ?? 'ARS',
             contactEmail: (s.contactEmail as string) ?? 'contacto@legalmev.com',
             mercadopagoPublicKey: (s.mercadopagoPublicKey as string) ?? '',
-            dlocalSubscriptionLink: (s.dlocalSubscriptionLink as string) ?? '',
           });
         }
       } catch (e) {
@@ -1516,14 +1535,6 @@ function PaymentsConfig() {
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSave} className="space-y-4">
-          <div className="rounded-lg border border-teal-500/30 bg-teal-950/10 p-4 space-y-2">
-            <h4 className="font-medium">DLocal Go - Suscripción abogado particular</h4>
-            <div>
-              <Label htmlFor="dlocalLink">Link de suscripción mensual (checkout.dlocalgo.com)</Label>
-              <Input id="dlocalLink" value={settings.dlocalSubscriptionLink} onChange={(e) => setSettings((s) => ({ ...s, dlocalSubscriptionLink: e.target.value }))} placeholder="https://checkout.dlocalgo.com/validate/subscription/..." />
-              <p className="text-xs text-muted-foreground mt-1">Link creado en el panel de DLocal para cobro recurrente mensual. Si existe, el botón &quot;Pagar con DLocal&quot; redirige aquí (se pasa user_reference=uid).</p>
-            </div>
-          </div>
           <div className="rounded-lg border border-emerald-500/30 bg-emerald-950/10 p-4 space-y-2">
             <h4 className="font-medium">Mercado Pago</h4>
             <div>
@@ -1566,9 +1577,25 @@ function PaymentsConfig() {
   );
 }
 
+type PagoRow = {
+  id: string;
+  tipo?: string;
+  monto?: number;
+  moneda?: string;
+  metodo?: string;
+  estado?: string;
+  clienteId?: string;
+  clienteNombre?: string;
+  clienteEmail?: string;
+  colegioId?: string;
+  colegioName?: string;
+  descripcion?: string;
+  createdAt?: string;
+};
+
 function PagosControl() {
   const { toast } = useToast();
-  const [pagos, setPagos] = useState<{ id: string; tipo?: string; monto?: number; moneda?: string; metodo?: string; estado?: string; clienteId?: string; colegioId?: string; colegioName?: string; descripcion?: string; createdAt?: string }[]>([]);
+  const [pagos, setPagos] = useState<PagoRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [tipoFilter, setTipoFilter] = useState<string>('all');
   const [manualTipo, setManualTipo] = useState<'cliente' | 'colegio'>('colegio');
@@ -1588,7 +1615,7 @@ function PagosControl() {
       const token = await user.getIdToken();
       const url = tipoFilter === 'all' ? '/api/admin/pagos' : `/api/admin/pagos?tipo=${tipoFilter}`;
       const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-      const json = await safeResJson<{ ok?: boolean; pagos?: { id: string; tipo?: string; monto?: number; moneda?: string; metodo?: string; estado?: string; clienteId?: string; colegioId?: string; colegioName?: string; descripcion?: string; createdAt?: string }[] }>(res);
+      const json = await safeResJson<{ ok?: boolean; pagos?: PagoRow[] }>(res);
       if (json.ok && json.pagos) setPagos(json.pagos);
     } catch (e) { console.error(e); } finally { setLoading(false); }
   };
@@ -1644,7 +1671,7 @@ function PagosControl() {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2"><Receipt className="h-5 w-5" /> Control de Pagos</CardTitle>
-        <CardDescription>Pagos de clientes (MP/DLocal) y colegios. Podés registrar pagos manuales (transferencia, convenio).</CardDescription>
+        <CardDescription>Pagos de clientes (Mercado Pago) y colegios. Podés registrar pagos manuales (transferencia, convenio).</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         <div className="flex gap-2 items-center">
@@ -1668,7 +1695,7 @@ function PagosControl() {
                 <TableHead>Tipo</TableHead>
                 <TableHead>Monto</TableHead>
                 <TableHead>Método</TableHead>
-                <TableHead>Origen</TableHead>
+                <TableHead>Usuario</TableHead>
                 <TableHead>Estado</TableHead>
               </TableRow>
             </TableHeader>
@@ -1681,7 +1708,26 @@ function PagosControl() {
                     <TableCell><Badge variant="outline">{p.tipo ?? '-'}</Badge></TableCell>
                     <TableCell>${(p.monto ?? 0).toLocaleString()} {p.moneda ?? 'ARS'}</TableCell>
                     <TableCell>{p.metodo ?? '-'}</TableCell>
-                    <TableCell>{p.tipo === 'colegio' ? (p.colegioName ?? p.colegioId ?? '-') : (p.clienteId ? 'Usuario' : '-')}</TableCell>
+                    <TableCell>
+                      {p.tipo === 'colegio' ? (
+                        p.colegioName ?? p.colegioId ?? '-'
+                      ) : p.clienteId ? (
+                        <Link
+                          href={`/admin?tab=users&userId=${encodeURIComponent(p.clienteId)}`}
+                          className="text-primary hover:underline"
+                          title="Ver historial del usuario"
+                        >
+                          <span className="font-medium block">
+                            {p.clienteNombre?.trim() || p.clienteEmail || 'Usuario'}
+                          </span>
+                          {p.clienteEmail && p.clienteNombre?.trim() && (
+                            <span className="text-xs text-muted-foreground block">{p.clienteEmail}</span>
+                          )}
+                        </Link>
+                      ) : (
+                        '-'
+                      )}
+                    </TableCell>
                     <TableCell><Badge variant={p.estado === 'completado' ? 'default' : 'secondary'}>{p.estado ?? '-'}</Badge></TableCell>
                   </TableRow>
                 ))}

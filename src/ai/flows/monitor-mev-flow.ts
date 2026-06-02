@@ -66,7 +66,7 @@ const monitorMevFlow = ai.defineFlow(
     console.log(`[monitorMevFlow] Simulación completada: ${message}`);
 
     return {
-      status: 'success',
+      status: 'success' as const,
       message: message,
       checkedCases: checkedCases,
       newUpdates: newUpdates,

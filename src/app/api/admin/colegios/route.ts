@@ -1,28 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAuth, getAdminDb } from '@/lib/firebase-admin';
+import { getAdminDb } from '@/lib/firebase-admin';
+import { requirePlatformAdmin } from '@/lib/api-auth';
 
 /**
  * GET /api/admin/colegios
- * Lista todos los colegios. Solo admins.
+ * Lista todos los colegios. Solo superadmins de plataforma.
  */
 export async function GET(request: NextRequest) {
   try {
-    const authHeader = request.headers.get('Authorization');
-    const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
-    if (!token) {
-      return NextResponse.json({ ok: false, error: 'No autenticado' }, { status: 401 });
-    }
-
-    const adminAuth = getAuth();
-    const decoded = await adminAuth.verifyIdToken(token);
-    const uid = decoded.uid;
+    const auth = await requirePlatformAdmin(request);
+    if (auth instanceof NextResponse) return auth;
 
     const adminDb = getAdminDb();
-    const userSnap = await adminDb.collection('users').doc(uid).get();
-    if (userSnap.data()?.role !== 'admin') {
-      return NextResponse.json({ ok: false, error: 'Solo administradores' }, { status: 403 });
-    }
-
     const colegiosSnap = await adminDb.collection('colegios').orderBy('createdAt', 'desc').get();
     const colegios = colegiosSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
@@ -37,26 +26,15 @@ export async function GET(request: NextRequest) {
 
 /**
  * POST /api/admin/colegios
- * Crea un nuevo colegio. Solo admins.
+ * Crea un nuevo colegio. Solo superadmins de plataforma.
  */
 export async function POST(request: NextRequest) {
   try {
-    const authHeader = request.headers.get('Authorization');
-    const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
-    if (!token) {
-      return NextResponse.json({ ok: false, error: 'No autenticado' }, { status: 401 });
-    }
-
-    const adminAuth = getAuth();
-    const decoded = await adminAuth.verifyIdToken(token);
-    const uid = decoded.uid;
+    const auth = await requirePlatformAdmin(request);
+    if (auth instanceof NextResponse) return auth;
+    const uid = auth.uid;
 
     const adminDb = getAdminDb();
-    const userSnap = await adminDb.collection('users').doc(uid).get();
-    if (userSnap.data()?.role !== 'admin') {
-      return NextResponse.json({ ok: false, error: 'Solo administradores' }, { status: 403 });
-    }
-
     const body = await request.json();
     const name = body?.name?.trim();
     if (!name) {

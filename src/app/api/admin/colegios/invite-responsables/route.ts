@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuth, getAdminDb } from '@/lib/firebase-admin';
+import { requirePlatformAdmin } from '@/lib/api-auth';
 import { resend, canSendEmail, getFromAddress } from '@/lib/resend';
 import { buildInviteEmailHtml } from '@/lib/email-templates';
+import { isKnownPlatformAdminEmail } from '@/lib/platform-admin';
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.legalmev.com.ar';
 
@@ -12,19 +14,11 @@ const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.legalmev.com.ar
  */
 export async function POST(request: NextRequest) {
   try {
-    const authHeader = request.headers.get('Authorization');
-    const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
-    if (!token) {
-      return NextResponse.json({ ok: false, error: 'No autenticado' }, { status: 401 });
-    }
+    const auth = await requirePlatformAdmin(request);
+    if (auth instanceof NextResponse) return auth;
 
     const adminAuth = getAuth();
-    const decoded = await adminAuth.verifyIdToken(token);
     const adminDb = getAdminDb();
-    const userSnap = await adminDb.collection('users').doc(decoded.uid).get();
-    if (userSnap.data()?.role !== 'admin') {
-      return NextResponse.json({ ok: false, error: 'Solo administradores' }, { status: 403 });
-    }
 
     const body = await request.json();
     const colegioId = typeof body.colegioId === 'string' ? body.colegioId.trim() : '';
@@ -44,18 +38,42 @@ export async function POST(request: NextRequest) {
     const colegioData = colegioSnap.data();
     const colegioName = (colegioData?.name as string) ?? 'Colegio';
     const currentEmails = (colegioData?.adminEmails || []) as string[];
-    const merged = [...new Set([...currentEmails, ...rawEmails])];
+    const filteredEmails = rawEmails.filter((e) => !isKnownPlatformAdminEmail(e));
+    const skippedPlatformAdmins = rawEmails.filter((e) => isKnownPlatformAdminEmail(e));
+
+    if (filteredEmails.length === 0) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error:
+            'No se pueden agregar superadmins de LegalMev como responsables de colegio.',
+        },
+        { status: 400 }
+      );
+    }
+
+    const merged = [...new Set([...currentEmails, ...filteredEmails])];
 
     await adminDb.collection('colegios').doc(colegioId).update({
       adminEmails: merged,
       updatedAt: new Date().toISOString(),
     });
 
+    for (const email of filteredEmails) {
+      const usersSnap = await adminDb.collection('users').where('email', '==', email).get();
+      for (const doc of usersSnap.docs) {
+        if (isKnownPlatformAdminEmail(email)) continue;
+        if (doc.data()?.role === 'admin') {
+          await doc.ref.update({ role: 'abogado', updatedAt: new Date().toISOString() });
+        }
+      }
+    }
+
     const emailsSent: string[] = [];
     const emailsFailed: string[] = [];
 
     if (canSendEmail()) {
-      for (const email of rawEmails) {
+      for (const email of filteredEmails) {
         try {
           let userExists = false;
           try {
@@ -104,18 +122,20 @@ export async function POST(request: NextRequest) {
     } else {
       return NextResponse.json({
         ok: true,
-        added: rawEmails.length,
+        added: filteredEmails.length,
         emailsSent: 0,
-        emailsFailed: rawEmails,
+        emailsFailed: filteredEmails,
+        skippedPlatformAdmins,
         message: 'Responsables agregados. El servicio de email no está configurado (RESEND_API_KEY). Los usuarios no recibieron el correo de invitación.',
       });
     }
 
     return NextResponse.json({
       ok: true,
-      added: rawEmails.length,
+      added: filteredEmails.length,
       emailsSent: emailsSent.length,
       emailsFailed,
+      skippedPlatformAdmins,
       message:
         emailsFailed.length > 0
           ? `${emailsSent.length} correo(s) enviado(s). No se pudo enviar a: ${emailsFailed.join(', ')}`

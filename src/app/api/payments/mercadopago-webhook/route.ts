@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { MercadoPagoConfig, Payment } from 'mercadopago';
 import { getAdminDb } from '@/lib/firebase-admin';
 import { sendPaymentSuccessEmail } from '@/lib/payment-notifications';
+import { requestHubInvoiceForLegalMevPayment } from '@/lib/hub-billing';
 
 /**
  * Extrae topic/type e id del pago desde GET (IPN) o POST (Webhooks).
@@ -11,16 +12,75 @@ import { sendPaymentSuccessEmail } from '@/lib/payment-notifications';
 function parseNotification(request: NextRequest): { topic: string; id: string } | null {
   const { searchParams } = new URL(request.url);
 
-  // Formato IPN: ?topic=payment&id=xxx
   const topicGet = searchParams.get('topic');
   const idGet = searchParams.get('id');
   if (topicGet && idGet) return { topic: topicGet, id: idGet };
 
-  // Formato Webhooks en query: ?data.id=xxx (type puede venir en body)
   const dataId = searchParams.get('data.id');
   if (dataId) return { topic: 'payment', id: dataId };
 
   return null;
+}
+
+function buyerFromUser(userData: Record<string, unknown> | undefined, payerEmail?: string) {
+  const name = (userData?.name as string)?.trim();
+  return {
+    email: payerEmail || (userData?.email as string) || undefined,
+    razonSocial: name || undefined,
+    cuit: (userData?.cuit as string) || undefined,
+  };
+}
+
+function buyerFromColegio(colegioData: Record<string, unknown> | undefined) {
+  const name = (colegioData?.name as string)?.trim();
+  return {
+    email: (colegioData?.contactoFacturacion as string) || undefined,
+    razonSocial: name || undefined,
+    cuit: ((colegioData?.cuit ?? colegioData?.document) as string) || undefined,
+  };
+}
+
+async function emitHubInvoice(opts: {
+  paymentId: string;
+  amount: number;
+  externalRef: string;
+  preferenceId?: string;
+  payerEmail?: string;
+  buyer: { email?: string; razonSocial?: string; cuit?: string };
+  description: string;
+  pagoDocId: string;
+  metadata?: Record<string, unknown>;
+}) {
+  const adminDb = getAdminDb();
+  const billing = await requestHubInvoiceForLegalMevPayment(adminDb, {
+    paymentId: opts.paymentId,
+    amount: opts.amount,
+    externalReference: opts.externalRef,
+    preferenceId: opts.preferenceId,
+    buyer: opts.buyer,
+    item: { description: opts.description },
+    pagoDocId: opts.pagoDocId,
+    metadata: opts.metadata,
+  });
+
+  if (billing.ok) {
+    console.log('[mercadopago-webhook] Factura Hub emitida/registrada', {
+      paymentId: opts.paymentId,
+      facturaId: billing.facturaId,
+      alreadyIssued: billing.alreadyIssued,
+    });
+  } else if (billing.skipped) {
+    console.warn('[mercadopago-webhook] Facturación Hub omitida', {
+      paymentId: opts.paymentId,
+      reason: billing.reason,
+    });
+  } else {
+    console.error('[mercadopago-webhook] Facturación Hub falló', {
+      paymentId: opts.paymentId,
+      error: billing.error,
+      status: billing.status,
+    });
+  }
 }
 
 async function processPaymentNotification(accessToken: string, id: string): Promise<{ ok: boolean; error?: string }> {
@@ -40,63 +100,92 @@ async function processPaymentNotification(accessToken: string, id: string): Prom
     const { recordPayment } = await import('@/lib/payments');
     const amount = (payInfo.transaction_amount as number) ?? 0;
     const moneda = (payInfo.currency_id as string) ?? 'ARS';
+    const payerEmail = (payInfo.payer as { email?: string } | undefined)?.email;
+    const preferenceId = (payInfo as { preference_id?: string }).preference_id;
 
     if (externalRef.startsWith('colegio-')) {
-    const parts = externalRef.split('-');
-    const colegioId = parts[1];
-    const periodo = parts.slice(2).join('-') || undefined;
-    if (colegioId) {
-      const colegioSnap = await adminDb.collection('colegios').doc(colegioId).get();
-      const colegioName = colegioSnap.exists ? (colegioSnap.data()?.name as string) : undefined;
-      await recordPayment(adminDb, {
-        tipo: 'colegio',
-        colegioId,
-        colegioName,
+      const parts = externalRef.split('-');
+      const colegioId = parts[1];
+      const periodo = parts.slice(2).join('-') || undefined;
+      if (colegioId) {
+        const colegioSnap = await adminDb.collection('colegios').doc(colegioId).get();
+        const colegioData = colegioSnap.data() as Record<string, unknown> | undefined;
+        const colegioName = colegioSnap.exists ? (colegioData?.name as string) : undefined;
+        const pagoDocId = await recordPayment(adminDb, {
+          tipo: 'colegio',
+          colegioId,
+          colegioName,
+          monto: amount,
+          moneda,
+          metodo: 'mercadopago',
+          referenciaExterna: String(id),
+          estado: 'completado',
+          descripcion: `Cuota convenio - Período ${periodo ?? 'N/A'}`,
+          periodo,
+        });
+        console.log('[mercadopago-webhook] Pago colegio registrado:', colegioId, periodo);
+
+        const desc = `Cuota convenio LegalMev${colegioName ? ` - ${colegioName}` : ''}${periodo ? ` (${periodo})` : ''}`;
+        await emitHubInvoice({
+          paymentId: String(id),
+          amount,
+          externalRef,
+          preferenceId,
+          payerEmail,
+          buyer: buyerFromColegio(colegioData),
+          description: desc,
+          pagoDocId,
+          metadata: { tipo: 'colegio', colegioId, periodo },
+        });
+      }
+    } else {
+      const userRef = adminDb.collection('users').doc(externalRef);
+      const userSnap = await userRef.get();
+      const userData = userSnap.data();
+      if (userSnap.exists && userData?.tier !== 'premium') {
+        await userRef.update({
+          tier: 'premium',
+          premiumSource: 'payment',
+          downloadsThisMonth: 0,
+          monthlyResetAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+          premiumActivatedAt: new Date().toISOString(),
+        });
+        console.log('[mercadopago-webhook] Usuario', externalRef, 'actualizado a premium');
+      }
+      const pagoDocId = await recordPayment(adminDb, {
+        tipo: 'cliente',
+        clienteId: externalRef,
         monto: amount,
         moneda,
         metodo: 'mercadopago',
         referenciaExterna: String(id),
         estado: 'completado',
-        descripcion: `Cuota convenio - Período ${periodo ?? 'N/A'}`,
-        periodo,
+        descripcion: 'Plan Premium LegalMev',
       });
-      console.log('[mercadopago-webhook] Pago colegio registrado:', colegioId, periodo);
-    }
-  } else {
-    const userRef = adminDb.collection('users').doc(externalRef);
-    const userSnap = await userRef.get();
-    const userData = userSnap.data();
-    if (userSnap.exists && userData?.tier !== 'premium') {
-      await userRef.update({
-        tier: 'premium',
-        premiumSource: 'payment',
-        downloadsThisMonth: 0,
-        monthlyResetAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-        premiumActivatedAt: new Date().toISOString(),
-      });
-      console.log('[mercadopago-webhook] Usuario', externalRef, 'actualizado a premium');
-    }
-    await recordPayment(adminDb, {
-      tipo: 'cliente',
-      clienteId: externalRef,
-      monto: amount,
-      moneda,
-      metodo: 'mercadopago',
-      referenciaExterna: String(id),
-      estado: 'completado',
-      descripcion: 'Plan Premium LegalMev',
-    });
-    // Notificar cobro exitoso por email (igual que DLocal)
-    const userEmail = (userData?.email as string) || '';
-    if (userEmail) {
-      await sendPaymentSuccessEmail({
-        to: userEmail,
-        userName: (userData?.name as string) || undefined,
+
+      const userEmail = (userData?.email as string) || '';
+      if (userEmail) {
+        await sendPaymentSuccessEmail({
+          to: userEmail,
+          userName: (userData?.name as string) || undefined,
+          amount,
+          currency: moneda,
+        });
+      }
+
+      await emitHubInvoice({
+        paymentId: String(id),
         amount,
-        currency: moneda,
+        externalRef,
+        preferenceId,
+        payerEmail,
+        buyer: buyerFromUser(userData, payerEmail),
+        description: 'Plan Premium LegalMev',
+        pagoDocId,
+        metadata: { tipo: 'cliente', clienteId: externalRef },
       });
     }
-  }
+
     return { ok: true };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -114,7 +203,6 @@ async function handleNotification(request: NextRequest): Promise<NextResponse> {
 
   let parsed = parseNotification(request);
 
-  // POST: intentar leer body JSON (Webhooks envían { type, data: { id } })
   if (!parsed && request.method === 'POST') {
     try {
       const body = await request.json();
@@ -124,7 +212,7 @@ async function handleNotification(request: NextRequest): Promise<NextResponse> {
         parsed = { topic: 'payment', id: String(dataId) };
       }
     } catch {
-      // body no es JSON válido, ignorar
+      // body no es JSON válido
     }
   }
 
@@ -139,13 +227,9 @@ async function handleNotification(request: NextRequest): Promise<NextResponse> {
     }
   }
 
-  // Siempre 200 para que Mercado Pago no reintente indefinidamente
   return NextResponse.json({ ok: true });
 }
 
-/**
- * GET: IPN legacy envía ?topic=payment&id=xxx
- */
 export async function GET(request: NextRequest) {
   try {
     return await handleNotification(request);
@@ -155,10 +239,6 @@ export async function GET(request: NextRequest) {
   }
 }
 
-/**
- * POST: Webhooks e IPN moderno envían JSON o form.
- * Mercado Pago recomienda Webhooks (POST) sobre IPN.
- */
 export async function POST(request: NextRequest) {
   try {
     return await handleNotification(request);

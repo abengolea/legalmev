@@ -23,6 +23,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { ColegioSuscripcionCard } from '@/components/ColegioSuscripcionCard';
 
 export type PagoRow = {
   id: string;
@@ -112,7 +113,7 @@ export function PaymentHistoryClient({
   colegioId,
 }: {
   variant: PaymentHistoryVariant;
-  /** Requerido para variant colegio (solo superadmin). */
+  /** Opcional: superadmin elige colegio; responsable usa su colegio automáticamente. */
   colegioId?: string;
 }) {
   const cfg = CONFIG[variant];
@@ -129,11 +130,6 @@ export function PaymentHistoryClient({
   const loadPagos = useCallback(async () => {
     const user = auth.currentUser;
     if (!user) return;
-    if (variant === 'colegio' && !colegioId) {
-      setPagos([]);
-      setLoading(false);
-      return;
-    }
     setLoading(true);
     try {
       const token = await user.getIdToken();
@@ -243,6 +239,8 @@ export function PaymentHistoryClient({
           )}
         </p>
       </div>
+
+      {variant === 'colegio' && !colegioId ? <ColegioSuscripcionCard /> : null}
 
       <Card>
         <CardHeader>

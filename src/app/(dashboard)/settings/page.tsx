@@ -2,6 +2,7 @@
 'use client';
 
 import { useState, useEffect, useTransition } from 'react';
+import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -102,7 +103,12 @@ function ProfileForm() {
     <Card>
       <CardHeader>
         <CardTitle>Perfil Profesional</CardTitle>
-        <CardDescription>Actualiza tu información para pagos y facturación.</CardDescription>
+        <CardDescription className="space-y-2">
+          <p>Actualizá tu información para pagos y facturación.</p>
+          <Button variant="link" className="h-auto p-0 text-primary" asChild>
+            <Link href="/dashboard/pagos">Historial de pagos y descarga de facturas</Link>
+          </Button>
+        </CardDescription>
       </CardHeader>
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)}>

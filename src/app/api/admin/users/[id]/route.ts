@@ -1,12 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAuth, getAdminDb } from '@/lib/firebase-admin';
-
-function requireAdmin(request: NextRequest) {
-  const authHeader = request.headers.get('Authorization');
-  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
-  if (!token) return { ok: false as const, error: 'No autenticado', status: 401 };
-  return { token };
-}
+import { getAdminDb } from '@/lib/firebase-admin';
+import { requirePlatformAdmin } from '@/lib/api-auth';
+import { isColegioResponsableEmail, isKnownPlatformAdminEmail } from '@/lib/platform-admin';
 
 /**
  * PATCH /api/admin/users/[id]
@@ -18,18 +13,11 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const auth = requireAdmin(request);
-    if ('error' in auth) {
-      return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status });
-    }
+    const auth = await requirePlatformAdmin(request);
+    if (auth instanceof NextResponse) return auth;
 
-    const adminAuth = getAuth();
-    const decoded = await adminAuth.verifyIdToken(auth.token);
     const adminDb = getAdminDb();
-    const adminSnap = await adminDb.collection('users').doc(decoded.uid).get();
-    if (adminSnap.data()?.role !== 'admin') {
-      return NextResponse.json({ ok: false, error: 'Solo administradores' }, { status: 403 });
-    }
+    const { uid } = auth;
 
     const { id: targetUserId } = await params;
     if (!targetUserId) {
@@ -40,7 +28,7 @@ export async function PATCH(
     const update: Record<string, unknown> = {};
 
     if ('role' in body) {
-      if (targetUserId === decoded.uid) {
+      if (targetUserId === uid) {
         return NextResponse.json(
           { ok: false, error: 'No podés cambiar tu propio rol' },
           { status: 400 }
@@ -63,6 +51,23 @@ export async function PATCH(
     const userSnap = await userRef.get();
     if (!userSnap.exists) {
       return NextResponse.json({ ok: false, error: 'Usuario no encontrado' }, { status: 404 });
+    }
+
+    if (update.role === 'admin') {
+      const email = (userSnap.data()?.email as string) || '';
+      if (
+        !isKnownPlatformAdminEmail(email) &&
+        (await isColegioResponsableEmail(adminDb, email))
+      ) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error:
+              'No se puede asignar admin de plataforma: el usuario es responsable de un colegio. Quitá el email de adminEmails del colegio primero.',
+          },
+          { status: 400 }
+        );
+      }
     }
 
     await userRef.update(update);
