@@ -24,7 +24,7 @@ import {
 import { Separator } from './ui/separator';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Button } from './ui/button';
-import { LayoutDashboard, LogOut, Shield, Users, Building2, BarChart3, CreditCard, Settings, Landmark } from 'lucide-react';
+import { LayoutDashboard, LogOut, Shield, Users, Building2, BarChart3, CreditCard, Settings, Landmark, Receipt } from 'lucide-react';
 import { Logo } from './Logo';
 import { useSidebar } from '@/components/ui/sidebar';
 
@@ -103,17 +103,29 @@ export function DashboardNav() {
               <Link href="/dashboard">Panel</Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              asChild
+              isActive={isActive('/dashboard/pagos')}
+              icon={<Receipt />}
+              tooltip={{ children: 'Pagos y facturas' }}
+            >
+              <Link href="/dashboard/pagos">Pagos y facturas</Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
           {isColegioAdmin && (
-            <SidebarMenuItem>
-              <SidebarMenuButton
-                asChild
-                isActive={isActive('/dashboard/colegio')}
-                icon={<Landmark />}
-                tooltip={{ children: 'Mi colegio' }}
-              >
-                <Link href="/dashboard/colegio">Mi colegio</Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
+            <>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  isActive={pathname === '/dashboard/colegio'}
+                  icon={<Landmark />}
+                  tooltip={{ children: 'Mi colegio' }}
+                >
+                  <Link href="/dashboard/colegio">Mi colegio</Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </>
           )}
           {userData?.role === 'admin' && (
             <SidebarGroup>
@@ -152,6 +164,11 @@ export function DashboardNav() {
                     <SidebarMenuSubItem>
                       <SidebarMenuSubButton asChild isActive={adminTab === 'payments'}>
                         <Link href="/admin?tab=payments"><CreditCard className="size-4" /> Pagos</Link>
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
+                    <SidebarMenuSubItem>
+                      <SidebarMenuSubButton asChild isActive={isActive('/dashboard/colegio/pagos')}>
+                        <Link href="/dashboard/colegio/pagos"><Receipt className="size-4" /> Cuotas colegio</Link>
                       </SidebarMenuSubButton>
                     </SidebarMenuSubItem>
                     <SidebarMenuSubItem>

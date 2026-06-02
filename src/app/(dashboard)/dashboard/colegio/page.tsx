@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { auth } from '@/lib/firebase';
 import {
@@ -58,7 +59,7 @@ export default function ColegioPage() {
   const [colegio, setColegio] = useState<Colegio | null>(null);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
-  const [payingWith, setPayingWith] = useState<'mercadopago' | 'dlocal' | null>(null);
+  const [payingWith, setPayingWith] = useState(false);
   const [adding, setAdding] = useState(false);
   const [actioningEmail, setActioningEmail] = useState<string | null>(null);
   const [addEmail, setAddEmail] = useState('');
@@ -213,9 +214,9 @@ export default function ColegioPage() {
     }
   };
 
-  const handlePay = async (metodo: 'mercadopago' | 'dlocal') => {
+  const handlePay = async () => {
     if (!colegio) return;
-    setPayingWith(metodo);
+    setPayingWith(true);
     try {
       const user = auth.currentUser;
       if (!user) throw new Error('No autenticado');
@@ -223,7 +224,7 @@ export default function ColegioPage() {
       const res = await fetch('/api/colegio/create-payment-link', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ metodo }),
+        body: JSON.stringify({}),
       });
       const json = await res.json();
       if (json.ok && json.link) {
@@ -241,7 +242,7 @@ export default function ColegioPage() {
         title: 'Error',
         description: err instanceof Error ? err.message : 'Error al crear el pago.',
       });
-      setPayingWith(null);
+      setPayingWith(false);
     }
   };
 
@@ -321,21 +322,18 @@ export default function ColegioPage() {
                 {colegio.moneda === 'USD' ? ' USD' : ' ARS'}
               </p>
               <div className="flex flex-wrap gap-2">
-                <Button onClick={() => handlePay('mercadopago')} disabled={!!payingWith}>
-                  {payingWith === 'mercadopago' ? 'Generando...' : (<><ExternalLink className="h-4 w-4 mr-2" />Pagar con Mercado Pago</>)}
-                </Button>
-                <Button variant="outline" onClick={() => handlePay('dlocal')} disabled={!!payingWith}>
-                  {payingWith === 'dlocal' ? 'Generando...' : (<><ExternalLink className="h-4 w-4 mr-2" />Pagar con DLocal</>)}
+                <Button onClick={handlePay} disabled={payingWith}>
+                  {payingWith ? 'Generando...' : (<><ExternalLink className="h-4 w-4 mr-2" />Pagar con Mercado Pago</>)}
                 </Button>
               </div>
             </div>
           )}
 
           {(!colegio.montoConvenio || colegio.montoConvenio <= 0) && (
-            <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50 text-sm text-muted-foreground">
+            <p className="flex items-center gap-2 p-3 rounded-lg bg-muted/50 text-sm text-muted-foreground">
               <CreditCard className="h-4 w-4 shrink-0" />
               El monto de la suscripción lo define el administrador de LegalMev.
-            </div>
+            </p>
           )}
 
           <Tabs defaultValue="lista" className="w-full">
