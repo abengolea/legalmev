@@ -28,7 +28,9 @@ import {
 } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Cpu, Database, Users, XCircle, FileText, MessageSquare, Bot, Send, PlusCircle, Zap, CreditCard, BarChart3, Building2, Upload, AlertTriangle, Receipt, Link2, UserPlus, LayoutDashboard, TrendingUp, DollarSign, FileOutput, ArrowRight, Settings, Mail, MoreHorizontal, Ban, Unlock, RefreshCw, History, StickyNote } from 'lucide-react';
+import { Cpu, Database, Users, XCircle, FileText, MessageSquare, Bot, Send, PlusCircle, Zap, CreditCard, BarChart3, Building2, Upload, AlertTriangle, Receipt, Link2, UserPlus, LayoutDashboard, TrendingUp, DollarSign, FileOutput, ArrowRight, Settings, Mail, MoreHorizontal, Ban, Unlock, RefreshCw, History, StickyNote, Gavel } from 'lucide-react';
+import { AudienciaCopilot } from '@/components/admin/AudienciaCopilot';
+import { canAccessAudienciaCopilot } from '@/lib/audiencia-copilot-access';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { clientIntakeAutomation } from '@/ai/flows/client-intake-automation';
@@ -2044,7 +2046,8 @@ function AdminDashboard() {
   );
 }
 
-const VALID_TABS = ['dashboard', 'users', 'colegios', 'stats', 'payments', 'config'] as const;
+const BASE_TABS = ['dashboard', 'users', 'colegios', 'stats', 'payments', 'config'] as const;
+const COPILOT_TAB = 'audiencia-copilot' as const;
 const VALID_COLEGIO_SUB = ['convenios', 'responsables'] as const;
 const VALID_CONFIG_TABS = ['payments', 'email', 'system', 'logs', 'ai-test'] as const;
 
@@ -2124,7 +2127,30 @@ function AdminTabs() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const tabParam = searchParams.get('tab');
-  const activeTab = (VALID_TABS.includes(tabParam as typeof VALID_TABS[number]) ? tabParam : 'dashboard') as typeof VALID_TABS[number];
+  const [canAccessCopilot, setCanAccessCopilot] = useState(false);
+
+  useEffect(() => {
+    import('@/lib/firebase').then(({ auth }) => {
+      const unsub = auth.onAuthStateChanged(async (user) => {
+        if (!user) {
+          setCanAccessCopilot(false);
+          return;
+        }
+        try {
+          const token = await user.getIdToken();
+          const res = await fetch('/api/user/me', { headers: { Authorization: `Bearer ${token}` } });
+          const json = await res.json();
+          setCanAccessCopilot(canAccessAudienciaCopilot(json?.user?.email));
+        } catch {
+          setCanAccessCopilot(false);
+        }
+      });
+      return () => unsub();
+    });
+  }, []);
+
+  const validTabs = canAccessCopilot ? [...BASE_TABS, COPILOT_TAB] : [...BASE_TABS];
+  const activeTab = (validTabs.includes(tabParam as (typeof validTabs)[number]) ? tabParam : 'dashboard') as (typeof validTabs)[number];
 
   const setTab = (value: string) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -2141,6 +2167,9 @@ function AdminTabs() {
         <TabsTrigger value="stats"><BarChart3 className="mr-2"/> Estadísticas</TabsTrigger>
         <TabsTrigger value="payments"><CreditCard className="mr-2"/> Pagos</TabsTrigger>
         <TabsTrigger value="config"><Settings className="mr-2"/> Configuración</TabsTrigger>
+        {canAccessCopilot && (
+          <TabsTrigger value="audiencia-copilot"><Gavel className="mr-2"/> Copiloto Audiencias</TabsTrigger>
+        )}
       </TabsList>
 
       <TabsContent value="dashboard">
@@ -2167,6 +2196,12 @@ function AdminTabs() {
       <TabsContent value="config">
         <ConfigTabs />
       </TabsContent>
+
+      {canAccessCopilot && (
+        <TabsContent value="audiencia-copilot">
+          <AudienciaCopilot />
+        </TabsContent>
+      )}
     </Tabs>
   );
 }

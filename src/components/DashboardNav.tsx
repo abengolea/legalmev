@@ -23,7 +23,8 @@ import {
 import { Separator } from './ui/separator';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Button } from './ui/button';
-import { LayoutDashboard, LogOut, Shield, Users, Building2, BarChart3, CreditCard, Settings, Landmark, Receipt } from 'lucide-react';
+import { LayoutDashboard, LogOut, Shield, Users, Building2, BarChart3, CreditCard, Settings, Landmark, Receipt, Gavel } from 'lucide-react';
+import { canAccessAudienciaCopilot } from '@/lib/audiencia-copilot-access';
 import { Logo } from './Logo';
 import { useSidebar } from '@/components/ui/sidebar';
 
@@ -40,6 +41,7 @@ export function DashboardNav() {
     role?: string;
     isPlatformAdmin?: boolean;
   } | null>(null);
+  const [canAccessCopilot, setCanAccessCopilot] = useState(false);
   const [isColegioAdmin, setIsColegioAdmin] = useState(false);
 
   useEffect(() => {
@@ -60,14 +62,17 @@ export function DashboardNav() {
             if (j?.ok && j.user) {
               setUserData(j.user);
               setIsColegioAdmin(!!j.user.isColegioAdmin);
+              setCanAccessCopilot(canAccessAudienciaCopilot(j.user.email));
             } else {
               setUserData(null);
               setIsColegioAdmin(false);
+              setCanAccessCopilot(false);
             }
           })
           .catch(() => {
             setUserData(null);
             setIsColegioAdmin(false);
+            setCanAccessCopilot(false);
           });
       });
     });
@@ -207,6 +212,13 @@ export function DashboardNav() {
                         <Link href="/admin?tab=config&configTab=payments"><Settings className="size-4" /> Configuración</Link>
                       </SidebarMenuSubButton>
                     </SidebarMenuSubItem>
+                    {canAccessCopilot && (
+                      <SidebarMenuSubItem>
+                        <SidebarMenuSubButton asChild isActive={adminTab === 'audiencia-copilot'}>
+                          <Link href="/admin?tab=audiencia-copilot"><Gavel className="size-4" /> Copiloto Audiencias</Link>
+                        </SidebarMenuSubButton>
+                      </SidebarMenuSubItem>
+                    )}
                   </SidebarMenuSub>
                 </SidebarMenuItem>
               </SidebarGroupContent>
