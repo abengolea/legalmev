@@ -14,7 +14,8 @@ import type {
   ParteRepresentada,
   RepresentacionCaso,
 } from '@/lib/audiencia-session-types';
-import { EMPTY_REPRESENTACION } from '@/lib/audiencia-session-types';
+import { EMPTY_REPRESENTACION, mergePreguntasATodos, migrateSessionRepreguntas, normalizeAudienciaAnalysis, normalizeRepreguntas, splitRepreguntas } from '@/lib/audiencia-session-types';
+import type { RepreguntaItem } from '@/lib/audiencia-session-types';
 import {
   esFueroPenal,
   etiquetasBandejaDeclarante,
@@ -26,6 +27,7 @@ import {
 } from '@/lib/audiencia-copilot-format';
 import { GEMINI_MODEL_ID } from '@/lib/gemini-model';
 import { EditablePreguntasList } from '@/components/admin/EditablePreguntasList';
+import { EditableRepreguntasList } from '@/components/admin/EditableRepreguntasList';
 import {
   Card,
   CardContent,
@@ -56,6 +58,7 @@ import {
   Lightbulb,
   Loader2,
   Plus,
+  RefreshCw,
   Scale,
   User,
   Wifi,
@@ -87,7 +90,7 @@ function normalizeTestigos(items: Testigo[]): Testigo[] {
 
 const LAST_SESSION_KEY = 'legalmev_audiencia_last_session';
 
-const EMPTY_ANALYSIS: AudienciaCopilotOutput = {
+const EMPTY_ANALYSIS: AudienciaCopilotOutput = normalizeAudienciaAnalysis({
   alertas: [],
   repreguntas: [],
   preguntasIneludibles: [],
@@ -97,7 +100,7 @@ const EMPTY_ANALYSIS: AudienciaCopilotOutput = {
   conclusiones: [],
   estrategia: '',
   borradorAlegato: '',
-};
+});
 
 const COPILOT_CAPABILITIES = [
   'Explica el expediente',
@@ -175,6 +178,7 @@ export function AudienciaCopilot() {
   const [analysisByTestigoId, setAnalysisByTestigoId] = useState<
     Record<string, AudienciaCopilotOutput>
   >({});
+  const [preguntasATodos, setPreguntasATodos] = useState<RepreguntaItem[]>([]);
   const [analysis, setAnalysis] = useState<AudienciaCopilotOutput>(EMPTY_ANALYSIS);
   const [nuevaPregunta, setNuevaPregunta] = useState('');
   const [nuevaRespuesta, setNuevaRespuesta] = useState('');
@@ -186,6 +190,7 @@ export function AudienciaCopilot() {
     AudienciaSessionData['alegatoGlobalMeta']
   >();
   const [generandoAlegatos, setGenerandoAlegatos] = useState(false);
+  const [reanalizandoCaso, setReanalizandoCaso] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const skipSaveRef = useRef(true);
   const sessionsLoadedRef = useRef(false);
@@ -201,11 +206,138 @@ export function AudienciaCopilot() {
   const testigosNuestra = testigos.filter((t) => t.bandeja === 'nuestra');
   const testigosContraria = testigos.filter((t) => t.bandeja === 'contraria');
   const testigosIndefinidos = testigos.filter((t) => t.bandeja === 'indefinida');
+  const repreguntasVisibles = [...preguntasATodos, ...analysis.repreguntas];
   const testimoniosCerrados = testigos.filter((t) => t.testimonioCerrado).length;
   const todosTestimoniosCerrados =
     testigos.length > 0 && testigos.every((t) => t.testimonioCerrado);
   const progresoTestimonios =
     testigos.length > 0 ? Math.round((testimoniosCerrados / testigos.length) * 100) : 0;
+  const puedeReanalizarCaso = !!expedienteAnalysis && !!representacion.parte && !!sessionId;
+
+  const fetchAnalisisParaTestigo = useCallback(
+    async (testigo: Testigo, repCtx: string): Promise<AudienciaCopilotOutput> => {
+      const user = auth.currentUser;
+      if (!user) throw new Error('Sesión requerida');
+      const token = await user.getIdToken();
+      const res = await fetch('/api/admin/audiencia-copilot', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          expedienteContexto,
+          representacionContexto: repCtx,
+          declaranteNombre: testigo.nombre,
+          declaranteRol: testigo.rol,
+          contextoDeclarante:
+            testigo.contextoDeclarante?.trim() ||
+            '(El abogado no agregó contexto sobre este testigo)',
+          testimonioPrevio: testigo.testimonioPrevio || '(Sin testimonio previo cargado)',
+          intercambiosTexto: formatIntercambios(testigo.intercambios),
+        }),
+      });
+      const json = await safeResJson<{
+        ok: boolean;
+        analysis?: AudienciaCopilotOutput;
+        error?: string;
+      }>(res);
+      if (!json.ok || !json.analysis) throw new Error(json.error || 'Error al analizar');
+      const rawSplit = splitRepreguntas(normalizeRepreguntas(json.analysis.repreguntas));
+      return {
+        analysis: normalizeAudienciaAnalysis({
+          ...json.analysis,
+          repreguntas: rawSplit.testigo,
+        }),
+        todos: rawSplit.todos,
+      };
+    },
+    [expedienteContexto]
+  );
+
+  const sincronizarYReanalizarCaso = useCallback(async () => {
+    if (!sessionId || !expedienteAnalysis) return;
+    if (!representacion.parte) {
+      toast({
+        title: 'Elegí la parte que defendés',
+        description: esPenal
+          ? 'Seleccioná Defensa o Fiscalía antes de reanalizar.'
+          : 'Seleccioná actor o demandado antes de reanalizar.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const user = auth.currentUser;
+    if (!user) return;
+
+    setReanalizandoCaso(true);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(
+        `/api/admin/audiencia-copilot/sessions/${sessionId}/reanalizar-caso`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ representacion }),
+        }
+      );
+      const json = await safeResJson<{
+        ok: boolean;
+        expedienteAnalysis?: ExpedienteAnalysisOutput;
+        analysisByTestigoId?: Record<string, AudienciaCopilotOutput>;
+        preguntasATodos?: RepreguntaItem[];
+        testigosReanalizados?: number;
+        representacion?: RepresentacionCaso;
+        error?: string;
+      }>(res);
+
+      if (!json.ok || !json.expedienteAnalysis) {
+        throw new Error(json.error || 'No se pudo reanalizar el caso');
+      }
+
+      setExpedienteAnalysis(json.expedienteAnalysis);
+      if (json.analysisByTestigoId) {
+        const migrated = migrateSessionRepreguntas({
+          preguntasATodos: json.preguntasATodos,
+          analysisByTestigoId: json.analysisByTestigoId,
+        });
+        setAnalysisByTestigoId(migrated.analysisByTestigoId);
+        setPreguntasATodos(migrated.preguntasATodos);
+        if (testigoActivoId && migrated.analysisByTestigoId[testigoActivoId]) {
+          setAnalysis(migrated.analysisByTestigoId[testigoActivoId]);
+        }
+      } else if (json.preguntasATodos) {
+        setPreguntasATodos(json.preguntasATodos);
+      }
+      if (json.representacion) {
+        setRepresentacion(json.representacion);
+        setRepresentacionGuardada(json.representacion);
+      }
+      setAlegatoGlobal('');
+      setAlegatoGlobalMeta(undefined);
+
+      const declarantes = json.testigosReanalizados ?? 0;
+      toast({
+        title: 'Caso reanalizado',
+        description:
+          declarantes > 0
+            ? `Mapa del expediente actualizado y sugerencias revisadas para ${declarantes} declarante(s).`
+            : 'Mapa del expediente actualizado según tu objetivo estratégico.',
+      });
+    } catch (err) {
+      toast({
+        title: 'Error al reanalizar',
+        description: err instanceof Error ? err.message : 'No se pudo sincronizar el caso',
+        variant: 'destructive',
+      });
+    } finally {
+      setReanalizandoCaso(false);
+    }
+  }, [sessionId, expedienteAnalysis, representacion, testigoActivoId, esPenal, toast]);
 
   const resetParaNuevaAudiencia = useCallback(() => {
     skipSaveRef.current = true;
@@ -214,6 +346,7 @@ export function AudienciaCopilot() {
     setTestigos([]);
     setTestigoActivoId(null);
     setAnalysisByTestigoId({});
+    setPreguntasATodos([]);
     setAnalysis(EMPTY_ANALYSIS);
     setRepresentacion({ ...EMPTY_REPRESENTACION });
     setRepresentacionGuardada({ ...EMPTY_REPRESENTACION });
@@ -238,7 +371,12 @@ export function AudienciaCopilot() {
     setExpedienteAnalysis(session.expedienteAnalysis ?? null);
     setTestigos(normalizeTestigos(session.testigos));
     setTestigoActivoId(session.testigoActivoId);
-    setAnalysisByTestigoId(session.analysisByTestigoId || {});
+    const migrated = migrateSessionRepreguntas({
+      preguntasATodos: session.preguntasATodos,
+      analysisByTestigoId: session.analysisByTestigoId,
+    });
+    setAnalysisByTestigoId(migrated.analysisByTestigoId);
+    setPreguntasATodos(migrated.preguntasATodos);
     const rep = session.representacion ?? { ...EMPTY_REPRESENTACION };
     setRepresentacion(rep);
     setRepresentacionGuardada(rep);
@@ -246,8 +384,8 @@ export function AudienciaCopilot() {
     setAlegatoGlobalMeta(session.alegatoGlobalMeta);
     const activeId = session.testigoActivoId;
     setAnalysis(
-      activeId && session.analysisByTestigoId?.[activeId]
-        ? session.analysisByTestigoId[activeId]
+      activeId && migrated.analysisByTestigoId[activeId]
+        ? migrated.analysisByTestigoId[activeId]
         : EMPTY_ANALYSIS
     );
     localStorage.setItem(LAST_SESSION_KEY, session.id);
@@ -367,6 +505,7 @@ export function AudienciaCopilot() {
           testigos,
           testigoActivoId,
           analysisByTestigoId,
+          preguntasATodos,
           alegatoGlobal,
           alegatoGlobalMeta,
         }),
@@ -378,7 +517,7 @@ export function AudienciaCopilot() {
     } catch {
       setSaveStatus('error');
     }
-  }, [sessionId, testigos, testigoActivoId, analysisByTestigoId, alegatoGlobal, alegatoGlobalMeta, fetchSessions]);
+  }, [sessionId, testigos, testigoActivoId, analysisByTestigoId, preguntasATodos, alegatoGlobal, alegatoGlobalMeta, fetchSessions]);
 
   const guardarRepresentacion = useCallback(async () => {
     if (!sessionId) return;
@@ -472,7 +611,7 @@ export function AudienciaCopilot() {
       void saveSession();
     }, 1200);
     return () => clearTimeout(timer);
-  }, [sessionId, testigos, testigoActivoId, analysisByTestigoId, alegatoGlobal, alegatoGlobalMeta, saveSession]);
+  }, [sessionId, testigos, testigoActivoId, analysisByTestigoId, preguntasATodos, alegatoGlobal, alegatoGlobalMeta, saveSession]);
 
   const handleLoadPdf = async (file: File) => {
     setIsLoading(true);
@@ -535,6 +674,7 @@ export function AudienciaCopilot() {
       setTestigos(normalizeTestigos(analyzeJson.testigos ?? []));
       setTestigoActivoId(analyzeJson.testigoActivoId ?? null);
       setAnalysisByTestigoId({});
+      setPreguntasATodos([]);
       setRepresentacion({ ...EMPTY_REPRESENTACION });
       setRepresentacionGuardada({ ...EMPTY_REPRESENTACION });
       setAlegatoGlobal('');
@@ -600,7 +740,7 @@ export function AudienciaCopilot() {
 
   const seleccionarTestigo = (id: string) => {
     setTestigoActivoId(id);
-    setAnalysis(analysisByTestigoId[id] ?? EMPTY_ANALYSIS);
+    setAnalysis(normalizeAudienciaAnalysis(analysisByTestigoId[id] ?? EMPTY_ANALYSIS));
   };
 
   const renderListaDeclarantes = (items: Testigo[], vacio: string) => {
@@ -695,42 +835,22 @@ export function AudienciaCopilot() {
       if (representacionDirty) {
         toast({
           title: 'Guardá la representación',
-          description: 'Hacé clic en Guardar en el paso 1 antes de usar las sugerencias de IA.',
+          description:
+            'Usá «Sincronizar y reanalizar» en el paso 1 o guardá antes de analizar.',
           variant: 'destructive',
         });
         return;
       }
-      const user = auth.currentUser;
-      if (!user) return;
 
       setIsLoading(true);
       try {
-        const token = await user.getIdToken();
-        const res = await fetch('/api/admin/audiencia-copilot', {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            expedienteContexto,
-            representacionContexto,
-            declaranteNombre: testigo.nombre,
-            declaranteRol: testigo.rol,
-            contextoDeclarante:
-              testigo.contextoDeclarante?.trim() || '(El abogado no agregó contexto sobre este testigo)',
-            testimonioPrevio: testigo.testimonioPrevio || '(Sin testimonio previo cargado)',
-            intercambiosTexto: formatIntercambios(testigo.intercambios),
-          }),
-        });
-        const json = await safeResJson<{
-          ok: boolean;
-          analysis?: AudienciaCopilotOutput;
-          error?: string;
-        }>(res);
-        if (!json.ok || !json.analysis) throw new Error(json.error || 'Error al analizar');
-        setAnalysis(json.analysis);
-        setAnalysisByTestigoId((prev) => ({ ...prev, [testigo.id]: json.analysis! }));
+        const { analysis: analysisResult, todos } = await fetchAnalisisParaTestigo(
+          testigo,
+          representacionContexto
+        );
+        setPreguntasATodos((prev) => mergePreguntasATodos(prev, todos));
+        setAnalysis(analysisResult);
+        setAnalysisByTestigoId((prev) => ({ ...prev, [testigo.id]: analysisResult }));
       } catch (err) {
         toast({
           title: 'Error de IA',
@@ -741,7 +861,15 @@ export function AudienciaCopilot() {
         setIsLoading(false);
       }
     },
-    [expedienteAnalysis, expedienteContexto, esPenal, representacion.parte, representacionContexto, representacionDirty, toast]
+    [
+      expedienteAnalysis,
+      esPenal,
+      representacion.parte,
+      representacionContexto,
+      representacionDirty,
+      fetchAnalisisParaTestigo,
+      toast,
+    ]
   );
 
   const agregarIntercambio = async () => {
@@ -1092,6 +1220,10 @@ export function AudienciaCopilot() {
                   }
                   className="min-h-[72px] resize-y text-sm bg-background"
                 />
+                <p className="text-[11px] text-muted-foreground">
+                  Si reformulás el objetivo, partido o cliente, sincronizá para actualizar el mapa
+                  del caso (resumen, objeto, puntos clave) y las sugerencias de IA.
+                </p>
               </div>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="space-y-1">
@@ -1102,14 +1234,17 @@ export function AudienciaCopilot() {
                     <p className="text-xs text-muted-foreground">Representación guardada.</p>
                   )}
                 </div>
-                {representacionDirty && (
-                  <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  {representacionDirty && (
                     <span className="text-xs text-amber-700 dark:text-amber-400">
                       Cambios sin guardar
                     </span>
+                  )}
+                  {representacionDirty && (
                     <Button
                       type="button"
                       size="sm"
+                      variant="outline"
                       disabled={guardandoRepresentacion || !representacion.parte}
                       onClick={() => void guardarRepresentacion()}
                     >
@@ -1118,20 +1253,65 @@ export function AudienciaCopilot() {
                       ) : null}
                       Guardar
                     </Button>
-                  </div>
-                )}
+                  )}
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={representacionDirty ? 'default' : 'secondary'}
+                    disabled={
+                      reanalizandoCaso ||
+                      isLoading ||
+                      !representacion.parte ||
+                      !puedeReanalizarCaso
+                    }
+                    onClick={() => void sincronizarYReanalizarCaso()}
+                    title={
+                      !puedeReanalizarCaso
+                        ? 'Elegí la parte que representás'
+                        : representacionDirty
+                          ? 'Guarda y reanaliza mapa del caso y sugerencias'
+                          : 'Reanaliza mapa del caso y sugerencias con el objetivo actual'
+                    }
+                  >
+                    {reanalizandoCaso ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <RefreshCw className="mr-2 h-4 w-4" />
+                    )}
+                    Sincronizar y reanalizar
+                  </Button>
+                </div>
               </div>
             </div>
           )}
 
           {expedienteAnalysis && (
-            <div className="rounded-lg border bg-muted/30 p-4 space-y-3 text-sm">
+            <div
+              className={cn(
+                'rounded-lg border bg-muted/30 p-4 space-y-3 text-sm relative',
+                reanalizandoCaso && 'opacity-60 pointer-events-none'
+              )}
+            >
+              {reanalizandoCaso && (
+                <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-background/50">
+                  <div className="flex items-center gap-2 text-sm font-medium text-primary">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Reencuadrando mapa del caso...
+                  </div>
+                </div>
+              )}
               <div className="flex flex-wrap items-center gap-2">
                 <p className="font-medium">{expedienteAnalysis.caratula || 'Expediente analizado'}</p>
                 <Badge variant="secondary" className="text-[10px]">
                   {tipoFueroLabel(expedienteAnalysis.tipoFuero ?? 'civil')}
                 </Badge>
               </div>
+              {expedienteAnalysis.ejeEstrategico && (
+                <div className="rounded-md border border-primary/30 bg-primary/5 px-3 py-2">
+                  <span className="text-xs font-semibold text-primary">EJE ESTRATÉGICO</span>
+                  <p className="mt-1 text-sm">{expedienteAnalysis.ejeEstrategico}</p>
+                </div>
+              )}
               <p>{expedienteAnalysis.resumen}</p>
               <div className="grid gap-2 md:grid-cols-2">
                 <div>
@@ -1431,18 +1611,29 @@ export function AudienciaCopilot() {
               <CardContent className="space-y-4">
                 <div>
                   <p className="text-xs font-semibold mb-2 text-primary">Preguntas sugeridas ahora</p>
-                  {!testigoActivo ? (
+                  {!testigoActivo && preguntasATodos.length === 0 ? (
                     <p className="text-sm text-muted-foreground">
-                      Seleccioná un declarante para gestionar preguntas.
+                      Seleccioná un declarante para gestionar preguntas al testigo.
                     </p>
                   ) : (
-                    <EditablePreguntasList
-                      items={analysis.repreguntas}
-                      onChange={(repreguntas) => patchAnalysis({ repreguntas })}
+                    <EditableRepreguntasList
+                      items={repreguntasVisibles}
+                      onChange={(items) => {
+                        const { testigo, todos } = splitRepreguntas(items);
+                        setPreguntasATodos(todos);
+                        if (testigoActivoId) {
+                          patchAnalysis({ repreguntas: testigo });
+                        }
+                      }}
                       itemClassName="border-primary/30 bg-primary/5"
                       addPlaceholder="Agregar pregunta manual..."
                       emptyMessage="Sin preguntas aún. La IA las sugerirá al registrar P/R, o agregá una acá."
                     />
+                  )}
+                  {preguntasATodos.length > 0 && (
+                    <p className="mt-2 text-[10px] text-muted-foreground">
+                      Las preguntas «A todos» se muestran con cualquier declarante.
+                    </p>
                   )}
                 </div>
 

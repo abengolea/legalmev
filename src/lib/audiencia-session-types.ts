@@ -1,6 +1,73 @@
 import type { ExpedienteAnalysisOutput } from '@/ai/flows/audiencia-expediente-analysis';
 import type { AudienciaCopilotOutput } from '@/ai/flows/audiencia-copilot';
 
+export type DestinatarioPregunta = 'testigo' | 'todos';
+
+export type RepreguntaItem = {
+  texto: string;
+  destinatario: DestinatarioPregunta;
+};
+
+export function normalizeRepreguntas(items: unknown): RepreguntaItem[] {
+  if (!Array.isArray(items)) return [];
+  return items.map((item) => {
+    if (typeof item === 'string') {
+      return { texto: item, destinatario: 'testigo' as const };
+    }
+    if (item && typeof item === 'object' && 'texto' in item) {
+      const o = item as { texto?: unknown; destinatario?: unknown };
+      return {
+        texto: String(o.texto ?? ''),
+        destinatario: o.destinatario === 'todos' ? 'todos' : 'testigo',
+      };
+    }
+    return { texto: String(item), destinatario: 'testigo' as const };
+  });
+}
+
+export function splitRepreguntas(items: RepreguntaItem[]): {
+  testigo: RepreguntaItem[];
+  todos: RepreguntaItem[];
+} {
+  const testigo: RepreguntaItem[] = [];
+  const todos: RepreguntaItem[] = [];
+  for (const item of items) {
+    if (item.destinatario === 'todos') {
+      todos.push(item);
+    } else {
+      testigo.push({ ...item, destinatario: 'testigo' });
+    }
+  }
+  return { testigo, todos };
+}
+
+export function mergePreguntasATodos(
+  existing: RepreguntaItem[],
+  incoming: RepreguntaItem[]
+): RepreguntaItem[] {
+  const map = new Map<string, RepreguntaItem>();
+  for (const item of existing) {
+    const key = item.texto.trim().toLowerCase();
+    if (key) map.set(key, item);
+  }
+  for (const item of incoming) {
+    if (item.destinatario !== 'todos') continue;
+    const key = item.texto.trim().toLowerCase();
+    if (key) map.set(key, { texto: item.texto.trim(), destinatario: 'todos' });
+  }
+  return Array.from(map.values());
+}
+
+export function normalizeAudienciaAnalysis<T extends { repreguntas?: unknown }>(
+  analysis: T
+): T & { repreguntas: RepreguntaItem[] } {
+  const { testigo } = splitRepreguntas(normalizeRepreguntas(analysis.repreguntas));
+  return {
+    ...analysis,
+    repreguntas: testigo,
+  };
+}
+
 export type AudienciaIntercambio = {
   id: string;
   pregunta: string;
@@ -47,6 +114,26 @@ export const EMPTY_REPRESENTACION: RepresentacionCaso = {
   notas: '',
 };
 
+export function migrateSessionRepreguntas(session: {
+  preguntasATodos?: RepreguntaItem[];
+  analysisByTestigoId?: Record<string, AudienciaCopilotOutput>;
+}): {
+  preguntasATodos: RepreguntaItem[];
+  analysisByTestigoId: Record<string, AudienciaCopilotOutput>;
+} {
+  let preguntasATodos = normalizeRepreguntas(session.preguntasATodos ?? []);
+  const analysisByTestigoId: Record<string, AudienciaCopilotOutput> = {};
+
+  for (const [id, raw] of Object.entries(session.analysisByTestigoId ?? {})) {
+    const analysis = normalizeAudienciaAnalysis(raw);
+    const split = splitRepreguntas(normalizeRepreguntas(raw.repreguntas));
+    preguntasATodos = mergePreguntasATodos(preguntasATodos, split.todos);
+    analysisByTestigoId[id] = { ...analysis, repreguntas: split.testigo };
+  }
+
+  return { preguntasATodos, analysisByTestigoId };
+}
+
 export type AudienciaSessionSummary = {
   id: string;
   titulo: string;
@@ -67,6 +154,7 @@ export type AudienciaSessionData = {
   testigos: AudienciaTestigo[];
   testigoActivoId: string | null;
   analysisByTestigoId: Record<string, AudienciaCopilotOutput>;
+  preguntasATodos: RepreguntaItem[];
   representacion: RepresentacionCaso;
   alegatoGlobal?: string;
   alegatoGlobalMeta?: {
@@ -83,6 +171,7 @@ export type AudienciaSessionPatch = Partial<{
   testigos: AudienciaTestigo[];
   testigoActivoId: string | null;
   analysisByTestigoId: Record<string, AudienciaCopilotOutput>;
+  preguntasATodos: RepreguntaItem[];
   representacion: RepresentacionCaso;
   alegatoGlobal?: string;
   alegatoGlobalMeta?: AudienciaSessionData['alegatoGlobalMeta'];

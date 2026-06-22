@@ -3,6 +3,14 @@ import { z } from 'genkit';
 
 export const ExpedienteAnalysisInputSchema = z.object({
   expedienteTexto: z.string().describe('Texto completo del expediente judicial exportado.'),
+  representacionContexto: z
+    .string()
+    .optional()
+    .describe('Parte representada y objetivo estratégico del abogado, si se reanaliza el caso.'),
+  testimoniosAudienciaContexto: z
+    .string()
+    .optional()
+    .describe('Resumen de lo declarado en audiencia hasta el momento, si existe.'),
 });
 
 export const DeclaracionPreviaSchema = z.object({
@@ -39,6 +47,12 @@ export const ExpedienteAnalysisOutputSchema = z.object({
     .string()
     .describe('Civil: teoría del demandado. Penal: teoría de la defensa.'),
   puntosControvertidos: z.array(z.string()),
+  ejeEstrategico: z
+    .string()
+    .optional()
+    .describe(
+      'Cuando hay representación del abogado: cómo entendiste su objetivo y qué eje prioriza el caso desde su posición.'
+    ),
   testigosIdentificados: z.array(
     z.object({
       nombre: z.string(),
@@ -80,6 +94,25 @@ Para cada testigo, indicá parteProcesal según el fuero:
 - desconocido: no se puede determinar.
 
 En causas PENALES: completá actor con Fiscalía/MP y demandado con imputado(s). teoríaActor = línea fiscal; teoríaDemandado = línea defensa.
+
+{{#if representacionContexto}}
+**REANÁLISIS ESTRATÉGICO (prioritario):**
+El abogado ya indicó a quién representa y su objetivo. NO repitas un resumen neutral: reencuadrá TODO el mapa del caso desde ESA posición.
+
+- resumen: enfocá en lo que importa para la parte que representamos y el objetivo estratégico.
+- objetoLitigio: reformulá destacando la pretensión o defensa relevante para nuestro cliente.
+- puntosControvertidos: ordená y redactá priorizando los ejes útiles para nuestro objetivo (máx. 5).
+- ejeEstrategico (OBLIGATORIO): 2-4 oraciones confirmando cómo entendiste el objetivo del abogado y cuál es el eje central del litigio desde su posición.
+- teoríaActor / teoríaDemandado (o fiscalía/defensa en penal): enfatizá la línea de nuestra parte.
+
+**Representación y objetivo del abogado:**
+{{{representacionContexto}}}
+
+{{#if testimoniosAudienciaContexto}}
+**Lo ya declarado en esta audiencia (incorporá al reencuadre):**
+{{{testimoniosAudienciaContexto}}}
+{{/if}}
+{{/if}}
 
 **Expediente:**
 {{{expedienteTexto}}}

@@ -26,10 +26,19 @@ const AlertaSchema = z.object({
   detalle: z.string().optional(),
 });
 
+const RepreguntaSchema = z.object({
+  texto: z.string().describe('Pregunta literal lista para leer en audiencia.'),
+  destinatario: z
+    .enum(['testigo', 'todos'])
+    .describe(
+      'testigo = dirigida solo al declarante activo; todos = pregunta general a quienes están en audiencia.'
+    ),
+});
+
 export const AudienciaCopilotOutputSchema = z.object({
   alertas: z.array(AlertaSchema),
-  repreguntas: z.array(z.string()).describe(
-    'Preguntas concretas sugeridas para formular ahora al declarante.'
+  repreguntas: z.array(RepreguntaSchema).describe(
+    'Preguntas concretas sugeridas para formular ahora, con destinatario.'
   ),
   preguntasIneludibles: z.array(z.string()),
   contradicciones: z.array(z.string()),
@@ -71,7 +80,7 @@ FUNCIONES:
 1. Detectar contradicciones entre las respuestas actuales y: expediente, demanda, contestación, documental, pericias, testimonio previo de este declarante, o respuestas anteriores en esta audiencia.
 2. Detectar evasivas, omisiones y ambigüedades en la última respuesta.
 3. Identificar admisiones relevantes.
-4. Proponer repreguntas concretas, breves y litigables (preguntas literales listas para leer en audiencia).
+4. Proponer repreguntas concretas, breves y litigables (preguntas literales listas para leer en audiencia). Para cada una indicá destinatario: "testigo" si va solo al declarante activo, "todos" si es pregunta general a quienes están en audiencia (partes, letrados, juez).
 5. Listar preguntas ineludibles antes de cerrar esta declaración.
 6. Alertas: ROJA (contradicción/admisión), AMARILLA (evasiva/incompleta), AZUL (tema no explorado).
 7. Sacar conclusiones provisionales sobre lo declarado hasta el momento (2-4 bullets concretos).

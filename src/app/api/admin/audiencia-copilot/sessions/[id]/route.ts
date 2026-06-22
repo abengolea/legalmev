@@ -43,6 +43,7 @@ export async function GET(
       testigoActivoId: (result.data!.testigoActivoId as string | null) ?? null,
       analysisByTestigoId:
         (result.data!.analysisByTestigoId as AudienciaSessionData['analysisByTestigoId']) || {},
+      preguntasATodos: (result.data!.preguntasATodos as AudienciaSessionData['preguntasATodos']) || [],
       representacion: (result.data!.representacion as RepresentacionCaso) ?? { ...EMPTY_REPRESENTACION },
       alegatoGlobal: result.data!.alegatoGlobal as string | undefined,
       alegatoGlobalMeta: result.data!.alegatoGlobalMeta as AudienciaSessionData['alegatoGlobalMeta'],
@@ -82,6 +83,7 @@ export async function PATCH(
     if (body.testigos !== undefined) update.testigos = body.testigos;
     if (body.testigoActivoId !== undefined) update.testigoActivoId = body.testigoActivoId;
     if (body.analysisByTestigoId !== undefined) update.analysisByTestigoId = body.analysisByTestigoId;
+    if (body.preguntasATodos !== undefined) update.preguntasATodos = body.preguntasATodos;
     if (body.representacion !== undefined) update.representacion = body.representacion;
     if (body.alegatoGlobal !== undefined) update.alegatoGlobal = body.alegatoGlobal;
     if (body.alegatoGlobalMeta !== undefined) update.alegatoGlobalMeta = body.alegatoGlobalMeta;

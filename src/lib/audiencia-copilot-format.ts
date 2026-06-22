@@ -107,6 +107,7 @@ export function formatExpedienteContexto(ctx: ExpedienteAnalysisOutput): string 
         ? `DEMANDADO: ${ctx.demandado}`
         : '',
     `OBJETO: ${ctx.objetoLitigio}`,
+    ctx.ejeEstrategico ? `EJE ESTRATÉGICO (según representación): ${ctx.ejeEstrategico}` : '',
     `HECHOS CENTRALES:\n${ctx.hechosCentrales.map((h) => `- ${h}`).join('\n')}`,
     `PRUEBA DOCUMENTAL:\n${ctx.pruebaDocumentalClave.map((p) => `- ${p}`).join('\n')}`,
     `PERICIAS:\n${ctx.periciasResumen.map((p) => `- ${p}`).join('\n')}`,
