@@ -3,6 +3,7 @@ import { getAdminDb } from '@/lib/firebase-admin';
 import { authorizeAudienciaCopilot } from '@/lib/audiencia-copilot-api-auth';
 import { requireGoogleGenAiApiKey } from '@/lib/google-ai-key';
 import { GEMINI_MODEL_ID } from '@/lib/gemini-model';
+import { normalizeTokenUsage, sumTokenUsage } from '@/lib/ai-token-usage';
 import { analyzeExpediente, type ExpedienteAnalysisOutput } from '@/ai/flows/audiencia-expediente-analysis';
 import { analyzeAudiencia, type AudienciaCopilotOutput } from '@/ai/flows/audiencia-copilot';
 import type { AudienciaTestigo, RepresentacionCaso } from '@/lib/audiencia-session-types';
@@ -98,7 +99,7 @@ export async function POST(
           )
         : undefined;
 
-    const expedienteAnalysis = await analyzeExpediente({
+    const expedienteResult = await analyzeExpediente({
       expedienteTexto: textoParaAnalisis,
       representacionContexto,
       testimoniosAudienciaContexto:
@@ -106,6 +107,11 @@ export async function POST(
           ? testimoniosAudienciaContexto
           : undefined,
     });
+    const expedienteAnalysis = expedienteResult.output;
+    let tokenUsage = sumTokenUsage(
+      normalizeTokenUsage(data.tokenUsage),
+      expedienteResult.usage
+    );
 
     const expedienteContexto = formatExpedienteContexto(expedienteAnalysis);
     const repCtx = formatRepresentacionContexto(representacion, expedienteAnalysis);
@@ -119,7 +125,7 @@ export async function POST(
     );
 
     for (const testigo of testigosAReanalizar) {
-      const raw = await analyzeAudiencia({
+      const rawResult = await analyzeAudiencia({
         expedienteContexto,
         representacionContexto: repCtx,
         declaranteNombre: testigo.nombre,
@@ -130,6 +136,8 @@ export async function POST(
         testimonioPrevio: testigo.testimonioPrevio || '(Sin testimonio previo cargado)',
         intercambiosTexto: formatIntercambios(testigo.intercambios),
       });
+      tokenUsage = sumTokenUsage(tokenUsage, rawResult.usage);
+      const raw = rawResult.output;
       const rawSplit = splitRepreguntas(normalizeRepreguntas(raw.repreguntas));
       preguntasATodos = mergePreguntasATodos(preguntasATodos, rawSplit.todos);
       nextAnalysisMap[testigo.id] = normalizeAudienciaAnalysis({
@@ -144,6 +152,11 @@ export async function POST(
     });
 
     const now = new Date().toISOString();
+    const tokenUsageMeta = {
+      ...tokenUsage,
+      model: GEMINI_MODEL_ID,
+      lastUpdatedAt: now,
+    };
 
     await ref.update({
       representacion,
@@ -152,6 +165,7 @@ export async function POST(
       preguntasATodos: migrated.preguntasATodos,
       alegatoGlobal: '',
       alegatoGlobalMeta: null,
+      tokenUsage: tokenUsageMeta,
       updatedAt: now,
     });
 
@@ -163,7 +177,8 @@ export async function POST(
       preguntasATodos: migrated.preguntasATodos,
       testigosReanalizados: testigosAReanalizar.length,
       representacion,
-      meta: { provider: 'Google Gemini', model: GEMINI_MODEL_ID },
+      meta: { provider: 'Google Gemini', model: GEMINI_MODEL_ID, usage: tokenUsage },
+      tokenUsage: tokenUsageMeta,
     });
   } catch (err) {
     console.error('[audiencia-copilot/sessions/reanalizar-caso]', err);

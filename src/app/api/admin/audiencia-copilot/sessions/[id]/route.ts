@@ -47,6 +47,7 @@ export async function GET(
       representacion: (result.data!.representacion as RepresentacionCaso) ?? { ...EMPTY_REPRESENTACION },
       alegatoGlobal: result.data!.alegatoGlobal as string | undefined,
       alegatoGlobalMeta: result.data!.alegatoGlobalMeta as AudienciaSessionData['alegatoGlobalMeta'],
+      tokenUsage: result.data!.tokenUsage as AudienciaSessionData['tokenUsage'],
       createdAt: (result.data!.createdAt as string) || '',
       updatedAt: (result.data!.updatedAt as string) || '',
     };
@@ -87,6 +88,7 @@ export async function PATCH(
     if (body.representacion !== undefined) update.representacion = body.representacion;
     if (body.alegatoGlobal !== undefined) update.alegatoGlobal = body.alegatoGlobal;
     if (body.alegatoGlobalMeta !== undefined) update.alegatoGlobalMeta = body.alegatoGlobalMeta;
+    if (body.tokenUsage !== undefined) update.tokenUsage = body.tokenUsage;
 
     await result.ref!.update(update);
 

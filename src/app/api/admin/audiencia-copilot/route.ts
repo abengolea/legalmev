@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { authorizeAudienciaCopilot } from '@/lib/audiencia-copilot-api-auth';
 import { getGoogleGenAiApiKey, requireGoogleGenAiApiKey } from '@/lib/google-ai-key';
+import { getAdminDb } from '@/lib/firebase-admin';
 import {
   analyzeAudiencia,
   AudienciaCopilotInputSchema,
 } from '@/ai/flows/audiencia-copilot';
-
 import { GEMINI_MODEL_ID } from '@/lib/gemini-model';
+import { normalizeTokenUsage, sumTokenUsage } from '@/lib/ai-token-usage';
 
 export async function GET(request: NextRequest) {
   try {
@@ -39,6 +40,10 @@ export async function POST(request: NextRequest) {
     requireGoogleGenAiApiKey();
 
     const body = await request.json();
+    const sessionId =
+      typeof body.sessionId === 'string' && body.sessionId.trim()
+        ? body.sessionId.trim()
+        : undefined;
     const parsed = AudienciaCopilotInputSchema.safeParse(body);
     if (!parsed.success) {
       return NextResponse.json(
@@ -47,12 +52,33 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const result = await analyzeAudiencia(parsed.data);
+    const { output: result, usage } = await analyzeAudiencia(parsed.data);
+    const now = new Date().toISOString();
+    let tokenUsage = {
+      ...usage,
+      model: GEMINI_MODEL_ID,
+      lastUpdatedAt: now,
+    };
+
+    if (sessionId) {
+      const adminDb = getAdminDb();
+      const ref = adminDb.collection('audiencia_sessions').doc(sessionId);
+      const snap = await ref.get();
+      if (snap.exists && snap.data()?.userId === auth.uid) {
+        tokenUsage = {
+          ...sumTokenUsage(normalizeTokenUsage(snap.data()?.tokenUsage), usage),
+          model: GEMINI_MODEL_ID,
+          lastUpdatedAt: now,
+        };
+        await ref.update({ tokenUsage, updatedAt: now });
+      }
+    }
 
     return NextResponse.json({
       ok: true,
       analysis: result,
-      meta: { provider: 'Google Gemini', model: GEMINI_MODEL_ID },
+      meta: { provider: 'Google Gemini', model: GEMINI_MODEL_ID, usage },
+      tokenUsage,
     });
   } catch (err) {
     console.error('[audiencia-copilot]', err);

@@ -26,6 +26,12 @@ import {
   tipoFueroLabel,
 } from '@/lib/audiencia-copilot-format';
 import { GEMINI_MODEL_ID } from '@/lib/gemini-model';
+import {
+  EMPTY_TOKEN_USAGE,
+  formatTokenCount,
+  normalizeTokenUsage,
+  type AiTokenUsageMeta,
+} from '@/lib/ai-token-usage';
 import { EditablePreguntasList } from '@/components/admin/EditablePreguntasList';
 import { EditableRepreguntasList } from '@/components/admin/EditableRepreguntasList';
 import {
@@ -53,6 +59,7 @@ import {
 } from '@/components/ui/select';
 import {
   Cloud,
+  Coins,
   FileText,
   Gavel,
   Lightbulb,
@@ -191,6 +198,7 @@ export function AudienciaCopilot() {
   >();
   const [generandoAlegatos, setGenerandoAlegatos] = useState(false);
   const [reanalizandoCaso, setReanalizandoCaso] = useState(false);
+  const [tokenUsage, setTokenUsage] = useState<AiTokenUsageMeta>({ ...EMPTY_TOKEN_USAGE });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const skipSaveRef = useRef(true);
   const sessionsLoadedRef = useRef(false);
@@ -214,8 +222,20 @@ export function AudienciaCopilot() {
     testigos.length > 0 ? Math.round((testimoniosCerrados / testigos.length) * 100) : 0;
   const puedeReanalizarCaso = !!expedienteAnalysis && !!representacion.parte && !!sessionId;
 
+  const aplicarTokenUsage = useCallback((next?: AiTokenUsageMeta | null) => {
+    if (!next) return;
+    setTokenUsage({
+      ...normalizeTokenUsage(next),
+      model: next.model ?? aiStatus?.model ?? GEMINI_MODEL_ID,
+      lastUpdatedAt: next.lastUpdatedAt,
+    });
+  }, [aiStatus?.model]);
+
   const fetchAnalisisParaTestigo = useCallback(
-    async (testigo: Testigo, repCtx: string): Promise<AudienciaCopilotOutput> => {
+    async (
+      testigo: Testigo,
+      repCtx: string
+    ): Promise<{ analysis: AudienciaCopilotOutput; todos: RepreguntaItem[] }> => {
       const user = auth.currentUser;
       if (!user) throw new Error('Sesión requerida');
       const token = await user.getIdToken();
@@ -226,6 +246,7 @@ export function AudienciaCopilot() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          sessionId,
           expedienteContexto,
           representacionContexto: repCtx,
           declaranteNombre: testigo.nombre,
@@ -240,9 +261,11 @@ export function AudienciaCopilot() {
       const json = await safeResJson<{
         ok: boolean;
         analysis?: AudienciaCopilotOutput;
+        tokenUsage?: AiTokenUsageMeta;
         error?: string;
       }>(res);
       if (!json.ok || !json.analysis) throw new Error(json.error || 'Error al analizar');
+      if (json.tokenUsage) aplicarTokenUsage(json.tokenUsage);
       const rawSplit = splitRepreguntas(normalizeRepreguntas(json.analysis.repreguntas));
       return {
         analysis: normalizeAudienciaAnalysis({
@@ -252,7 +275,7 @@ export function AudienciaCopilot() {
         todos: rawSplit.todos,
       };
     },
-    [expedienteContexto]
+    [expedienteContexto, sessionId, aplicarTokenUsage]
   );
 
   const sincronizarYReanalizarCaso = useCallback(async () => {
@@ -292,12 +315,15 @@ export function AudienciaCopilot() {
         preguntasATodos?: RepreguntaItem[];
         testigosReanalizados?: number;
         representacion?: RepresentacionCaso;
+        tokenUsage?: AiTokenUsageMeta;
         error?: string;
       }>(res);
 
       if (!json.ok || !json.expedienteAnalysis) {
         throw new Error(json.error || 'No se pudo reanalizar el caso');
       }
+
+      if (json.tokenUsage) aplicarTokenUsage(json.tokenUsage);
 
       setExpedienteAnalysis(json.expedienteAnalysis);
       if (json.analysisByTestigoId) {
@@ -337,7 +363,7 @@ export function AudienciaCopilot() {
     } finally {
       setReanalizandoCaso(false);
     }
-  }, [sessionId, expedienteAnalysis, representacion, testigoActivoId, esPenal, toast]);
+  }, [sessionId, expedienteAnalysis, representacion, testigoActivoId, esPenal, toast, aplicarTokenUsage]);
 
   const resetParaNuevaAudiencia = useCallback(() => {
     skipSaveRef.current = true;
@@ -352,6 +378,7 @@ export function AudienciaCopilot() {
     setRepresentacionGuardada({ ...EMPTY_REPRESENTACION });
     setAlegatoGlobal('');
     setAlegatoGlobalMeta(undefined);
+    setTokenUsage({ ...EMPTY_TOKEN_USAGE });
     setNuevaPregunta('');
     setNuevaRespuesta('');
     setNuevoNombre('');
@@ -382,6 +409,15 @@ export function AudienciaCopilot() {
     setRepresentacionGuardada(rep);
     setAlegatoGlobal(session.alegatoGlobal ?? '');
     setAlegatoGlobalMeta(session.alegatoGlobalMeta);
+    setTokenUsage(
+      session.tokenUsage
+        ? {
+            ...normalizeTokenUsage(session.tokenUsage),
+            model: session.tokenUsage.model ?? GEMINI_MODEL_ID,
+            lastUpdatedAt: session.tokenUsage.lastUpdatedAt,
+          }
+        : { ...EMPTY_TOKEN_USAGE }
+    );
     const activeId = session.testigoActivoId;
     setAnalysis(
       activeId && migrated.analysisByTestigoId[activeId]
@@ -457,6 +493,7 @@ export function AudienciaCopilot() {
             testigos?: Testigo[];
             testigoActivoId?: string | null;
             titulo?: string;
+            tokenUsage?: AiTokenUsageMeta;
             error?: string;
           }>(analyzeRes);
           stopLoadTimer();
@@ -470,6 +507,7 @@ export function AudienciaCopilot() {
             testigoActivoId: analyzeJson.testigoActivoId ?? null,
             analysisStatus: 'ready',
             titulo: analyzeJson.titulo ?? json.session.titulo,
+            tokenUsage: analyzeJson.tokenUsage ?? json.session.tokenUsage,
           });
         } else {
           applySession(json.session);
@@ -508,6 +546,7 @@ export function AudienciaCopilot() {
           preguntasATodos,
           alegatoGlobal,
           alegatoGlobalMeta,
+          tokenUsage,
         }),
       });
       const json = await safeResJson<{ ok: boolean; error?: string }>(res);
@@ -517,7 +556,11 @@ export function AudienciaCopilot() {
     } catch {
       setSaveStatus('error');
     }
-  }, [sessionId, testigos, testigoActivoId, analysisByTestigoId, preguntasATodos, alegatoGlobal, alegatoGlobalMeta, fetchSessions]);
+  }, [sessionId, testigos, testigoActivoId, analysisByTestigoId, preguntasATodos, alegatoGlobal, alegatoGlobalMeta, tokenUsage, fetchSessions]);
+
+  const actualizarParteRepresentada = (parte: ParteRepresentada) => {
+    setRepresentacion((prev) => ({ ...prev, parte }));
+  };
 
   const guardarRepresentacion = useCallback(async () => {
     if (!sessionId) return;
@@ -611,7 +654,7 @@ export function AudienciaCopilot() {
       void saveSession();
     }, 1200);
     return () => clearTimeout(timer);
-  }, [sessionId, testigos, testigoActivoId, analysisByTestigoId, preguntasATodos, alegatoGlobal, alegatoGlobalMeta, saveSession]);
+  }, [sessionId, testigos, testigoActivoId, analysisByTestigoId, preguntasATodos, alegatoGlobal, alegatoGlobalMeta, tokenUsage, saveSession]);
 
   const handleLoadPdf = async (file: File) => {
     setIsLoading(true);
@@ -633,12 +676,15 @@ export function AudienciaCopilot() {
         sessionId?: string;
         titulo?: string;
         textoLength?: number;
+        tokenUsage?: AiTokenUsageMeta;
         error?: string;
       }>(extractRes);
 
       if (!extractJson.ok || !extractJson.sessionId) {
         throw new Error(extractJson.error || `Error al leer PDF (${extractRes.status})`);
       }
+
+      if (extractJson.tokenUsage) aplicarTokenUsage(extractJson.tokenUsage);
 
       startLoadTimer(file.name, 1, LOAD_STEPS[1].label);
       setLoadProgress((prev) =>
@@ -659,12 +705,15 @@ export function AudienciaCopilot() {
         testigos?: Testigo[];
         testigoActivoId?: string | null;
         titulo?: string;
+        tokenUsage?: AiTokenUsageMeta;
         error?: string;
       }>(analyzeRes);
 
       if (!analyzeJson.ok || !analyzeJson.analysis || !analyzeJson.sessionId) {
         throw new Error(analyzeJson.error || `Error al analizar (${analyzeRes.status})`);
       }
+
+      if (analyzeJson.tokenUsage) aplicarTokenUsage(analyzeJson.tokenUsage);
 
       startLoadTimer(file.name, 2, LOAD_STEPS[2].label);
 
@@ -930,11 +979,13 @@ export function AudienciaCopilot() {
         ok: boolean;
         alegatoGlobal?: string;
         alegatoGlobalMeta?: AudienciaSessionData['alegatoGlobalMeta'];
+        tokenUsage?: AiTokenUsageMeta;
         error?: string;
       }>(res);
       if (!json.ok || !json.alegatoGlobal) {
         throw new Error(json.error || 'No se pudieron generar los alegatos');
       }
+      if (json.tokenUsage) aplicarTokenUsage(json.tokenUsage);
       setAlegatoGlobal(json.alegatoGlobal);
       setAlegatoGlobalMeta(json.alegatoGlobalMeta);
       toast({
@@ -957,6 +1008,7 @@ export function AudienciaCopilot() {
     testigos.length,
     testimoniosCerrados,
     toast,
+    aplicarTokenUsage,
   ]);
 
   return (
@@ -990,6 +1042,16 @@ export function AudienciaCopilot() {
                   {aiStatus.ready ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
                   {aiStatus.ready ? `Gemini · ${aiStatus.model}` : 'Falta API key'}
                 </Badge>
+                {aiStatus.ready && tokenUsage.totalTokens > 0 && (
+                  <Badge
+                    variant="outline"
+                    className="gap-1"
+                    title={`Entrada: ${tokenUsage.inputTokens.toLocaleString('es-AR')} · Salida: ${tokenUsage.outputTokens.toLocaleString('es-AR')}`}
+                  >
+                    <Coins className="h-3 w-3" />
+                    {formatTokenCount(tokenUsage.totalTokens)} tokens
+                  </Badge>
+                )}
                 {sessionId && (
                   <Badge variant="outline" className="gap-1">
                     <Cloud className="h-3 w-3" />

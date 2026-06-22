@@ -4,6 +4,7 @@ import { getAdminDb } from '@/lib/firebase-admin';
 import { authorizeAudienciaCopilot } from '@/lib/audiencia-copilot-api-auth';
 import { requireGoogleGenAiApiKey } from '@/lib/google-ai-key';
 import { GEMINI_MODEL_ID } from '@/lib/gemini-model';
+import { normalizeTokenUsage, sumTokenUsage } from '@/lib/ai-token-usage';
 import { analyzeExpediente } from '@/ai/flows/audiencia-expediente-analysis';
 import type { AudienciaTestigo, RepresentacionCaso } from '@/lib/audiencia-session-types';
 import { EMPTY_REPRESENTACION } from '@/lib/audiencia-session-types';
@@ -52,9 +53,15 @@ export async function POST(
         ? `${texto.slice(0, MAX_TEXTO_ANALISIS)}\n\n[... expediente truncado por tamaño ...]`
         : texto;
 
-    const analysis = await analyzeExpediente({ expedienteTexto: textoParaAnalisis });
+    const { output: analysis, usage } = await analyzeExpediente({ expedienteTexto: textoParaAnalisis });
 
     const representacion = (data.representacion as RepresentacionCaso) ?? EMPTY_REPRESENTACION;
+    const now = new Date().toISOString();
+    const tokenUsage = {
+      ...sumTokenUsage(normalizeTokenUsage(data.tokenUsage), usage),
+      model: GEMINI_MODEL_ID,
+      lastUpdatedAt: now,
+    };
 
     const testigos: AudienciaTestigo[] = analysis.testigosIdentificados.map((t) => ({
       id: randomUUID(),
@@ -81,7 +88,6 @@ export async function POST(
       'Audiencia';
 
     const testigoActivoId = testigos[0]?.id ?? null;
-    const now = new Date().toISOString();
 
     await ref.update({
       titulo,
@@ -89,6 +95,7 @@ export async function POST(
       analysisStatus: 'ready',
       testigos,
       testigoActivoId,
+      tokenUsage,
       updatedAt: now,
     });
 
@@ -100,7 +107,8 @@ export async function POST(
       testigoActivoId,
       titulo,
       step: 'analyzed',
-      meta: { provider: 'Google Gemini', model: GEMINI_MODEL_ID },
+      meta: { provider: 'Google Gemini', model: GEMINI_MODEL_ID, usage },
+      tokenUsage,
     });
   } catch (err) {
     console.error('[audiencia-copilot/sessions/analyze]', err);

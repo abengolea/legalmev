@@ -1,5 +1,6 @@
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
+import { normalizeTokenUsage, type AiFlowResult } from '@/lib/ai-token-usage';
 
 export const ExpedienteAnalysisInputSchema = z.object({
   expedienteTexto: z.string().describe('Texto completo del expediente judicial exportado.'),
@@ -71,8 +72,12 @@ export type ExpedienteAnalysisOutput = z.infer<typeof ExpedienteAnalysisOutputSc
 
 export async function analyzeExpediente(
   input: ExpedienteAnalysisInput
-): Promise<ExpedienteAnalysisOutput> {
-  return expedienteAnalysisFlow(input);
+): Promise<AiFlowResult<ExpedienteAnalysisOutput>> {
+  const response = await expedienteAnalysisPrompt(input);
+  return {
+    output: response.output!,
+    usage: normalizeTokenUsage(response.usage),
+  };
 }
 
 const expedienteAnalysisPrompt = ai.definePrompt({

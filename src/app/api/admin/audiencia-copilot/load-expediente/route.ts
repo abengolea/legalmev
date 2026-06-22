@@ -5,6 +5,11 @@ import { getAdminDb } from '@/lib/firebase-admin';
 import { authorizeAudienciaCopilot } from '@/lib/audiencia-copilot-api-auth';
 import { requireGoogleGenAiApiKey } from '@/lib/google-ai-key';
 import { GEMINI_MODEL_ID } from '@/lib/gemini-model';
+import {
+  normalizeGeminiSdkUsage,
+  normalizeTokenUsage,
+  sumTokenUsage,
+} from '@/lib/ai-token-usage';
 import type { AudienciaTestigo } from '@/lib/audiencia-session-types';
 import { EMPTY_REPRESENTACION } from '@/lib/audiencia-session-types';
 
@@ -69,6 +74,13 @@ Solo el texto extraído, sin comentarios ni resúmenes.`,
       );
     }
 
+    const extractUsage = normalizeGeminiSdkUsage(extractResult.response.usageMetadata);
+    const tokenUsage = {
+      ...extractUsage,
+      model: GEMINI_MODEL_ID,
+      lastUpdatedAt: new Date().toISOString(),
+    };
+
     const now = new Date().toISOString();
     const titulo = upload.name.replace(/\.pdf$/i, '') || 'Audiencia';
 
@@ -86,6 +98,7 @@ Solo el texto extraído, sin comentarios ni resúmenes.`,
       analysisByTestigoId: {},
       preguntasATodos: [],
       representacion: { ...EMPTY_REPRESENTACION },
+      tokenUsage,
       createdAt: now,
       updatedAt: now,
     });
@@ -97,7 +110,13 @@ Solo el texto extraído, sin comentarios ni resúmenes.`,
       textoLength: texto.length,
       pdfSizeKb: Math.round(upload.buffer.length / 1024),
       step: 'extracted',
-      meta: { provider: 'Google Gemini', model: GEMINI_MODEL_ID, fileName: upload.name },
+      meta: {
+        provider: 'Google Gemini',
+        model: GEMINI_MODEL_ID,
+        fileName: upload.name,
+        usage: extractUsage,
+      },
+      tokenUsage,
     });
   } catch (err) {
     console.error('[audiencia-copilot/load-expediente]', err);

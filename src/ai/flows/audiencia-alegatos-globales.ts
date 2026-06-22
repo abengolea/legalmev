@@ -1,5 +1,6 @@
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
+import { normalizeTokenUsage, type AiFlowResult } from '@/lib/ai-token-usage';
 
 export const AlegatosGlobalesInputSchema = z.object({
   expedienteContexto: z.string(),
@@ -25,8 +26,12 @@ export type AlegatosGlobalesOutput = z.infer<typeof AlegatosGlobalesOutputSchema
 
 export async function generarAlegatosGlobales(
   input: AlegatosGlobalesInput
-): Promise<AlegatosGlobalesOutput> {
-  return alegatosGlobalesFlow(input);
+): Promise<AiFlowResult<AlegatosGlobalesOutput>> {
+  const response = await alegatosGlobalesPrompt(input);
+  return {
+    output: response.output!,
+    usage: normalizeTokenUsage(response.usage),
+  };
 }
 
 const alegatosGlobalesPrompt = ai.definePrompt({

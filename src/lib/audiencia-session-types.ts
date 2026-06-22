@@ -1,5 +1,6 @@
 import type { ExpedienteAnalysisOutput } from '@/ai/flows/audiencia-expediente-analysis';
 import type { AudienciaCopilotOutput } from '@/ai/flows/audiencia-copilot';
+import type { AiTokenUsageMeta } from '@/lib/ai-token-usage';
 
 export type DestinatarioPregunta = 'testigo' | 'todos';
 
@@ -162,6 +163,7 @@ export type AudienciaSessionData = {
     debilidadesContraria?: string[];
     generadoAt?: string;
   };
+  tokenUsage?: AiTokenUsageMeta;
   createdAt: string;
   updatedAt: string;
 };
@@ -175,4 +177,5 @@ export type AudienciaSessionPatch = Partial<{
   representacion: RepresentacionCaso;
   alegatoGlobal?: string;
   alegatoGlobalMeta?: AudienciaSessionData['alegatoGlobalMeta'];
+  tokenUsage?: AiTokenUsageMeta;
 }>;

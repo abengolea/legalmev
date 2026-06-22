@@ -3,6 +3,7 @@ import { getAdminDb } from '@/lib/firebase-admin';
 import { authorizeAudienciaCopilot } from '@/lib/audiencia-copilot-api-auth';
 import { requireGoogleGenAiApiKey } from '@/lib/google-ai-key';
 import { GEMINI_MODEL_ID } from '@/lib/gemini-model';
+import { normalizeTokenUsage, sumTokenUsage } from '@/lib/ai-token-usage';
 import { generarAlegatosGlobales } from '@/ai/flows/audiencia-alegatos-globales';
 import type { ExpedienteAnalysisOutput } from '@/ai/flows/audiencia-expediente-analysis';
 import type { AudienciaCopilotOutput } from '@/ai/flows/audiencia-copilot';
@@ -82,7 +83,7 @@ export async function POST(
     const analysisByTestigoId =
       (data.analysisByTestigoId as Record<string, AudienciaCopilotOutput>) || {};
 
-    const result = await generarAlegatosGlobales({
+    const alegatosResult = await generarAlegatosGlobales({
       expedienteContexto: formatExpedienteContexto(expedienteAnalysis),
       representacionContexto: formatRepresentacionContexto(representacion, expedienteAnalysis),
       testimoniosAudienciaTexto: formatTestimoniosAudienciaContexto(
@@ -93,8 +94,13 @@ export async function POST(
       ),
       caratula: expedienteAnalysis.caratula,
     });
-
+    const result = alegatosResult.output;
     const now = new Date().toISOString();
+    const tokenUsage = {
+      ...sumTokenUsage(normalizeTokenUsage(data.tokenUsage), alegatosResult.usage),
+      model: GEMINI_MODEL_ID,
+      lastUpdatedAt: now,
+    };
     const alegatoGlobalMeta = {
       puntosFuertes: result.puntosFuertes,
       debilidadesContraria: result.debilidadesContraria,
@@ -104,6 +110,7 @@ export async function POST(
     await ref.update({
       alegatoGlobal: result.alegatoGlobal,
       alegatoGlobalMeta,
+      tokenUsage,
       updatedAt: now,
     });
 
@@ -111,7 +118,8 @@ export async function POST(
       ok: true,
       alegatoGlobal: result.alegatoGlobal,
       alegatoGlobalMeta,
-      meta: { provider: 'Google Gemini', model: GEMINI_MODEL_ID },
+      meta: { provider: 'Google Gemini', model: GEMINI_MODEL_ID, usage: alegatosResult.usage },
+      tokenUsage,
     });
   } catch (err) {
     console.error('[audiencia-copilot/sessions/alegatos-globales]', err);

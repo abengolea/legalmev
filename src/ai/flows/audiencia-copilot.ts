@@ -1,5 +1,6 @@
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
+import { normalizeTokenUsage, type AiFlowResult } from '@/lib/ai-token-usage';
 
 export const AudienciaCopilotInputSchema = z.object({
   expedienteContexto: z.string().describe(
@@ -58,8 +59,12 @@ export type AudienciaCopilotOutput = z.infer<typeof AudienciaCopilotOutputSchema
 
 export async function analyzeAudiencia(
   input: AudienciaCopilotInput
-): Promise<AudienciaCopilotOutput> {
-  return audienciaCopilotFlow(input);
+): Promise<AiFlowResult<AudienciaCopilotOutput>> {
+  const response = await audienciaCopilotPrompt(input);
+  return {
+    output: response.output!,
+    usage: normalizeTokenUsage(response.usage),
+  };
 }
 
 const audienciaCopilotPrompt = ai.definePrompt({
