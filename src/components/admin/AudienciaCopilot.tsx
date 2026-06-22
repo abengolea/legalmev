@@ -181,6 +181,11 @@ export function AudienciaCopilot() {
   const [nuevoNombre, setNuevoNombre] = useState('');
   const [nuevoRol, setNuevoRol] = useState('');
   const [nuevaBandeja, setNuevaBandeja] = useState<BandejaDeclarante>('nuestra');
+  const [alegatoGlobal, setAlegatoGlobal] = useState('');
+  const [alegatoGlobalMeta, setAlegatoGlobalMeta] = useState<
+    AudienciaSessionData['alegatoGlobalMeta']
+  >();
+  const [generandoAlegatos, setGenerandoAlegatos] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const skipSaveRef = useRef(true);
   const sessionsLoadedRef = useRef(false);
@@ -201,6 +206,31 @@ export function AudienciaCopilot() {
     testigos.length > 0 && testigos.every((t) => t.testimonioCerrado);
   const progresoTestimonios =
     testigos.length > 0 ? Math.round((testimoniosCerrados / testigos.length) * 100) : 0;
+
+  const resetParaNuevaAudiencia = useCallback(() => {
+    skipSaveRef.current = true;
+    setSessionId(null);
+    setExpedienteAnalysis(null);
+    setTestigos([]);
+    setTestigoActivoId(null);
+    setAnalysisByTestigoId({});
+    setAnalysis(EMPTY_ANALYSIS);
+    setRepresentacion({ ...EMPTY_REPRESENTACION });
+    setRepresentacionGuardada({ ...EMPTY_REPRESENTACION });
+    setAlegatoGlobal('');
+    setAlegatoGlobalMeta(undefined);
+    setNuevaPregunta('');
+    setNuevaRespuesta('');
+    setNuevoNombre('');
+    setNuevoRol('');
+    setSaveStatus('idle');
+    localStorage.removeItem(LAST_SESSION_KEY);
+  }, []);
+
+  const handleNuevaAudiencia = () => {
+    resetParaNuevaAudiencia();
+    fileInputRef.current?.click();
+  };
 
   const applySession = useCallback((session: AudienciaSessionData) => {
     skipSaveRef.current = true;
@@ -847,8 +877,8 @@ export function AudienciaCopilot() {
               </div>
             )}
           </div>
-          {sessions.length > 0 && (
-            <div className="mt-4 flex flex-wrap items-end gap-3">
+          <div className="mt-4 flex flex-wrap items-end gap-3">
+            {sessions.length > 0 && (
               <div className="min-w-[240px] flex-1 space-y-1">
                 <Label className="text-xs">Audiencias guardadas</Label>
                 <Select
@@ -869,11 +899,27 @@ export function AudienciaCopilot() {
                   </SelectContent>
                 </Select>
               </div>
-              <p className="text-xs text-muted-foreground pb-2">
-                {sessions.length} audiencia(s) · se guarda automáticamente
-              </p>
-            </div>
-          )}
+            )}
+            <Button
+              type="button"
+              variant="default"
+              disabled={isLoading}
+              onClick={handleNuevaAudiencia}
+              className="shrink-0"
+            >
+              {isLoading ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <FileText className="mr-2 h-4 w-4" />
+              )}
+              Nueva audiencia
+            </Button>
+            <p className="text-xs text-muted-foreground pb-2">
+              {sessions.length > 0
+                ? `${sessions.length} audiencia(s) · se guarda automáticamente`
+                : 'Cargá el PDF de una causa para empezar'}
+            </p>
+          </div>
         </CardHeader>
       </Card>
 
