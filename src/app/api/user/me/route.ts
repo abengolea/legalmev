@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuth, getAdminDb } from '@/lib/firebase-admin';
 import { isColegioAdminUser, isPlatformAdminUser } from '@/lib/platform-admin';
+import { resolveAudienciaCopilotAccess } from '@/lib/audiencia-copilot-access';
 
 /**
  * GET /api/user/me
@@ -33,6 +34,13 @@ export async function GET(request: NextRequest) {
       isColegioAdminUser(adminDb, uid),
     ]);
 
+    const audienciaCopilot = resolveAudienciaCopilotAccess({
+      email: data.email as string | undefined,
+      audienciaCopilotTrial: data.audienciaCopilotTrial as
+        | import('@/lib/audiencia-copilot-access').AudienciaCopilotTrial
+        | undefined,
+    });
+
     return NextResponse.json({
       ok: true,
       user: {
@@ -45,6 +53,8 @@ export async function GET(request: NextRequest) {
         cuit: data.cuit ?? '',
         isPlatformAdmin,
         isColegioAdmin,
+        audienciaCopilot,
+        audienciaCopilotTrial: data.audienciaCopilotTrial ?? null,
       },
     });
   } catch (err) {

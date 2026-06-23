@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { randomUUID } from 'crypto';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { FieldValue } from 'firebase-admin/firestore';
 import { getAdminDb } from '@/lib/firebase-admin';
 import { authorizeAudienciaCopilot } from '@/lib/audiencia-copilot-api-auth';
+import {
+  canCreateAudienciaSession,
+  type AudienciaCopilotTrial,
+} from '@/lib/audiencia-copilot-access';
 import { requireGoogleGenAiApiKey } from '@/lib/google-ai-key';
 import { GEMINI_MODEL_ID } from '@/lib/gemini-model';
 import {
@@ -35,6 +39,25 @@ export async function POST(request: NextRequest) {
   try {
     const auth = await authorizeAudienciaCopilot(request);
     if (auth instanceof NextResponse) return auth;
+
+    const adminDb = getAdminDb();
+    const userSnap = await adminDb.collection('users').doc(auth.uid).get();
+    const userData = userSnap.data() ?? {};
+    const copilotUser = {
+      email: userData.email as string | undefined,
+      audienciaCopilotTrial: userData.audienciaCopilotTrial as AudienciaCopilotTrial | undefined,
+    };
+
+    if (!canCreateAudienciaSession(copilotUser)) {
+      const limit = copilotUser.audienciaCopilotTrial?.limit ?? 0;
+      return NextResponse.json(
+        {
+          ok: false,
+          error: `Alcanzaste el límite de ${limit} audiencias de prueba. Contactá a LegalMev para ampliar el acceso.`,
+        },
+        { status: 403 }
+      );
+    }
 
     const apiKey = requireGoogleGenAiApiKey();
     const form = await request.formData();
@@ -84,7 +107,6 @@ Solo el texto extraído, sin comentarios ni resúmenes.`,
     const now = new Date().toISOString();
     const titulo = upload.name.replace(/\.pdf$/i, '') || 'Audiencia';
 
-    const adminDb = getAdminDb();
     const sessionRef = adminDb.collection(COLLECTION).doc();
 
     await sessionRef.set({
@@ -102,6 +124,12 @@ Solo el texto extraído, sin comentarios ni resúmenes.`,
       createdAt: now,
       updatedAt: now,
     });
+
+    if (!auth.unlimited) {
+      await adminDb.collection('users').doc(auth.uid).update({
+        'audienciaCopilotTrial.used': FieldValue.increment(1),
+      });
+    }
 
     return NextResponse.json({
       ok: true,

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Download, FileText, Loader2, Receipt } from 'lucide-react';
+import { useSearchParams } from 'next/navigation';
 import { auth } from '@/lib/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
@@ -117,6 +118,7 @@ export function PaymentHistoryClient({
   colegioId?: string;
 }) {
   const cfg = CONFIG[variant];
+  const searchParams = useSearchParams();
   const listUrl =
     variant === 'colegio' && colegioId
       ? `/api/colegio/pagos?colegioId=${encodeURIComponent(colegioId)}`
@@ -170,6 +172,32 @@ export function PaymentHistoryClient({
     });
     return () => unsub();
   }, [loadPagos]);
+
+  useEffect(() => {
+    if (variant !== 'colegio') return;
+    const mp = searchParams.get('mp');
+    if (mp === 'success') {
+      toast({
+        title: '¡Pago exitoso!',
+        description: 'La cuota del colegio fue registrada. La factura aparecerá en el historial cuando se emita.',
+      });
+      window.history.replaceState({}, '', '/dashboard/pagos');
+      void loadPagos();
+    } else if (mp === 'pending') {
+      toast({
+        title: 'Pago pendiente',
+        description: 'Te notificaremos cuando Mercado Pago acredite el pago.',
+      });
+      window.history.replaceState({}, '', '/dashboard/pagos');
+    } else if (mp === 'failure') {
+      toast({
+        variant: 'destructive',
+        title: 'Pago rechazado',
+        description: 'Intentá de nuevo o contactá al administrador de LegalMev.',
+      });
+      window.history.replaceState({}, '', '/dashboard/pagos');
+    }
+  }, [searchParams, toast, variant, loadPagos]);
 
   const handleDownloadInvoice = async (pago: PagoRow) => {
     const user = auth.currentUser;

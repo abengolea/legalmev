@@ -5,6 +5,7 @@
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import type { ScbaSentencia } from '@/lib/scba-scraper';
+import { GEMINI_MODEL_ID } from '@/lib/gemini-model';
 
 const MAX_RESUMEN_CHARS = 2000;
 
@@ -36,7 +37,7 @@ export async function summarizeScbaSentencia(
 **Texto:** ${resumen}`;
 
   const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+  const model = genAI.getGenerativeModel({ model: GEMINI_MODEL_ID });
   const result = await model.generateContent(prompt);
   const response = result.response;
 

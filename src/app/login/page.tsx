@@ -10,6 +10,7 @@ import { signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider } from 
 import { auth } from '@/lib/firebase';
 import { getDeviceId } from '@/lib/deviceId';
 import { resolvePostLoginPath } from '@/lib/post-login-redirect';
+import { fetchCheckColegio } from '@/lib/check-colegio-client';
 import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -57,6 +58,7 @@ export default function LoginPage() {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ deviceId }),
       }).catch(() => {}); // No bloquear si falla
+      await fetchCheckColegio(token);
       toast({
         title: '¡Bienvenido de nuevo!',
       });
@@ -93,6 +95,7 @@ export default function LoginPage() {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ deviceId }),
       }).catch(() => {});
+      await fetchCheckColegio(token);
       toast({ title: '¡Bienvenido de nuevo!' });
       const dest = await resolvePostLoginPath(token, redirectTo);
       window.location.href = dest;

@@ -27,6 +27,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import { safeResJson } from '@/lib/utils';
+import { fetchCheckColegio } from '@/lib/check-colegio-client';
 
 type UserData = {
   name?: string;
@@ -119,7 +120,8 @@ export default function DashboardPage() {
         return;
       }
       // Esperar a que el token esté listo antes de suscribirse (evita permission-denied por race)
-      user.getIdToken().then(() => {
+      user.getIdToken().then((token) => {
+        fetchCheckColegio(token).catch(() => {});
         unsubDoc = onSnapshot(
           doc(db, 'users', user.uid),
           (snap) => {

@@ -1,4 +1,4 @@
-import type { Firestore } from 'firebase-admin/firestore';
+import type { DocumentData, Firestore, QueryDocumentSnapshot, UpdateData } from 'firebase-admin/firestore';
 
 export type MemberEstado = 'activo' | 'suspendido';
 
@@ -7,6 +7,15 @@ export type ColegioMember = {
   name: string;
   estado?: MemberEstado;
 };
+
+const FIRESTORE_IN_LIMIT = 30;
+const FIRESTORE_BATCH_LIMIT = 500;
+
+function chunk<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
 
 /** Normaliza miembros: sin estado = activo (retrocompatibilidad) */
 export function normalizeMembers(members: ColegioMember[] | undefined): ColegioMember[] {
@@ -18,6 +27,23 @@ export function normalizeMembers(members: ColegioMember[] | undefined): ColegioM
   })).filter((m) => m.email);
 }
 
+function colegioPremiumFields(
+  colegioId: string,
+  colegioName: string
+): UpdateData<DocumentData> {
+  return {
+    tier: 'premium',
+    colegioId,
+    premiumSource: 'colegio',
+    colegioName,
+    colegioSuspended: null,
+    premiumForever: null,
+    downloadsThisMonth: 0,
+    monthlyResetAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+}
+
 /** Actualiza tier de usuarios según estado en colegio. Devuelve cantidad activados y suspendidos. */
 export async function syncUserTiersForColegio(
   adminDb: Firestore,
@@ -25,37 +51,35 @@ export async function syncUserTiersForColegio(
   colegioName: string,
   members: ColegioMember[]
 ): Promise<{ activated: number; suspended: number }> {
+  const normalized = normalizeMembers(members);
   const activoEmails = new Set(
-    members.filter((m) => m.estado !== 'suspendido').map((m) => m.email)
+    normalized.filter((m) => m.estado !== 'suspendido').map((m) => m.email)
   );
-  const memberByEmail = new Map<string, ColegioMember>();
-  for (const m of members) memberByEmail.set(m.email, m);
 
   let activated = 0;
   let suspended = 0;
 
   // 1. Usuarios que ya tienen este colegio: activar o suspender según membresía
   const usersConColegio = await adminDb.collection('users').where('colegioId', '==', colegioId).get();
-  const batch = adminDb.batch();
+  let batch = adminDb.batch();
+  let batchOps = 0;
+
+  const commitBatch = async () => {
+    if (batchOps === 0) return;
+    await batch.commit();
+    batch = adminDb.batch();
+    batchOps = 0;
+  };
+
   for (const doc of usersConColegio.docs) {
     const data = doc.data();
-    const email = String(data?.email || '').toLowerCase();
+    const email = String(data?.email || '').toLowerCase().trim();
     const shouldBePremium = activoEmails.has(email);
 
     if (shouldBePremium) {
-      batch.update(doc.ref, {
-        tier: 'premium',
-        colegioId,
-        premiumSource: 'colegio',
-        colegioName,
-        colegioSuspended: null,
-        downloadsThisMonth: 0,
-        monthlyResetAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-        updatedAt: new Date().toISOString(),
-      });
-      if (data?.tier !== 'premium') activated++;
+      batch.update(doc.ref, colegioPremiumFields(colegioId, colegioName));
+      if (data?.tier !== 'premium' || data?.premiumSource !== 'colegio') activated++;
     } else {
-      // Mantener colegioId y colegioName para poder informar al usuario en el dashboard
       batch.update(doc.ref, {
         tier: 'free',
         premiumSource: null,
@@ -64,30 +88,49 @@ export async function syncUserTiersForColegio(
       });
       if (data?.tier === 'premium') suspended++;
     }
+    batchOps++;
+    if (batchOps >= FIRESTORE_BATCH_LIMIT) await commitBatch();
   }
-  const processedEmails = new Set(usersConColegio.docs.map((d) => String(d.data()?.email || '').toLowerCase()));
-  await batch.commit();
+  await commitBatch();
 
-  // 2. Miembros activos que tienen cuenta pero no tenían este colegio: activarlos
-  for (const email of activoEmails) {
-    if (processedEmails.has(email)) continue;
-    const usersSnap = await adminDb.collection('users').where('email', '==', email).limit(1).get();
-    if (usersSnap.empty) continue;
-    const doc = usersSnap.docs[0];
-    const data = doc.data();
-    if (data?.colegioId === colegioId && data?.tier === 'premium') continue;
-    await doc.ref.update({
-      tier: 'premium',
-      colegioId,
-      premiumSource: 'colegio',
-      colegioName,
-      colegioSuspended: null,
-      downloadsThisMonth: 0,
-      monthlyResetAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-      updatedAt: new Date().toISOString(),
-    });
-    activated++;
+  const processedEmails = new Set(
+    usersConColegio.docs.map((d) => String(d.data()?.email || '').toLowerCase().trim())
+  );
+
+  // 2. Miembros activos con cuenta pero sin colegioId: activar en lotes (evita timeout con listas grandes)
+  const pendingEmails = [...activoEmails].filter((e) => !processedEmails.has(e));
+  const foundDocs = new Map<string, QueryDocumentSnapshot>();
+
+  for (const emailChunk of chunk(pendingEmails, FIRESTORE_IN_LIMIT)) {
+    const snap = await adminDb.collection('users').where('email', 'in', emailChunk).get();
+    for (const doc of snap.docs) {
+      const email = String(doc.data()?.email || '').toLowerCase().trim();
+      if (email) foundDocs.set(email, doc);
+    }
   }
+
+  batch = adminDb.batch();
+  batchOps = 0;
+
+  for (const email of pendingEmails) {
+    const doc = foundDocs.get(email);
+    if (!doc) continue;
+
+    const data = doc.data();
+    if (data?.premiumSource === 'payment' && data?.tier === 'premium') continue;
+    if (data?.colegioId === colegioId && data?.tier === 'premium' && data?.premiumSource === 'colegio') {
+      continue;
+    }
+
+    const update = { ...colegioPremiumFields(colegioId, colegioName) };
+    if (data?.email !== email) update.email = email;
+
+    batch.update(doc.ref, update);
+    activated++;
+    batchOps++;
+    if (batchOps >= FIRESTORE_BATCH_LIMIT) await commitBatch();
+  }
+  await commitBatch();
 
   return { activated, suspended };
 }

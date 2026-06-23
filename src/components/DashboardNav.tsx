@@ -24,7 +24,6 @@ import { Separator } from './ui/separator';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Button } from './ui/button';
 import { LayoutDashboard, LogOut, Shield, Users, Building2, BarChart3, CreditCard, Settings, Landmark, Receipt, Gavel } from 'lucide-react';
-import { canAccessAudienciaCopilot } from '@/lib/audiencia-copilot-access';
 import { Logo } from './Logo';
 import { useSidebar } from '@/components/ui/sidebar';
 
@@ -62,7 +61,7 @@ export function DashboardNav() {
             if (j?.ok && j.user) {
               setUserData(j.user);
               setIsColegioAdmin(!!j.user.isColegioAdmin);
-              setCanAccessCopilot(canAccessAudienciaCopilot(j.user.email));
+              setCanAccessCopilot(!!j.user.audienciaCopilot?.hasAccess);
             } else {
               setUserData(null);
               setIsColegioAdmin(false);
@@ -160,6 +159,18 @@ export function DashboardNav() {
                   <Link href="/dashboard/colegio">Mi colegio</Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
+          )}
+          {canAccessCopilot && !userData?.isPlatformAdmin && (
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                isActive={isActive('/dashboard/copiloto-audiencias')}
+                icon={<Gavel />}
+                tooltip={{ children: 'Copiloto Audiencias' }}
+              >
+                <Link href="/dashboard/copiloto-audiencias">Copiloto Audiencias</Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
           )}
             </>
           )}

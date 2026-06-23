@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuth, getAdminDb } from '@/lib/firebase-admin';
+import { checkColegioForUser } from '@/lib/check-colegio-for-user';
 
 /**
  * POST /api/user/check-colegio
- * Llamado tras el registro. Si el email está en algún colegio activo, asigna premium.
+ * Registro, login o dashboard: vincula premium si el email está en un colegio activo.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -15,47 +16,10 @@ export async function POST(request: NextRequest) {
 
     const adminAuth = getAuth();
     const decoded = await adminAuth.verifyIdToken(token);
-    const uid = decoded.uid;
-
     const adminDb = getAdminDb();
-    const userSnap = await adminDb.collection('users').doc(uid).get();
-    const userData = userSnap.data();
-    if (!userSnap.exists || !userData) {
-      return NextResponse.json({ ok: false, error: 'Usuario no encontrado' }, { status: 404 });
-    }
 
-    if (userData.tier === 'premium') {
-      return NextResponse.json({ ok: true, alreadyPremium: true });
-    }
-
-    const email = (userData.email || '').toString().toLowerCase();
-    if (!email) return NextResponse.json({ ok: true, noEmail: true });
-
-    const colegiosSnap = await adminDb.collection('colegios').where('convenioActivo', '==', true).get();
-
-    for (const doc of colegiosSnap.docs) {
-      const data = doc.data();
-      const members = (data.members || []) as { email: string; name?: string; estado?: string }[];
-      const found = members.find((m) => String(m?.email || '').toLowerCase() === email);
-      if (found && found.estado !== 'suspendido') {
-        await adminDb.collection('users').doc(uid).update({
-          tier: 'premium',
-          colegioId: doc.id,
-          premiumSource: 'colegio',
-          colegioName: data.name,
-          downloadsThisMonth: 0,
-          monthlyResetAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-          updatedAt: new Date().toISOString(),
-        });
-        return NextResponse.json({
-          ok: true,
-          premiumFromColegio: true,
-          colegioName: data.name,
-        });
-      }
-    }
-
-    return NextResponse.json({ ok: true, notInColegio: true });
+    const result = await checkColegioForUser(adminDb, adminAuth, decoded.uid);
+    return NextResponse.json(result);
   } catch (err) {
     return NextResponse.json(
       { ok: false, error: err instanceof Error ? err.message : 'Error' },

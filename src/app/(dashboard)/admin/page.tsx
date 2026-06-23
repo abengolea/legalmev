@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { collection, onSnapshot, doc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -28,9 +28,12 @@ import {
 } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Cpu, Database, Users, XCircle, FileText, MessageSquare, Bot, Send, PlusCircle, Zap, CreditCard, BarChart3, Building2, Upload, AlertTriangle, Receipt, Link2, UserPlus, LayoutDashboard, TrendingUp, DollarSign, FileOutput, ArrowRight, Settings, Mail, MoreHorizontal, Ban, Unlock, RefreshCw, History, StickyNote, Gavel } from 'lucide-react';
+import { Cpu, Database, Users, XCircle, FileText, MessageSquare, Bot, Send, PlusCircle, Zap, CreditCard, BarChart3, Building2, Upload, AlertTriangle, Receipt, Link2, UserPlus, LayoutDashboard, TrendingUp, DollarSign, FileOutput, ArrowRight, Settings, Mail, MoreHorizontal, Ban, Unlock, RefreshCw, History, StickyNote, Gavel, Search } from 'lucide-react';
 import { AudienciaCopilot } from '@/components/admin/AudienciaCopilot';
-import { canAccessAudienciaCopilot } from '@/lib/audiencia-copilot-access';
+import {
+  AUDIENCIA_COPILOT_TRIAL_SESSIONS,
+  type AudienciaCopilotTrial,
+} from '@/lib/audiencia-copilot-access';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { clientIntakeAutomation } from '@/ai/flows/client-intake-automation';
@@ -82,7 +85,32 @@ type User = {
   premiumSource?: 'payment' | 'colegio' | 'admin' | null;
   premiumForever?: boolean;
   adminNotes?: string | null;
+  audienciaCopilotTrial?: AudienciaCopilotTrial | null;
+  createdAt?: string;
 };
+
+function getUserRegistrationMs(user: User, registrationDates: Record<string, string>): number {
+  const raw = user.createdAt || registrationDates[user.id];
+  if (!raw) return 0;
+  const t = new Date(raw).getTime();
+  return Number.isNaN(t) ? 0 : t;
+}
+
+function sortUsersByRegistration(list: User[], registrationDates: Record<string, string>): User[] {
+  return [...list].sort(
+    (a, b) => getUserRegistrationMs(b, registrationDates) - getUserRegistrationMs(a, registrationDates)
+  );
+}
+
+function matchesUserSearch(user: User, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  const haystack = [user.name, user.email, user.phone, user.colegioName, user.adminNotes]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+  return haystack.includes(q);
+}
 
 type Exportacion = {
   id: string;
@@ -292,17 +320,42 @@ function UserManagement() {
   const [filterTier, setFilterTier] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterColegio, setFilterColegio] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState('');
   const [exportacionesUserId, setExportacionesUserId] = useState<string | null>(null);
   const [exportaciones, setExportaciones] = useState<Exportacion[]>([]);
   const [exportacionesLoading, setExportacionesLoading] = useState(false);
   const [notesUserId, setNotesUserId] = useState<string | null>(null);
   const [notesValue, setNotesValue] = useState('');
+  const [registrationDates, setRegistrationDates] = useState<Record<string, string>>({});
   const openedHistorialRef = useRef<string | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
     import('@/lib/firebase').then(({ auth }) => {
       const unsub = auth.onAuthStateChanged((u) => setCurrentUserId(u?.uid ?? null));
+      return () => unsub();
+    });
+  }, []);
+
+  useEffect(() => {
+    import('@/lib/firebase').then(({ auth }) => {
+      const loadRegistrationDates = async () => {
+        const user = auth.currentUser;
+        if (!user) return;
+        try {
+          const token = await user.getIdToken();
+          const res = await fetch('/api/admin/users/registration-dates', {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const json = await safeResJson<{ ok?: boolean; dates?: Record<string, string> }>(res);
+          if (json.ok && json.dates) setRegistrationDates(json.dates);
+        } catch (e) {
+          console.error('Error fetching registration dates:', e);
+        }
+      };
+      const unsub = auth.onAuthStateChanged((u) => {
+        if (u) void loadRegistrationDates();
+      });
       return () => unsub();
     });
   }, []);
@@ -440,6 +493,66 @@ function UserManagement() {
     }
   };
 
+  const handleGrantAudienciaCopilotTrial = async (userId: string, renew = false) => {
+    const target = users.find((u) => u.id === userId);
+    const msg = renew
+      ? `¿Renovar la prueba de copiloto (${AUDIENCIA_COPILOT_TRIAL_SESSIONS} audiencias) para ${target?.email ?? 'este usuario'}?`
+      : `¿Dar prueba gratis del Copiloto de Audiencias (${AUDIENCIA_COPILOT_TRIAL_SESSIONS} audiencias) a ${target?.email ?? 'este usuario'}?`;
+    if (!confirm(msg)) return;
+
+    setUpdatingId(userId);
+    try {
+      const { auth } = await import('@/lib/firebase');
+      const user = auth.currentUser;
+      if (!user) throw new Error('No autenticado');
+      const token = await user.getIdToken();
+      const res = await fetch(`/api/admin/users/${userId}/audiencia-copilot-trial`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await safeResJson<{ ok?: boolean; message?: string; error?: string }>(res);
+      if (json.ok) {
+        toast({
+          title: 'Prueba otorgada',
+          description: json.message ?? `${AUDIENCIA_COPILOT_TRIAL_SESSIONS} audiencias disponibles.`,
+        });
+      } else {
+        toast({ variant: 'destructive', title: 'Error', description: json.error ?? 'No se pudo otorgar.' });
+      }
+    } catch (e) {
+      console.error(e);
+      toast({ variant: 'destructive', title: 'Error', description: 'No se pudo otorgar la prueba.' });
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const handleRevokeAudienciaCopilotTrial = async (userId: string) => {
+    if (!confirm('¿Quitar la prueba del Copiloto de Audiencias a este usuario?')) return;
+    setUpdatingId(userId);
+    try {
+      const { auth } = await import('@/lib/firebase');
+      const user = auth.currentUser;
+      if (!user) throw new Error('No autenticado');
+      const token = await user.getIdToken();
+      const res = await fetch(`/api/admin/users/${userId}/audiencia-copilot-trial`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await safeResJson<{ ok?: boolean; message?: string; error?: string }>(res);
+      if (json.ok) {
+        toast({ title: 'Prueba revocada', description: 'El usuario ya no tiene acceso al copiloto.' });
+      } else {
+        toast({ variant: 'destructive', title: 'Error', description: json.error ?? 'No se pudo revocar.' });
+      }
+    } catch (e) {
+      console.error(e);
+      toast({ variant: 'destructive', title: 'Error', description: 'No se pudo revocar la prueba.' });
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
   const handleResetDownloads = async (userId: string) => {
     setUpdatingId(userId);
     try {
@@ -545,12 +658,16 @@ function UserManagement() {
     }
   };
 
-  const filteredUsers = users.filter((u) => {
-    if (filterTier !== 'all' && (u.tier ?? 'free') !== filterTier) return false;
-    if (filterStatus !== 'all' && (u.status || 'activo') !== filterStatus) return false;
-    if (filterColegio !== 'all' && (u.colegioName ?? '') !== filterColegio) return false;
-    return true;
-  });
+  const filteredUsers = useMemo(() => {
+    const filtered = users.filter((u) => {
+      if (!matchesUserSearch(u, searchQuery)) return false;
+      if (filterTier !== 'all' && (u.tier ?? 'free') !== filterTier) return false;
+      if (filterStatus !== 'all' && (u.status || 'activo') !== filterStatus) return false;
+      if (filterColegio !== 'all' && (u.colegioName ?? '') !== filterColegio) return false;
+      return true;
+    });
+    return sortUsersByRegistration(filtered, registrationDates);
+  }, [users, searchQuery, filterTier, filterStatus, filterColegio, registrationDates]);
 
   const colegiosOptions = Array.from(new Set(users.map((u) => u.colegioName).filter(Boolean))) as string[];
 
@@ -570,7 +687,17 @@ function UserManagement() {
       </CardHeader>
       <CardContent className="space-y-4">
         {!isLoading && (
-          <div className="flex flex-wrap gap-4 items-center">
+          <div className="space-y-3">
+            <div className="relative max-w-md">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+              <Input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Buscar por nombre, email, teléfono o colegio..."
+                className="h-9 pl-8"
+              />
+            </div>
+            <div className="flex flex-wrap gap-4 items-center">
             <div className="flex items-center gap-2">
               <Label className="text-xs">Plan</Label>
               <Select value={filterTier} onValueChange={setFilterTier}>
@@ -610,6 +737,7 @@ function UserManagement() {
             <span className="text-sm text-muted-foreground">
               {filteredUsers.length} de {users.length} usuarios
             </span>
+            </div>
           </div>
         )}
         {isLoading ? (
@@ -697,6 +825,11 @@ function UserManagement() {
                         ({user.freeDownloadsUsed ?? 0}/5)
                       </span>
                     )}
+                    {user.audienciaCopilotTrial && user.audienciaCopilotTrial.limit > 0 && (
+                      <Badge variant="outline" className="ml-1 text-xs">
+                        Copiloto {user.audienciaCopilotTrial.used ?? 0}/{user.audienciaCopilotTrial.limit}
+                      </Badge>
+                    )}
                   </TableCell>
                   <TableCell>{user.colegioName || '-'}</TableCell>
                   <TableCell className="text-right">
@@ -775,6 +908,23 @@ function UserManagement() {
                           <DropdownMenuItem onClick={() => handleResetDownloads(user.id)}>
                             <RefreshCw className="h-4 w-4 mr-2" /> Resetear descargas
                           </DropdownMenuItem>
+                          {user.audienciaCopilotTrial?.limit ? (
+                            <>
+                              <DropdownMenuItem onClick={() => handleGrantAudienciaCopilotTrial(user.id, true)}>
+                                <Gavel className="h-4 w-4 mr-2" /> Renovar prueba Copiloto ({AUDIENCIA_COPILOT_TRIAL_SESSIONS} audiencias)
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                className="text-destructive focus:text-destructive"
+                                onClick={() => handleRevokeAudienciaCopilotTrial(user.id)}
+                              >
+                                <Gavel className="h-4 w-4 mr-2" /> Quitar prueba Copiloto
+                              </DropdownMenuItem>
+                            </>
+                          ) : (
+                            <DropdownMenuItem onClick={() => handleGrantAudienciaCopilotTrial(user.id)}>
+                              <Gavel className="h-4 w-4 mr-2" /> Prueba Copiloto ({AUDIENCIA_COPILOT_TRIAL_SESSIONS} audiencias)
+                            </DropdownMenuItem>
+                          )}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </div>
@@ -2140,7 +2290,7 @@ function AdminTabs() {
           const token = await user.getIdToken();
           const res = await fetch('/api/user/me', { headers: { Authorization: `Bearer ${token}` } });
           const json = await res.json();
-          setCanAccessCopilot(canAccessAudienciaCopilot(json?.user?.email));
+          setCanAccessCopilot(!!json?.user?.audienciaCopilot?.hasAccess);
         } catch {
           setCanAccessCopilot(false);
         }

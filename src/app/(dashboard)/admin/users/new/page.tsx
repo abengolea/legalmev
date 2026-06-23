@@ -86,6 +86,7 @@ export default function NewUserPage() {
         phone: fullPhoneNumber,
         role: data.role,
         status: data.status,
+        createdAt: new Date().toISOString(),
       });
 
       toast({

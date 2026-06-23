@@ -9,6 +9,7 @@ import { Logo } from '@/components/Logo';
 import { Button } from '@/components/ui/button';
 import { Mail, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { fetchCheckColegio } from '@/lib/check-colegio-client';
 
 /**
  * Página mostrada cuando el usuario se registró pero aún no verificó su email.
@@ -40,6 +41,11 @@ export default function VerificaEmailPage() {
     });
     return () => unsub();
   }, [router]);
+
+  useEffect(() => {
+    if (!user?.emailVerified) return;
+    user.getIdToken().then((token) => fetchCheckColegio(token)).catch(() => {});
+  }, [user?.emailVerified, user]);
 
   const handleResend = async () => {
     if (!user) return;
@@ -85,6 +91,8 @@ export default function VerificaEmailPage() {
       await user.reload();
       const fresh = auth.currentUser;
       if (fresh?.emailVerified) {
+        const token = await fresh.getIdToken();
+        await fetchCheckColegio(token);
         router.replace('/dashboard');
         return;
       }

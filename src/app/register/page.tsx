@@ -58,21 +58,23 @@ export default function RegisterPage() {
   const onSubmit = async (data: RegisterFormValues) => {
     setIsLoading(true);
     try {
+      const emailNormalized = data.email.trim().toLowerCase();
       // Step 1: Create the user in Firebase Authentication
-      const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
+      const userCredential = await createUserWithEmailAndPassword(auth, emailNormalized, data.password);
       const user = userCredential.user;
 
       // Step 2: Save the user's profile information in Firestore
       const cuitClean = (data.cuit ?? '').replace(/\D/g, '');
       await setDoc(doc(db, 'users', user.uid), {
         name: `${data.firstName} ${data.lastName}`,
-        email: data.email,
+        email: emailNormalized,
         role: 'abogado',
         status: 'activo',
         tier: 'free',
         freeDownloadsUsed: 0,
         phone: '',
         cuit: cuitClean || '',
+        createdAt: new Date().toISOString(),
       });
 
       // Step 3: Enviar email de verificación. Resend (botón bonito) o Firebase como fallback
