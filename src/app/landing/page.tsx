@@ -2,7 +2,7 @@
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { FileDown, Check, Zap, Mail } from 'lucide-react';
+import { FileDown, Check, Zap, Mail, Gavel, Sparkles } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 
@@ -15,9 +15,18 @@ export default function LandingPage() {
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,rgba(84,166,168,0.2),transparent)]" />
         <div className="container px-5 sm:px-6 lg:px-10 xl:px-12 relative grid lg:grid-cols-2 place-items-center py-20 md:py-32 gap-12">
           <div className="text-center lg:text-start space-y-8">
-            <div className="inline-flex items-center gap-2 rounded-full border border-[#54A6A8]/40 bg-[#54A6A8]/15 px-4 py-2 text-sm text-[#7ec8ca]">
-              <FileDown className="h-4 w-4" />
-              Exportación de expedientes MEV y PJN
+            <div className="flex flex-col items-center lg:items-start gap-2">
+              <div className="inline-flex items-center gap-2 rounded-full border border-[#54A6A8]/40 bg-[#54A6A8]/15 px-4 py-2 text-sm text-[#7ec8ca]">
+                <FileDown className="h-4 w-4" />
+                Exportación de expedientes MEV y PJN
+              </div>
+              <Link
+                href="/register"
+                className="inline-flex items-center gap-2 rounded-full border border-amber-400/50 bg-amber-500/15 px-4 py-2 text-sm font-medium text-amber-100 hover:bg-amber-500/25 transition-colors"
+              >
+                <Gavel className="h-4 w-4 text-amber-300" />
+                Nuevo: Copiloto de Audiencias — 1 audiencia de prueba gratis
+              </Link>
             </div>
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight">
               <span className="bg-gradient-to-r from-[#54A6A8] to-[#7ec8ca] text-transparent bg-clip-text">
@@ -32,6 +41,13 @@ export default function LandingPage() {
             <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
               <Button size="lg" className="bg-[#2A6A78] hover:bg-[#3a7a88] text-white" asChild>
                 <Link href="/register">Registrarse Gratis</Link>
+              </Button>
+              <Button
+                size="lg"
+                className="bg-amber-600 hover:bg-amber-700 text-white border-0"
+                asChild
+              >
+                <Link href="/register">Probar Copiloto de Audiencias</Link>
               </Button>
               <Button size="lg" variant="outline" className="border-[#54A6A8]/50 text-[#7ec8ca] hover:bg-[#54A6A8]/20" asChild>
                 <Link href="/login">Ya tengo cuenta</Link>
@@ -55,6 +71,55 @@ export default function LandingPage() {
               />
               <div className="absolute -bottom-4 -right-4 rounded-lg bg-[#2A6A78] px-4 py-2 text-sm font-medium text-white shadow-lg">
                 ✓ PDF listo en segundos
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Copiloto de Audiencias */}
+      <section className="border-y border-primary/20 bg-gradient-to-r from-primary/10 via-background to-accent/10">
+        <div className="container px-5 sm:px-6 lg:px-10 xl:px-12 py-16 md:py-20">
+          <div className="mx-auto max-w-4xl rounded-2xl border border-primary/30 bg-card/80 p-8 md:p-10 shadow-sm">
+            <div className="flex flex-col md:flex-row md:items-start gap-8">
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-primary/15 ring-2 ring-primary/25">
+                <Gavel className="h-7 w-7 text-primary" />
+              </div>
+              <div className="flex-1 space-y-4">
+                <div className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-primary">
+                  <Sparkles className="h-3.5 w-3.5" />
+                  Nuevo en LegalMev
+                </div>
+                <h2 className="text-2xl md:text-3xl font-bold font-headline text-foreground">
+                  Copiloto de Audiencias con IA
+                </h2>
+                <p className="text-muted-foreground leading-relaxed max-w-2xl">
+                  Asistente para preparar y conducir audiencias: analiza el expediente, sugiere
+                  preguntas en vivo, detecta contradicciones y arma borradores de alegatos. Estamos
+                  en fase de prueba — tu cuenta incluye{' '}
+                  <strong className="text-foreground">1 audiencia gratuita</strong> para probarlo.
+                </p>
+                <ul className="grid sm:grid-cols-2 gap-2 text-sm text-muted-foreground">
+                  {[
+                    'Resumen del expediente y testigos',
+                    'Sugerencias mientras declara el testigo',
+                    'Contradicciones y admisiones en tiempo real',
+                    'Borrador de alegatos de cierre',
+                  ].map((item) => (
+                    <li key={item} className="flex items-start gap-2">
+                      <Check className="h-4 w-4 shrink-0 text-primary mt-0.5" />
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+                <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                  <Button className="bg-primary hover:bg-primary/90" asChild>
+                    <Link href="/register">Probar el Copiloto — registro gratis</Link>
+                  </Button>
+                  <Button variant="outline" asChild>
+                    <Link href="/login">Ya tengo cuenta — iniciar sesión</Link>
+                  </Button>
+                </div>
               </div>
             </div>
           </div>

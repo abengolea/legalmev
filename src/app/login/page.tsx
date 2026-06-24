@@ -120,7 +120,7 @@ export default function LoginPage() {
   return (
     <div className="w-full lg:grid lg:min-h-screen lg:grid-cols-2 xl:min-h-screen">
       <div className="flex items-center justify-center py-12">
-        <div className="mx-auto grid w-[350px] gap-6">
+        <div className="mx-auto grid w-full max-w-[400px] gap-6 px-4 sm:px-0">
           <div className="grid gap-2 text-center">
             <div className="flex justify-center">
               <Logo />
@@ -132,6 +132,27 @@ export default function LoginPage() {
             ) : (
               <p className="text-balance text-muted-foreground">Introduce tu email para iniciar sesión en tu cuenta</p>
             )}
+          </div>
+
+          <div className="rounded-xl border border-primary/40 bg-gradient-to-br from-primary/10 to-accent/5 p-4 text-left shadow-sm">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/15">
+                <Gavel className="h-5 w-5 text-primary" />
+              </div>
+              <div className="space-y-1.5 min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-wide text-primary">
+                  Nuevo — fase de prueba
+                </p>
+                <p className="font-semibold text-foreground leading-snug">
+                  Probá el Copiloto de Audiencias
+                </p>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  Asistente con IA para audiencias: sugerencias en vivo, contradicciones y alegatos.
+                  Al entrar, tenés{' '}
+                  <strong className="text-foreground">1 audiencia de prueba incluida</strong>.
+                </p>
+              </div>
+            </div>
           </div>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4">
