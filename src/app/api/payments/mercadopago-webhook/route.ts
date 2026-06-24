@@ -3,6 +3,9 @@ import { MercadoPagoConfig, Payment } from 'mercadopago';
 import { getAdminDb } from '@/lib/firebase-admin';
 import { sendPaymentSuccessEmail } from '@/lib/payment-notifications';
 import { requestHubInvoiceForLegalMevPayment } from '@/lib/hub-billing';
+import { recordPayment } from '@/lib/payments';
+import { AUDIENCIA_COPILOT_TRIAL_SESSIONS } from '@/lib/audiencia-copilot-access';
+import type { Firestore } from 'firebase-admin/firestore';
 
 /**
  * Extrae topic/type e id del pago desde GET (IPN) o POST (Webhooks).
@@ -83,6 +86,114 @@ async function emitHubInvoice(opts: {
   }
 }
 
+async function processAudienciaCopilotPayment(opts: {
+  adminDb: Firestore;
+  uid: string;
+  sessionId: string | null;
+  amount: number;
+  moneda: string;
+  paymentId: string;
+  preferenceId?: string;
+  payerEmail?: string;
+  userData: Record<string, unknown> | undefined;
+}): Promise<void> {
+  const { adminDb, uid, sessionId, amount, moneda, paymentId, preferenceId, payerEmail, userData } =
+    opts;
+  const now = new Date().toISOString();
+
+  if (sessionId) {
+    const sessionRef = adminDb.collection('audiencia_sessions').doc(sessionId);
+    const sessionSnap = await sessionRef.get();
+    if (sessionSnap.exists && sessionSnap.data()?.userId === uid) {
+      await sessionRef.set(
+        {
+          audienciaPagada: true,
+          audienciaPagoMeta: {
+            paymentId: String(paymentId),
+            monto: amount,
+            moneda,
+            paidAt: now,
+          },
+          updatedAt: now,
+        },
+        { merge: true }
+      );
+      console.log('[mercadopago-webhook] Audiencia copilot desbloqueada:', sessionId);
+    }
+  } else {
+    const userRef = adminDb.collection('users').doc(uid);
+    const userSnap = await userRef.get();
+    const trial = userSnap.data()?.audienciaCopilotTrial as
+      | { limit?: number; used?: number; grantedAt?: string }
+      | undefined;
+    const currentLimit =
+      typeof trial?.limit === 'number' && trial.limit > 0
+        ? trial.limit
+        : AUDIENCIA_COPILOT_TRIAL_SESSIONS;
+    const used = typeof trial?.used === 'number' ? trial.used : 0;
+    await userRef.set(
+      {
+        audienciaCopilotTrial: {
+          limit: currentLimit + 1,
+          used,
+          grantedAt: trial?.grantedAt ?? now,
+          grantedBy: 'payment',
+        },
+        updatedAt: now,
+      },
+      { merge: true }
+    );
+    console.log('[mercadopago-webhook] Audiencia copilot: +1 audiencia para usuario', uid);
+  }
+
+  const sessionTitulo = sessionId
+    ? (
+        await adminDb.collection('audiencia_sessions').doc(sessionId).get()
+      ).data()?.titulo
+    : undefined;
+
+  const descripcion = sessionId
+    ? `Copiloto Audiencias — ${(sessionTitulo as string) || 'audiencia completa'}`
+    : 'Copiloto Audiencias — audiencia completa (nueva)';
+
+  const pagoDocId = await recordPayment(adminDb, {
+    tipo: 'cliente',
+    clienteId: uid,
+    monto: amount,
+    moneda,
+    metodo: 'mercadopago',
+    referenciaExterna: String(paymentId),
+    estado: 'completado',
+    descripcion,
+  });
+
+  const userEmail = (userData?.email as string) || '';
+  if (userEmail) {
+    await sendPaymentSuccessEmail({
+      to: userEmail,
+      userName: (userData?.name as string) || undefined,
+      amount,
+      currency: moneda,
+    });
+  }
+
+  await emitHubInvoice({
+    paymentId: String(paymentId),
+    amount,
+    externalRef: sessionId ? `audiencia-copilot:${uid}:${sessionId}` : `audiencia-copilot-new:${uid}`,
+    preferenceId,
+    payerEmail,
+    buyer: buyerFromUser(userData, payerEmail),
+    description: descripcion,
+    pagoDocId,
+    metadata: {
+      tipo: 'audiencia_copilot',
+      clienteId: uid,
+      audienciaSessionId: sessionId ?? undefined,
+    },
+  });
+}
+
 async function processPaymentNotification(accessToken: string, id: string): Promise<{ ok: boolean; error?: string }> {
   try {
     const client = new MercadoPagoConfig({ accessToken });
@@ -97,11 +208,50 @@ async function processPaymentNotification(accessToken: string, id: string): Prom
     }
 
     const adminDb = getAdminDb();
-    const { recordPayment } = await import('@/lib/payments');
     const amount = (payInfo.transaction_amount as number) ?? 0;
     const moneda = (payInfo.currency_id as string) ?? 'ARS';
     const payerEmail = (payInfo.payer as { email?: string } | undefined)?.email;
     const preferenceId = (payInfo as { preference_id?: string }).preference_id;
+
+    if (externalRef.startsWith('audiencia-copilot:')) {
+      const parts = externalRef.split(':');
+      const uid = parts[1];
+      const sessionId = parts[2] || null;
+      if (uid) {
+        const userSnap = await adminDb.collection('users').doc(uid).get();
+        await processAudienciaCopilotPayment({
+          adminDb,
+          uid,
+          sessionId,
+          amount,
+          moneda,
+          paymentId: String(id),
+          preferenceId,
+          payerEmail,
+          userData: userSnap.data(),
+        });
+      }
+      return { ok: true };
+    }
+
+    if (externalRef.startsWith('audiencia-copilot-new:')) {
+      const uid = externalRef.slice('audiencia-copilot-new:'.length);
+      if (uid) {
+        const userSnap = await adminDb.collection('users').doc(uid).get();
+        await processAudienciaCopilotPayment({
+          adminDb,
+          uid,
+          sessionId: null,
+          amount,
+          moneda,
+          paymentId: String(id),
+          preferenceId,
+          payerEmail,
+          userData: userSnap.data(),
+        });
+      }
+      return { ok: true };
+    }
 
     if (externalRef.startsWith('colegio-')) {
       const parts = externalRef.split('-');

@@ -30,6 +30,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Cpu, Database, Users, XCircle, FileText, MessageSquare, Bot, Send, PlusCircle, Zap, CreditCard, BarChart3, Building2, Upload, AlertTriangle, Receipt, Link2, UserPlus, LayoutDashboard, TrendingUp, DollarSign, FileOutput, ArrowRight, Settings, Mail, MoreHorizontal, Ban, Unlock, RefreshCw, History, StickyNote, Gavel, Search } from 'lucide-react';
 import { AudienciaCopilot } from '@/components/admin/AudienciaCopilot';
+import { AudienciaCopilotAdminReport } from '@/components/admin/AudienciaCopilotAdminReport';
+import { CopilotoAnnouncementEmailCard } from '@/components/admin/CopilotoAnnouncementEmailCard';
 import {
   AUDIENCIA_COPILOT_TRIAL_SESSIONS,
   type AudienciaCopilotTrial,
@@ -2196,7 +2198,7 @@ function AdminDashboard() {
   );
 }
 
-const BASE_TABS = ['dashboard', 'users', 'colegios', 'stats', 'payments', 'config'] as const;
+const BASE_TABS = ['dashboard', 'users', 'colegios', 'stats', 'audiencias', 'payments', 'config'] as const;
 const COPILOT_TAB = 'audiencia-copilot' as const;
 const VALID_COLEGIO_SUB = ['convenios', 'responsables'] as const;
 const VALID_CONFIG_TABS = ['payments', 'email', 'system', 'logs', 'ai-test'] as const;
@@ -2315,6 +2317,7 @@ function AdminTabs() {
         <TabsTrigger value="users"><Users className="mr-2"/> Usuarios</TabsTrigger>
         <TabsTrigger value="colegios"><Building2 className="mr-2"/> Colegios</TabsTrigger>
         <TabsTrigger value="stats"><BarChart3 className="mr-2"/> Estadísticas</TabsTrigger>
+        <TabsTrigger value="audiencias"><Gavel className="mr-2"/> Audiencias</TabsTrigger>
         <TabsTrigger value="payments"><CreditCard className="mr-2"/> Pagos</TabsTrigger>
         <TabsTrigger value="config"><Settings className="mr-2"/> Configuración</TabsTrigger>
         {canAccessCopilot && (
@@ -2337,6 +2340,13 @@ function AdminTabs() {
 
       <TabsContent value="stats">
         <Stats />
+      </TabsContent>
+
+      <TabsContent value="audiencias">
+        <div className="space-y-6">
+          <CopilotoAnnouncementEmailCard />
+          <AudienciaCopilotAdminReport />
+        </div>
       </TabsContent>
 
       <TabsContent value="payments">

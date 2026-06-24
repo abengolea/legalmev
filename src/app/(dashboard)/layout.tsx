@@ -3,6 +3,7 @@ import { DashboardNav } from '@/components/DashboardNav';
 import { DashboardAuthGuard } from '@/components/DashboardAuthGuard';
 import { ColegioResponsableGuard } from '@/components/ColegioResponsableGuard';
 import { NotificasColegioPromoDialog } from '@/components/NotificasColegioPromoDialog';
+import { CopilotoAudienciaAnnouncementDialog } from '@/components/CopilotoAudienciaAnnouncementDialog';
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
 import { DashboardMobileBar } from '@/components/DashboardMobileBar';
 
@@ -13,6 +14,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <DashboardAuthGuard>
       <ColegioResponsableGuard>
       <NotificasColegioPromoDialog />
+      <CopilotoAudienciaAnnouncementDialog />
       <SidebarProvider>
         <div className={`legalmev-rebrand ${inter.className} flex min-h-screen`}>
           <DashboardNav />

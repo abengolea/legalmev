@@ -182,3 +182,51 @@ export function buildConvenioSuspendedHtml(params: { colegioName: string }): str
   `;
   return emailWrapper(emailHeader() + emailCard(content) + emailFooter());
 }
+
+export function buildCopilotoAudienciaAnnouncementHtml(params: {
+  firstName?: string;
+  copilotUrl?: string;
+}): string {
+  const firstName = params.firstName?.trim();
+  const greeting = firstName ? `Hola ${escapeHtml(firstName)},` : 'Hola,';
+  const copilotUrl = params.copilotUrl || `${BASE}/dashboard/copiloto-audiencias`;
+
+  const content = `
+    <p style="margin:0 0 16px;font-size:16px;">${greeting}</p>
+    <p style="margin:0 0 24px;">
+      LegalMev suma el <strong>Copiloto de Audiencias</strong>: un asistente con inteligencia artificial
+      para preparar y conducir audiencias a partir del expediente que exportás desde MEV/PJN.
+    </p>
+    <div style="margin:0 0 24px;padding:16px 18px;background:#f0f7f8;border-radius:8px;border-left:4px solid #2A6A78;">
+      <p style="margin:0 0 12px;font-weight:600;color:#2A6A78;">¿Qué hace?</p>
+      <ul style="margin:0;padding-left:20px;color:#374151;font-size:15px;line-height:1.7;">
+        <li>Analiza el expediente y resume partes, hechos, prueba y testigos.</li>
+        <li>Sugiere preguntas mientras interrogás a cada declarante.</li>
+        <li>Detecta contradicciones, admisiones y evasivas en tiempo real.</li>
+        <li>Arma un borrador de alegatos de cierre con todos los testimonios.</li>
+      </ul>
+    </div>
+    <p style="margin:0 0 8px;font-size:15px;">
+      <strong>Tu cuenta incluye 1 audiencia de prueba gratuita</strong> para conocer el copiloto.
+    </p>
+    <div style="margin:0 0 24px;padding:16px 18px;background:#fffbeb;border-radius:8px;border-left:4px solid #d97706;">
+      <p style="margin:0 0 10px;font-weight:600;color:#92400e;">Estamos en fase de prueba</p>
+      <p style="margin:0;font-size:14px;color:#78350f;line-height:1.7;">
+        Tu opinión nos ayuda mucho: contanos qué te resultó útil, qué mejorarías o si encontraste
+        algún error. Con casos reales vamos afinando la herramienta antes de definir el servicio
+        comercial.
+      </p>
+    </div>
+    ${ctaButton(copilotUrl, 'Probar el Copiloto de Audiencias')}
+    <p style="margin:0 0 8px;font-size:14px;color:#6b7280;">
+      Entrá a LegalMev, cargá el PDF exportado (con texto seleccionable) e indicá a quién representás.
+      Todo queda guardado en la nube para retomarlo cuando quieras.
+    </p>
+    <p style="margin:0 0 8px;font-size:14px;color:#6b7280;">
+      Sugerencias, mejoras o reporte de errores: escribinos a
+      <a href="mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent('Copiloto de Audiencias — sugerencias')}" style="color:#2A6A78;">${CONTACT_EMAIL}</a>.
+    </p>
+    <p style="margin:24px 0 0;font-size:14px;color:#9ca3af;">— El equipo de LegalMev</p>
+  `;
+  return emailWrapper(emailHeader() + emailCard(content) + emailFooter());
+}

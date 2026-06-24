@@ -9,6 +9,7 @@ import * as z from 'zod';
 import { createUserWithEmailAndPassword, sendEmailVerification } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
+import { buildDefaultAudienciaCopilotTrial } from '@/lib/audiencia-copilot-access';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -74,6 +75,7 @@ export default function RegisterPage() {
         freeDownloadsUsed: 0,
         phone: '',
         cuit: cuitClean || '',
+        audienciaCopilotTrial: buildDefaultAudienciaCopilotTrial('registration'),
         createdAt: new Date().toISOString(),
       });
 

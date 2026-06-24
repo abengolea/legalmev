@@ -9,6 +9,10 @@ import { analyzeExpediente } from '@/ai/flows/audiencia-expediente-analysis';
 import type { AudienciaTestigo, RepresentacionCaso } from '@/lib/audiencia-session-types';
 import { EMPTY_REPRESENTACION } from '@/lib/audiencia-session-types';
 import { inferBandejaDeclarante } from '@/lib/audiencia-copilot-format';
+import {
+  capTestigosForTrial,
+  TRIAL_COPILOT_LIMITS,
+} from '@/lib/audiencia-copilot-limits';
 
 const COLLECTION = 'audiencia_sessions';
 const MAX_TEXTO_ANALISIS = 120_000;
@@ -63,7 +67,7 @@ export async function POST(
       lastUpdatedAt: now,
     };
 
-    const testigos: AudienciaTestigo[] = analysis.testigosIdentificados.map((t) => ({
+    const testigosRaw: AudienciaTestigo[] = analysis.testigosIdentificados.map((t) => ({
       id: randomUUID(),
       nombre: t.nombre,
       rol: t.rol,
@@ -80,6 +84,16 @@ export async function POST(
       intercambios: [],
       testimonioCerrado: false,
     }));
+
+    const testigos = capTestigosForTrial(
+      testigosRaw,
+      auth.unlimited,
+      TRIAL_COPILOT_LIMITS.maxTestigos
+    );
+    const testigosTruncados =
+      !auth.unlimited && testigosRaw.length > testigos.length
+        ? testigosRaw.length - testigos.length
+        : 0;
 
     const titulo =
       analysis.caratula?.trim() ||
@@ -107,6 +121,7 @@ export async function POST(
       testigoActivoId,
       titulo,
       step: 'analyzed',
+      testigosTruncados,
       meta: { provider: 'Google Gemini', model: GEMINI_MODEL_ID, usage },
       tokenUsage,
     });

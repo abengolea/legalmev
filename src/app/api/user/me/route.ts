@@ -55,6 +55,8 @@ export async function GET(request: NextRequest) {
         isColegioAdmin,
         audienciaCopilot,
         audienciaCopilotTrial: data.audienciaCopilotTrial ?? null,
+        premiumSource: data.premiumSource ?? null,
+        colegioName: typeof data.colegioName === 'string' ? data.colegioName : null,
       },
     });
   } catch (err) {

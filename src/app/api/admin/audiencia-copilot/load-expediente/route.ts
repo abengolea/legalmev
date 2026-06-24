@@ -1,20 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import { FieldValue } from 'firebase-admin/firestore';
 import { getAdminDb } from '@/lib/firebase-admin';
 import { authorizeAudienciaCopilot } from '@/lib/audiencia-copilot-api-auth';
 import {
+  AUDIENCIA_COPILOT_TRIAL_SESSIONS,
   canCreateAudienciaSession,
   type AudienciaCopilotTrial,
 } from '@/lib/audiencia-copilot-access';
-import { requireGoogleGenAiApiKey } from '@/lib/google-ai-key';
 import { GEMINI_MODEL_ID } from '@/lib/gemini-model';
+import { EMPTY_TOKEN_USAGE } from '@/lib/ai-token-usage';
 import {
-  normalizeGeminiSdkUsage,
-  normalizeTokenUsage,
-  sumTokenUsage,
-} from '@/lib/ai-token-usage';
-import type { AudienciaTestigo } from '@/lib/audiencia-session-types';
+  extractTextFromPdfBuffer,
+  PdfExtractError,
+  PDF_EXTRACT_CODES,
+} from '@/lib/pdf-text-extract';
 import { EMPTY_REPRESENTACION } from '@/lib/audiencia-session-types';
 
 const COLLECTION = 'audiencia_sessions';
@@ -34,7 +33,7 @@ async function readUploadFile(file: FormDataEntryValue | null): Promise<{
   return { buffer, name };
 }
 
-/** Paso 1: extrae texto del PDF y crea sesión en Firestore. */
+/** Paso 1: extrae texto del PDF localmente y crea sesión en Firestore. */
 export async function POST(request: NextRequest) {
   try {
     const auth = await authorizeAudienciaCopilot(request);
@@ -59,7 +58,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const apiKey = requireGoogleGenAiApiKey();
     const form = await request.formData();
     const upload = await readUploadFile(form.get('file'));
 
@@ -74,38 +72,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: GEMINI_MODEL_ID });
-
-    const extractResult = await model.generateContent([
-      {
-        inlineData: {
-          mimeType: 'application/pdf',
-          data: upload.buffer.toString('base64'),
-        },
-      },
-      `Extraé el texto completo de este expediente judicial exportado en PDF.
-Conservá la estructura por actuaciones si es posible.
-Solo el texto extraído, sin comentarios ni resúmenes.`,
-    ]);
-
-    const texto = extractResult.response.text()?.trim();
-    if (!texto) {
-      return NextResponse.json(
-        { ok: false, error: 'Gemini no devolvió texto del PDF' },
-        { status: 422 }
-      );
-    }
-
-    const extractUsage = normalizeGeminiSdkUsage(extractResult.response.usageMetadata);
-    const tokenUsage = {
-      ...extractUsage,
-      model: GEMINI_MODEL_ID,
-      lastUpdatedAt: new Date().toISOString(),
-    };
+    const { texto: textoCompleto, numPages, charsPerPage } = await extractTextFromPdfBuffer(
+      upload.buffer
+    );
+    const texto = textoCompleto.slice(0, MAX_TEXTO_GUARDADO);
 
     const now = new Date().toISOString();
     const titulo = upload.name.replace(/\.pdf$/i, '') || 'Audiencia';
+    const tokenUsage = {
+      ...EMPTY_TOKEN_USAGE,
+      model: GEMINI_MODEL_ID,
+      lastUpdatedAt: now,
+    };
 
     const sessionRef = adminDb.collection(COLLECTION).doc();
 
@@ -113,7 +91,7 @@ Solo el texto extraído, sin comentarios ni resúmenes.`,
       userId: auth.uid,
       titulo,
       pdfFileName: upload.name,
-      expedienteTexto: texto.slice(0, MAX_TEXTO_GUARDADO),
+      expedienteTexto: texto,
       analysisStatus: 'pending',
       testigos: [],
       testigoActivoId: null,
@@ -126,9 +104,26 @@ Solo el texto extraído, sin comentarios ni resúmenes.`,
     });
 
     if (!auth.unlimited) {
-      await adminDb.collection('users').doc(auth.uid).update({
-        'audienciaCopilotTrial.used': FieldValue.increment(1),
-      });
+      const existingTrial = copilotUser.audienciaCopilotTrial;
+      if (!existingTrial || typeof existingTrial.limit !== 'number') {
+        await adminDb.collection('users').doc(auth.uid).set(
+          {
+            audienciaCopilotTrial: {
+              limit: AUDIENCIA_COPILOT_TRIAL_SESSIONS,
+              used: 1,
+              grantedAt: now,
+              grantedBy: 'auto',
+            },
+            updatedAt: now,
+          },
+          { merge: true }
+        );
+      } else {
+        await adminDb.collection('users').doc(auth.uid).update({
+          'audienciaCopilotTrial.used': FieldValue.increment(1),
+          updatedAt: now,
+        });
+      }
     }
 
     return NextResponse.json({
@@ -137,19 +132,27 @@ Solo el texto extraído, sin comentarios ni resúmenes.`,
       titulo,
       textoLength: texto.length,
       pdfSizeKb: Math.round(upload.buffer.length / 1024),
+      numPages,
+      charsPerPage,
       step: 'extracted',
       meta: {
-        provider: 'Google Gemini',
-        model: GEMINI_MODEL_ID,
+        extractMethod: 'local',
         fileName: upload.name,
-        usage: extractUsage,
       },
       tokenUsage,
     });
   } catch (err) {
     console.error('[audiencia-copilot/load-expediente]', err);
+    if (err instanceof PdfExtractError) {
+      return NextResponse.json(
+        { ok: false, error: err.message, code: err.code },
+        { status: 422 }
+      );
+    }
     const message = err instanceof Error ? err.message : 'Error interno';
-    const status = message.includes('GOOGLE_GENAI_API_KEY') ? 503 : 500;
-    return NextResponse.json({ ok: false, error: message }, { status });
+    return NextResponse.json(
+      { ok: false, error: message, code: PDF_EXTRACT_CODES.EMPTY_PDF },
+      { status: 500 }
+    );
   }
 }

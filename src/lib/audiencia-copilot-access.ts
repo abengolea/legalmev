@@ -1,7 +1,18 @@
 import { normalizeEmail } from '@/lib/platform-admin';
 
-/** Audiencias incluidas en la prueba gratuita otorgada por super admin. */
-export const AUDIENCIA_COPILOT_TRIAL_SESSIONS = 3;
+/** Audiencias incluidas en la prueba gratuita de cada cuenta registrada. */
+export const AUDIENCIA_COPILOT_TRIAL_SESSIONS = 1;
+
+export function buildDefaultAudienciaCopilotTrial(
+  grantedBy = 'registration'
+): AudienciaCopilotTrial {
+  return {
+    limit: AUDIENCIA_COPILOT_TRIAL_SESSIONS,
+    used: 0,
+    grantedAt: new Date().toISOString(),
+    grantedBy,
+  };
+}
 
 export type AudienciaCopilotTrial = {
   limit: number;
@@ -48,11 +59,15 @@ export function resolveAudienciaCopilotAccess(
   }
 
   const trial = user.audienciaCopilotTrial;
-  if (trial && typeof trial.limit === 'number' && trial.limit > 0) {
+  if (trial && typeof trial.limit === 'number') {
+    if (trial.limit <= 0) {
+      const used = typeof trial.used === 'number' ? trial.used : 0;
+      return { hasAccess: false, unlimited: false, remaining: 0, limit: 0, used };
+    }
     const used = typeof trial.used === 'number' ? trial.used : 0;
     const remaining = Math.max(0, trial.limit - used);
     return {
-      hasAccess: true,
+      hasAccess: remaining > 0,
       unlimited: false,
       remaining,
       limit: trial.limit,
@@ -60,7 +75,14 @@ export function resolveAudienciaCopilotAccess(
     };
   }
 
-  return { hasAccess: false, unlimited: false, remaining: 0, limit: 0, used: 0 };
+  // Prueba incluida al registrarse (usuarios existentes sin campo explícito).
+  return {
+    hasAccess: true,
+    unlimited: false,
+    remaining: AUDIENCIA_COPILOT_TRIAL_SESSIONS,
+    limit: AUDIENCIA_COPILOT_TRIAL_SESSIONS,
+    used: 0,
+  };
 }
 
 /** Puede ver y usar el copiloto (prueba activa o acceso ilimitado). */

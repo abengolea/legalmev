@@ -8,6 +8,9 @@ export const AlegatosGlobalesInputSchema = z.object({
   testimoniosAudienciaTexto: z.string().describe(
     'Todos los testimonios cerrados de la audiencia: P/R, admisiones y conclusiones por declarante.'
   ),
+  documentosAdicionalesTexto: z.string().optional().describe(
+    'Documentos complementarios cargados por el abogado (pericias, escritos, notas).'
+  ),
   caratula: z.string().optional(),
 });
 
@@ -49,6 +52,7 @@ REGLAS:
 - Estructura sugerida del alegatoGlobal: (1) introducción y objeto, (2) hechos probados en audiencia, (3) análisis por ejes temáticos cruzando declarantes, (4) refutación de la línea contraria, (5) conclusión y petitorio.
 - Tono profesional, oral pero preciso. Párrafos claros, sin markdown.
 - Adaptá terminología al fuero (civil: actor/demandado; penal: defensa/fiscalía/imputado).
+- Si hay documentos adicionales, integrá su contenido cuando sea argumentalmente relevante (no los cites como mera transcripción).
 
 {{#if caratula}}**Carátula:** {{caratula}}{{/if}}
 
@@ -57,6 +61,11 @@ REGLAS:
 
 **Contexto del expediente:**
 {{{expedienteContexto}}}
+
+{{#if documentosAdicionalesTexto}}
+**Documentos adicionales cargados por el abogado:**
+{{{documentosAdicionalesTexto}}}
+{{/if}}
 
 **Testimonios completos de la audiencia (todos los declarantes):**
 {{{testimoniosAudienciaTexto}}}

@@ -3,6 +3,13 @@ import { getAdminDb } from '@/lib/firebase-admin';
 import { authorizeAudienciaCopilot } from '@/lib/audiencia-copilot-api-auth';
 import type { AudienciaSessionData, AudienciaSessionPatch, RepresentacionCaso } from '@/lib/audiencia-session-types';
 import { EMPTY_REPRESENTACION } from '@/lib/audiencia-session-types';
+import {
+  countAudienciaSessionUsage,
+  getCopilotLimitsForContext,
+  isAudienciaSessionPaid,
+  trialIntercambioLimitForTestigo,
+  trialLimitError,
+} from '@/lib/audiencia-copilot-limits';
 
 const COLLECTION = 'audiencia_sessions';
 
@@ -47,12 +54,20 @@ export async function GET(
       representacion: (result.data!.representacion as RepresentacionCaso) ?? { ...EMPTY_REPRESENTACION },
       alegatoGlobal: result.data!.alegatoGlobal as string | undefined,
       alegatoGlobalMeta: result.data!.alegatoGlobalMeta as AudienciaSessionData['alegatoGlobalMeta'],
+      documentosAdicionales:
+        (result.data!.documentosAdicionales as AudienciaSessionData['documentosAdicionales']) || [],
       tokenUsage: result.data!.tokenUsage as AudienciaSessionData['tokenUsage'],
+      audienciaPagada: result.data!.audienciaPagada === true,
+      audienciaPagoMeta: result.data!.audienciaPagoMeta as AudienciaSessionData['audienciaPagoMeta'],
       createdAt: (result.data!.createdAt as string) || '',
       updatedAt: (result.data!.updatedAt as string) || '',
     };
 
-    return NextResponse.json({ ok: true, session });
+    return NextResponse.json({
+      ok: true,
+      session,
+      audienciaPagada: session.audienciaPagada === true,
+    });
   } catch (err) {
     console.error('[audiencia-copilot/sessions/[id] GET]', err);
     return NextResponse.json(
@@ -79,6 +94,38 @@ export async function PATCH(
 
     const body = (await request.json()) as AudienciaSessionPatch;
     const update: Record<string, unknown> = { updatedAt: new Date().toISOString() };
+
+    const limits = getCopilotLimitsForContext(
+      auth.unlimited,
+      isAudienciaSessionPaid(result.data)
+    );
+    if (limits && body.testigos !== undefined) {
+      if (body.testigos.length > limits.maxTestigos) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: trialLimitError(
+              limits,
+              { testigos: body.testigos.length, intercambiosTotal: 0, documentosAdicionales: 0 },
+              'add_testigo'
+            ),
+            code: 'TRIAL_LIMIT',
+          },
+          { status: 403 }
+        );
+      }
+      const usage = countAudienciaSessionUsage({ testigos: body.testigos });
+      const totalErr = trialLimitError(limits, usage, 'add_intercambio');
+      if (totalErr) {
+        return NextResponse.json({ ok: false, error: totalErr, code: 'TRIAL_LIMIT' }, { status: 403 });
+      }
+      for (const testigo of body.testigos) {
+        const perErr = trialIntercambioLimitForTestigo(limits, testigo);
+        if (perErr) {
+          return NextResponse.json({ ok: false, error: perErr, code: 'TRIAL_LIMIT' }, { status: 403 });
+        }
+      }
+    }
 
     if (body.titulo !== undefined) update.titulo = body.titulo;
     if (body.testigos !== undefined) update.testigos = body.testigos;
