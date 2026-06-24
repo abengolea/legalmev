@@ -4,6 +4,7 @@ import type {
   AudienciaIntercambio,
   AudienciaTestigo,
   BandejaDeclarante,
+  DocumentoAdicionalAudiencia,
   ParteProcesalDeclarante,
   ParteRepresentada,
   RepresentacionCaso,
@@ -284,4 +285,32 @@ export function formatTestimoniosAudienciaContexto(
       return blocks.filter(Boolean).join('\n');
     })
     .join('\n\n');
+}
+
+const MAX_DOC_CONTEXTO_CHARS = 48_000;
+
+export function formatDocumentosAdicionalesContexto(
+  documentos: DocumentoAdicionalAudiencia[] | undefined | null
+): string {
+  if (!documentos?.length) return '';
+
+  let remaining = MAX_DOC_CONTEXTO_CHARS;
+  const parts: string[] = [];
+
+  for (const doc of documentos) {
+    if (remaining <= 0) break;
+    const header = doc.descripcion.trim()
+      ? `--- ${doc.descripcion.trim()} (${doc.fileName}) ---`
+      : `--- ${doc.fileName} ---`;
+    let body = doc.texto.trim();
+    if (body.length > remaining) {
+      body = `${body.slice(0, remaining)}\n[... documento truncado por tamaño ...]`;
+      remaining = 0;
+    } else {
+      remaining -= body.length;
+    }
+    parts.push(`${header}\n${body}`);
+  }
+
+  return parts.join('\n\n');
 }

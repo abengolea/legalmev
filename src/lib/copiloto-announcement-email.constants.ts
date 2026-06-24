@@ -1,0 +1,2 @@
+export const COPILOTO_ANNOUNCEMENT_CAMPAIGN = 'copiloto_audiencia_v1';
+export const COPILOTO_ANNOUNCEMENT_CONFIRM = 'ENVIAR_COPILOTO';

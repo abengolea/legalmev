@@ -20,6 +20,9 @@ export default function LandingLayout({
           </div>
           <div className="flex flex-1 items-center justify-end space-x-2">
             <nav className="flex items-center space-x-2">
+              <Button asChild variant="ghost" className="hidden sm:inline-flex">
+                <Link href="/landing/instrucciones">Ayuda</Link>
+              </Button>
               <Button asChild variant="ghost">
                 <Link href="/login">Iniciar Sesión</Link>
               </Button>

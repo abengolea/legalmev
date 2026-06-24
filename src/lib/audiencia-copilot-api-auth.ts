@@ -32,5 +32,5 @@ export async function authorizeAudienciaCopilot(
     );
   }
 
-  return { uid: auth.uid, unlimited: access.unlimited };
+  return { uid: auth.uid, unlimited: access.unlimited, access };
 }

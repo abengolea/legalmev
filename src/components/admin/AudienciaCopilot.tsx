@@ -1,8 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { auth } from '@/lib/firebase';
-import { safeResJson } from '@/lib/utils';
+import { cn, safeResJson } from '@/lib/utils';
 import type { AudienciaCopilotOutput } from '@/ai/flows/audiencia-copilot';
 import type { ExpedienteAnalysisOutput } from '@/ai/flows/audiencia-expediente-analysis';
 import type {
@@ -11,11 +12,13 @@ import type {
   AudienciaSessionSummary,
   AudienciaTestigo,
   BandejaDeclarante,
+  DocumentoAdicionalAudiencia,
   ParteRepresentada,
   RepresentacionCaso,
 } from '@/lib/audiencia-session-types';
 import { EMPTY_REPRESENTACION, mergePreguntasATodos, migrateSessionRepreguntas, normalizeAudienciaAnalysis, normalizeRepreguntas, splitRepreguntas } from '@/lib/audiencia-session-types';
 import type { RepreguntaItem } from '@/lib/audiencia-session-types';
+import type { AudienciaCopilotLimits } from '@/lib/audiencia-copilot-limits';
 import {
   esFueroPenal,
   etiquetasBandejaDeclarante,
@@ -35,12 +38,25 @@ import {
 import { EditablePreguntasList } from '@/components/admin/EditablePreguntasList';
 import { EditableRepreguntasList } from '@/components/admin/EditableRepreguntasList';
 import {
+  AudienciaCopilotUpgradeDialog,
+  type AudienciaCopilotUpgradeReason,
+} from '@/components/AudienciaCopilotUpgradeDialog';
+import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
@@ -64,14 +80,17 @@ import {
   Gavel,
   Lightbulb,
   Loader2,
+  Paperclip,
   Plus,
   RefreshCw,
   Scale,
+  ScanLine,
+  Sparkles,
+  Trash2,
   User,
   Wifi,
   WifiOff,
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
 
 function sameRepresentacion(a: RepresentacionCaso, b: RepresentacionCaso): boolean {
   return a.parte === b.parte && a.clienteNombre === b.clienteNombre && a.notas === b.notas;
@@ -130,7 +149,7 @@ function alertBadgeClass(tipo: 'roja' | 'amarilla' | 'azul') {
 }
 
 const LOAD_STEPS = [
-  { key: 'extract', label: 'Extrayendo texto del PDF' },
+  { key: 'extract', label: 'Leyendo texto del PDF' },
   { key: 'analyze', label: 'Analizando expediente con Gemini' },
   { key: 'save', label: 'Guardando audiencia' },
 ] as const;
@@ -168,10 +187,17 @@ function formatFecha(iso: string) {
 export function AudienciaCopilot() {
   const { toast } = useToast();
   const [aiStatus, setAiStatus] = useState<AiStatus | null>(null);
+  const [trialLimits, setTrialLimits] = useState<AudienciaCopilotLimits | null>(null);
+  const [audienciaPagada, setAudienciaPagada] = useState(false);
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const [upgradeReason, setUpgradeReason] = useState<AudienciaCopilotUpgradeReason>('general');
   const [isLoading, setIsLoading] = useState(false);
+  const [analyzingTestigoId, setAnalyzingTestigoId] = useState<string | null>(null);
   const [loadProgress, setLoadProgress] = useState<LoadProgress | null>(null);
   const loadTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const loadElapsedRef = useRef(0);
+  const analysisTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const analysisGenRef = useRef<Record<string, number>>({});
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [sessions, setSessions] = useState<AudienciaSessionSummary[]>([]);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
@@ -197,11 +223,27 @@ export function AudienciaCopilot() {
     AudienciaSessionData['alegatoGlobalMeta']
   >();
   const [generandoAlegatos, setGenerandoAlegatos] = useState(false);
+  const [refinandoAlegato, setRefinandoAlegato] = useState(false);
+  const [instruccionesAlegato, setInstruccionesAlegato] = useState('');
+  const [documentosAdicionales, setDocumentosAdicionales] = useState<DocumentoAdicionalAudiencia[]>(
+    []
+  );
+  const [descripcionDocumento, setDescripcionDocumento] = useState('');
+  const [subiendoDocumento, setSubiendoDocumento] = useState(false);
+  const [pdfEscaneadoOpen, setPdfEscaneadoOpen] = useState(false);
+  const [pdfEscaneadoMensaje, setPdfEscaneadoMensaje] = useState('');
   const [reanalizandoCaso, setReanalizandoCaso] = useState(false);
   const [tokenUsage, setTokenUsage] = useState<AiTokenUsageMeta>({ ...EMPTY_TOKEN_USAGE });
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const docAdicionalInputRef = useRef<HTMLInputElement>(null);
   const skipSaveRef = useRef(true);
   const sessionsLoadedRef = useRef(false);
+  const searchParams = useSearchParams();
+  const mpHandledRef = useRef(false);
+  const testigosRef = useRef(testigos);
+  testigosRef.current = testigos;
+
+  const analizandoTestigoActivo = analyzingTestigoId === testigoActivoId;
 
   const testigoActivo = testigos.find((t) => t.id === testigoActivoId) ?? null;
   const tipoFuero = expedienteAnalysis?.tipoFuero ?? 'civil';
@@ -221,6 +263,40 @@ export function AudienciaCopilot() {
   const progresoTestimonios =
     testigos.length > 0 ? Math.round((testimoniosCerrados / testigos.length) * 100) : 0;
   const puedeReanalizarCaso = !!expedienteAnalysis && !!representacion.parte && !!sessionId;
+  const intercambiosTotales = testigos.reduce((n, t) => n + t.intercambios.length, 0);
+  const intercambiosTestigoActivo = testigoActivo?.intercambios.length ?? 0;
+  const alcanzoLimiteTestigos =
+    !!trialLimits && !audienciaPagada && testigos.length >= trialLimits.maxTestigos;
+  const alcanzoLimiteIntercambiosTotal =
+    !!trialLimits && !audienciaPagada && intercambiosTotales >= trialLimits.maxIntercambiosTotal;
+  const alcanzoLimiteIntercambiosTestigo =
+    !!trialLimits &&
+    !audienciaPagada &&
+    intercambiosTestigoActivo >= trialLimits.maxIntercambiosPerTestigo;
+  const alcanzoLimiteDocumentos =
+    !!trialLimits &&
+    !audienciaPagada &&
+    documentosAdicionales.length >= trialLimits.maxDocumentosAdicionales;
+  const alcanzoLimitePruebaSesion =
+    alcanzoLimiteTestigos ||
+    alcanzoLimiteIntercambiosTotal ||
+    alcanzoLimiteDocumentos;
+
+  const abrirUpsell = useCallback((reason: AudienciaCopilotUpgradeReason) => {
+    setUpgradeReason(reason);
+    setUpgradeOpen(true);
+  }, []);
+
+  const mostrarErrorPdfEscaneado = useCallback((error?: string, code?: string) => {
+    const esEscaneado = code === 'SCANNED_PDF';
+    setPdfEscaneadoMensaje(
+      error ||
+        (esEscaneado
+          ? 'Este PDF parece ser un escaneo sin texto seleccionable.'
+          : 'No se pudo leer el PDF.')
+    );
+    setPdfEscaneadoOpen(true);
+  }, []);
 
   const aplicarTokenUsage = useCallback((next?: AiTokenUsageMeta | null) => {
     if (!next) return;
@@ -378,17 +454,22 @@ export function AudienciaCopilot() {
     setRepresentacionGuardada({ ...EMPTY_REPRESENTACION });
     setAlegatoGlobal('');
     setAlegatoGlobalMeta(undefined);
+    setInstruccionesAlegato('');
+    setDocumentosAdicionales([]);
+    setDescripcionDocumento('');
     setTokenUsage({ ...EMPTY_TOKEN_USAGE });
     setNuevaPregunta('');
     setNuevaRespuesta('');
     setNuevoNombre('');
     setNuevoRol('');
     setSaveStatus('idle');
+    setAudienciaPagada(false);
     localStorage.removeItem(LAST_SESSION_KEY);
   }, []);
 
   const handleNuevaAudiencia = () => {
     resetParaNuevaAudiencia();
+    setAudienciaPagada(false);
     fileInputRef.current?.click();
   };
 
@@ -409,6 +490,8 @@ export function AudienciaCopilot() {
     setRepresentacionGuardada(rep);
     setAlegatoGlobal(session.alegatoGlobal ?? '');
     setAlegatoGlobalMeta(session.alegatoGlobalMeta);
+    setDocumentosAdicionales(session.documentosAdicionales ?? []);
+    setAudienciaPagada(session.audienciaPagada === true);
     setTokenUsage(
       session.tokenUsage
         ? {
@@ -427,6 +510,35 @@ export function AudienciaCopilot() {
     localStorage.setItem(LAST_SESSION_KEY, session.id);
     setSaveStatus('saved');
   }, []);
+
+  const refreshCopilotLimits = useCallback(async (forSessionId?: string | null) => {
+    const user = auth.currentUser;
+    if (!user) return;
+    try {
+      const token = await user.getIdToken();
+      const qs = forSessionId ? `?sessionId=${encodeURIComponent(forSessionId)}` : '';
+      const res = await fetch(`/api/admin/audiencia-copilot${qs}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await safeResJson<{
+        ok: boolean;
+        trialLimits?: AudienciaCopilotLimits | null;
+        audienciaPagada?: boolean;
+      }>(res);
+      if (json.ok) {
+        setTrialLimits(json.trialLimits ?? null);
+        if (typeof json.audienciaPagada === 'boolean') {
+          setAudienciaPagada(json.audienciaPagada);
+        }
+      }
+    } catch {
+      /* opcional */
+    }
+  }, []);
+
+  useEffect(() => {
+    if (sessionId) void refreshCopilotLimits(sessionId);
+  }, [sessionId, refreshCopilotLimits]);
 
   const fetchSessions = useCallback(async () => {
     const user = auth.currentUser;
@@ -607,6 +719,41 @@ export function AudienciaCopilot() {
   }, [sessionId, representacion, esPenal, toast]);
 
   useEffect(() => {
+    const mp = searchParams.get('mp');
+    const returnSessionId = searchParams.get('sessionId');
+    if (!mp || mpHandledRef.current) return;
+    mpHandledRef.current = true;
+
+    if (mp === 'success') {
+      toast({
+        title: '¡Pago acreditado!',
+        description: 'Tu audiencia completa está activa. Ya podés seguir cargando preguntas.',
+      });
+      if (returnSessionId) {
+        void loadSessionById(returnSessionId).then(() => refreshCopilotLimits(returnSessionId));
+      } else {
+        void refreshCopilotLimits(sessionId);
+      }
+      setUpgradeOpen(false);
+    } else if (mp === 'pending') {
+      toast({
+        title: 'Pago pendiente',
+        description: 'Te avisaremos cuando se acredite. Si ya pagaste, recargá en unos minutos.',
+      });
+    } else if (mp === 'failure') {
+      toast({
+        variant: 'destructive',
+        title: 'Pago no completado',
+        description: 'Podés intentar de nuevo cuando quieras.',
+      });
+    }
+
+    if (typeof window !== 'undefined') {
+      window.history.replaceState({}, '', '/dashboard/copiloto-audiencias');
+    }
+  }, [searchParams, toast, loadSessionById, refreshCopilotLimits, sessionId]);
+
+  useEffect(() => {
     const loadStatus = async () => {
       const user = auth.currentUser;
       if (!user) return;
@@ -615,7 +762,9 @@ export function AudienciaCopilot() {
         const res = await fetch('/api/admin/audiencia-copilot', {
           headers: { Authorization: `Bearer ${token}` },
         });
-        const json = await safeResJson<{ ok: boolean } & Partial<AiStatus>>(res);
+        const json = await safeResJson<{ ok: boolean } & Partial<AiStatus> & {
+          trialLimits?: AudienciaCopilotLimits | null;
+        }>(res);
         if (json.ok) {
           setAiStatus({
             provider: json.provider ?? 'Google Gemini',
@@ -623,6 +772,7 @@ export function AudienciaCopilot() {
             keyConfigured: !!json.keyConfigured,
             ready: !!json.ready,
           });
+          setTrialLimits(json.trialLimits ?? null);
         }
       } catch {
         setAiStatus(null);
@@ -678,9 +828,14 @@ export function AudienciaCopilot() {
         textoLength?: number;
         tokenUsage?: AiTokenUsageMeta;
         error?: string;
+        code?: string;
       }>(extractRes);
 
       if (!extractJson.ok || !extractJson.sessionId) {
+        if (extractJson.code === 'SCANNED_PDF' || extractJson.code === 'EMPTY_PDF') {
+          mostrarErrorPdfEscaneado(extractJson.error, extractJson.code);
+          return;
+        }
         throw new Error(extractJson.error || `Error al leer PDF (${extractRes.status})`);
       }
 
@@ -705,6 +860,7 @@ export function AudienciaCopilot() {
         testigos?: Testigo[];
         testigoActivoId?: string | null;
         titulo?: string;
+        testigosTruncados?: number;
         tokenUsage?: AiTokenUsageMeta;
         error?: string;
       }>(analyzeRes);
@@ -728,20 +884,32 @@ export function AudienciaCopilot() {
       setRepresentacionGuardada({ ...EMPTY_REPRESENTACION });
       setAlegatoGlobal('');
       setAlegatoGlobalMeta(undefined);
+      setDocumentosAdicionales([]);
+      setInstruccionesAlegato('');
       setAnalysis(EMPTY_ANALYSIS);
       localStorage.setItem(LAST_SESSION_KEY, analyzeJson.sessionId);
       setSaveStatus('saved');
       void fetchSessions();
 
       const count = analyzeJson.testigos?.length ?? 0;
+      if (analyzeJson.testigosTruncados && analyzeJson.testigosTruncados > 0) {
+        toast({
+          title: 'Prueba gratuita',
+          description: `Se importaron ${count} declarantes (máx. ${trialLimits?.maxTestigos ?? 10} en prueba). El expediente detectó más testigos.`,
+        });
+      }
       toast({
         title: 'Expediente listo',
         description: `${analyzeJson.titulo ?? 'Audiencia'} — ${count} declarante(s) en ${loadElapsedRef.current || 'unos'} segundos.`,
       });
     } catch (err) {
+      const msg = err instanceof Error ? err.message : 'No se pudo cargar el PDF';
+      if (/prueba|límite|limite|alcanzaste/i.test(msg)) {
+        abrirUpsell('nueva_audiencia');
+      }
       toast({
         title: 'Error',
-        description: err instanceof Error ? err.message : 'No se pudo cargar el PDF',
+        description: msg,
         variant: 'destructive',
       });
     } finally {
@@ -752,6 +920,10 @@ export function AudienciaCopilot() {
 
   const agregarTestigo = () => {
     if (!nuevoNombre.trim()) return;
+    if (alcanzoLimiteTestigos) {
+      abrirUpsell('testigos');
+      return;
+    }
     const t: Testigo = {
       id: crypto.randomUUID(),
       nombre: nuevoNombre.trim(),
@@ -868,61 +1040,123 @@ export function AudienciaCopilot() {
     [testigoActivoId]
   );
 
-  const analizarTestigo = useCallback(
-    async (testigo: Testigo) => {
-      if (!expedienteAnalysis) return;
-      if (!representacion.parte) {
-        toast({
-          title: 'Falta indicar representación',
-          description: esPenal
-            ? 'En el paso 1, elegí si representás a la defensa o a la fiscalía.'
-            : 'En el paso 1, elegí si representás al actor o al demandado.',
-          variant: 'destructive',
-        });
-        return;
-      }
-      if (representacionDirty) {
-        toast({
-          title: 'Guardá la representación',
-          description:
-            'Usá «Sincronizar y reanalizar» en el paso 1 o guardá antes de analizar.',
-          variant: 'destructive',
-        });
-        return;
-      }
+  const validarAntesDeAnalizar = useCallback((): boolean => {
+    if (!expedienteAnalysis) return false;
+    if (!representacion.parte) {
+      toast({
+        title: 'Falta indicar representación',
+        description: esPenal
+          ? 'En el paso 1, elegí si representás a la defensa o a la fiscalía.'
+          : 'En el paso 1, elegí si representás al actor o al demandado.',
+        variant: 'destructive',
+      });
+      return false;
+    }
+    if (representacionDirty) {
+      toast({
+        title: 'Guardá la representación',
+        description:
+          'Usá «Sincronizar y reanalizar» en el paso 1 o guardá antes de analizar.',
+        variant: 'destructive',
+      });
+      return false;
+    }
+    return true;
+  }, [expedienteAnalysis, esPenal, representacion.parte, representacionDirty, toast]);
 
-      setIsLoading(true);
+  const ejecutarAnalisisTestigo = useCallback(
+    async (testigo: Testigo) => {
+      if (!validarAntesDeAnalizar()) return;
+
+      const gen = (analysisGenRef.current[testigo.id] ?? 0) + 1;
+      analysisGenRef.current[testigo.id] = gen;
+      setAnalyzingTestigoId(testigo.id);
+
       try {
         const { analysis: analysisResult, todos } = await fetchAnalisisParaTestigo(
           testigo,
           representacionContexto
         );
+        if (analysisGenRef.current[testigo.id] !== gen) return;
+
         setPreguntasATodos((prev) => mergePreguntasATodos(prev, todos));
-        setAnalysis(analysisResult);
         setAnalysisByTestigoId((prev) => ({ ...prev, [testigo.id]: analysisResult }));
+        if (testigoActivoId === testigo.id) {
+          setAnalysis(analysisResult);
+        }
       } catch (err) {
+        if (analysisGenRef.current[testigo.id] !== gen) return;
+        const msg = err instanceof Error ? err.message : 'No se pudo analizar';
+        if (/prueba|límite|limite|fase/i.test(msg)) {
+          abrirUpsell('general');
+        }
         toast({
-          title: 'Error de IA',
-          description: err instanceof Error ? err.message : 'No se pudo analizar',
+          title: msg.includes('prueba') ? 'Límite de prueba' : 'Error de IA',
+          description: msg,
           variant: 'destructive',
         });
       } finally {
-        setIsLoading(false);
+        if (analysisGenRef.current[testigo.id] === gen) {
+          setAnalyzingTestigoId((prev) => (prev === testigo.id ? null : prev));
+        }
       }
     },
     [
-      expedienteAnalysis,
-      esPenal,
-      representacion.parte,
+      validarAntesDeAnalizar,
       representacionContexto,
-      representacionDirty,
       fetchAnalisisParaTestigo,
+      testigoActivoId,
       toast,
     ]
   );
 
-  const agregarIntercambio = async () => {
+  const programarAnalisisTestigo = useCallback(
+    (testigoId: string, delayMs = 1200) => {
+      const existing = analysisTimersRef.current[testigoId];
+      if (existing) clearTimeout(existing);
+      analysisTimersRef.current[testigoId] = setTimeout(() => {
+        delete analysisTimersRef.current[testigoId];
+        const testigo = testigosRef.current.find((t) => t.id === testigoId);
+        if (testigo) void ejecutarAnalisisTestigo(testigo);
+      }, delayMs);
+    },
+    [ejecutarAnalisisTestigo]
+  );
+
+  const analizarTestigo = useCallback(
+    (testigo: Testigo, inmediato = true) => {
+      if (!validarAntesDeAnalizar()) return;
+      if (inmediato) {
+        const pending = analysisTimersRef.current[testigo.id];
+        if (pending) {
+          clearTimeout(pending);
+          delete analysisTimersRef.current[testigo.id];
+        }
+        void ejecutarAnalisisTestigo(testigo);
+      } else {
+        programarAnalisisTestigo(testigo.id);
+      }
+    },
+    [validarAntesDeAnalizar, ejecutarAnalisisTestigo, programarAnalisisTestigo]
+  );
+
+  useEffect(
+    () => () => {
+      Object.values(analysisTimersRef.current).forEach(clearTimeout);
+    },
+    []
+  );
+
+  const agregarIntercambio = () => {
     if (!testigoActivo || !nuevaPregunta.trim() || !nuevaRespuesta.trim()) return;
+    if (alcanzoLimiteIntercambiosTotal) {
+      abrirUpsell('intercambios_total');
+      return;
+    }
+    if (alcanzoLimiteIntercambiosTestigo) {
+      abrirUpsell('intercambios_testigo');
+      return;
+    }
 
     const intercambio: AudienciaIntercambio = {
       id: crypto.randomUUID(),
@@ -930,17 +1164,16 @@ export function AudienciaCopilot() {
       respuesta: nuevaRespuesta.trim(),
     };
 
-    const testigoActualizado: Testigo = {
-      ...testigoActivo,
-      intercambios: [...testigoActivo.intercambios, intercambio],
-    };
-
     setTestigos((prev) =>
-      prev.map((t) => (t.id === testigoActivo.id ? testigoActualizado : t))
+      prev.map((t) =>
+        t.id === testigoActivo.id
+          ? { ...t, intercambios: [...t.intercambios, intercambio] }
+          : t
+      )
     );
     setNuevaPregunta('');
     setNuevaRespuesta('');
-    await analizarTestigo(testigoActualizado);
+    programarAnalisisTestigo(testigoActivo.id);
   };
 
   const generarAlegatosGlobales = useCallback(async () => {
@@ -1011,8 +1244,243 @@ export function AudienciaCopilot() {
     aplicarTokenUsage,
   ]);
 
+  const subirDocumentoAdicional = useCallback(
+    async (file: File) => {
+      if (!sessionId) return;
+      const user = auth.currentUser;
+      if (!user) return;
+
+      setSubiendoDocumento(true);
+      try {
+        const token = await user.getIdToken();
+        const form = new FormData();
+        form.append('file', file);
+        if (descripcionDocumento.trim()) {
+          form.append('descripcion', descripcionDocumento.trim());
+        }
+
+        const res = await fetch(
+          `/api/admin/audiencia-copilot/sessions/${sessionId}/documentos-adicionales`,
+          {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}` },
+            body: form,
+          }
+        );
+        const json = await safeResJson<{
+          ok: boolean;
+          documento?: DocumentoAdicionalAudiencia;
+          documentosAdicionales?: DocumentoAdicionalAudiencia[];
+          tokenUsage?: AiTokenUsageMeta;
+          error?: string;
+          code?: string;
+        }>(res);
+
+        if (!json.ok || !json.documentosAdicionales) {
+          if (json.code === 'SCANNED_PDF' || json.code === 'EMPTY_PDF') {
+            mostrarErrorPdfEscaneado(json.error, json.code);
+            return;
+          }
+          throw new Error(json.error || 'No se pudo cargar el documento');
+        }
+
+        if (json.tokenUsage) aplicarTokenUsage(json.tokenUsage);
+        setDocumentosAdicionales(json.documentosAdicionales);
+        setDescripcionDocumento('');
+        toast({
+          title: 'Documento agregado',
+          description: `${file.name} quedará disponible para los alegatos.`,
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Error';
+        if (/prueba|límite|limite|fase/i.test(msg)) {
+          abrirUpsell('documentos');
+        }
+        toast({
+          title: 'Error al subir documento',
+          description: msg,
+          variant: 'destructive',
+        });
+      } finally {
+        setSubiendoDocumento(false);
+      }
+    },
+    [sessionId, descripcionDocumento, toast, aplicarTokenUsage, mostrarErrorPdfEscaneado]
+  );
+
+  const eliminarDocumentoAdicional = useCallback(
+    async (docId: string) => {
+      if (!sessionId) return;
+      const user = auth.currentUser;
+      if (!user) return;
+
+      try {
+        const token = await user.getIdToken();
+        const res = await fetch(
+          `/api/admin/audiencia-copilot/sessions/${sessionId}/documentos-adicionales/${docId}`,
+          {
+            method: 'DELETE',
+            headers: { Authorization: `Bearer ${token}` },
+          }
+        );
+        const json = await safeResJson<{
+          ok: boolean;
+          documentosAdicionales?: DocumentoAdicionalAudiencia[];
+          error?: string;
+        }>(res);
+        if (!json.ok || !json.documentosAdicionales) {
+          throw new Error(json.error || 'No se pudo eliminar');
+        }
+        setDocumentosAdicionales(json.documentosAdicionales);
+        toast({ title: 'Documento eliminado' });
+      } catch (err) {
+        toast({
+          title: 'Error',
+          description: err instanceof Error ? err.message : 'No se pudo eliminar',
+          variant: 'destructive',
+        });
+      }
+    },
+    [sessionId, toast]
+  );
+
+  const refinarAlegatosGlobales = useCallback(async () => {
+    if (!sessionId || !alegatoGlobal.trim()) return;
+    if (!instruccionesAlegato.trim()) {
+      toast({
+        title: 'Escribí una instrucción',
+        description:
+          'Indicá qué querés mejorar: más énfasis en un tema, acortar, cambiar el tono, etc.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (representacionDirty) {
+      toast({
+        title: 'Guardá la representación',
+        description: 'Guardá la representación en el paso 1 antes de refinar alegatos.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const user = auth.currentUser;
+    if (!user) return;
+
+    setRefinandoAlegato(true);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(
+        `/api/admin/audiencia-copilot/sessions/${sessionId}/alegatos-globales/refinar`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            instrucciones: instruccionesAlegato.trim(),
+            alegatoActual: alegatoGlobal.trim(),
+          }),
+        }
+      );
+      const json = await safeResJson<{
+        ok: boolean;
+        alegatoGlobal?: string;
+        alegatoGlobalMeta?: AudienciaSessionData['alegatoGlobalMeta'];
+        tokenUsage?: AiTokenUsageMeta;
+        error?: string;
+      }>(res);
+      if (!json.ok || !json.alegatoGlobal) {
+        throw new Error(json.error || 'No se pudo refinar el alegato');
+      }
+      if (json.tokenUsage) aplicarTokenUsage(json.tokenUsage);
+      setAlegatoGlobal(json.alegatoGlobal);
+      setAlegatoGlobalMeta(json.alegatoGlobalMeta);
+      setInstruccionesAlegato('');
+      toast({
+        title: 'Alegato actualizado',
+        description: 'La IA aplicó tus instrucciones al borrador.',
+      });
+    } catch (err) {
+      toast({
+        title: 'Error al refinar',
+        description: err instanceof Error ? err.message : 'Error',
+        variant: 'destructive',
+      });
+    } finally {
+      setRefinandoAlegato(false);
+    }
+  }, [
+    sessionId,
+    alegatoGlobal,
+    instruccionesAlegato,
+    representacionDirty,
+    toast,
+    aplicarTokenUsage,
+  ]);
+
   return (
     <div className="space-y-6">
+      {trialLimits && !audienciaPagada && (
+        <div className="rounded-lg border border-amber-300/70 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
+          <p className="font-semibold">Fase de prueba — 1 audiencia gratuita</p>
+          <p className="mt-1 text-xs opacity-90">
+            Hasta {trialLimits.maxTestigos} declarantes · {trialLimits.maxIntercambiosTotal}{' '}
+            preguntas en total · {trialLimits.maxIntercambiosPerTestigo} por declarante ·{' '}
+            {trialLimits.maxDocumentosAdicionales} documento(s) extra. Estamos evaluando la
+            herramienta con casos reales: nos sirve tu devolución, mejoras o detección de errores.
+          </p>
+          <p className="mt-2 text-xs opacity-90">
+            <strong>Consejo:</strong> anotá solo las preguntas y respuestas relevantes (admisiones,
+            contradicciones, hechos clave). No hace falta transcribir toda la audiencia: así la IA
+            rinde mejor y aprovechás mejor los límites de la prueba.
+          </p>
+          {sessionId && (
+            <p className="mt-2 text-xs tabular-nums">
+              Uso: {testigos.length}/{trialLimits.maxTestigos} declarantes · {intercambiosTotales}/
+              {trialLimits.maxIntercambiosTotal} P/R
+            </p>
+          )}
+        </div>
+      )}
+      {audienciaPagada && (
+        <div className="rounded-lg border border-primary/40 bg-primary/5 px-4 py-3 text-sm">
+          <p className="font-semibold text-primary">Audiencia completa contratada</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Sin límites de la prueba gratuita en esta audiencia.
+          </p>
+        </div>
+      )}
+      {trialLimits && !audienciaPagada && alcanzoLimitePruebaSesion && (
+        <div className="rounded-lg border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm">
+          <p className="font-semibold text-destructive">Límite de la fase de prueba alcanzado</p>
+          <p className="mt-1 text-muted-foreground text-xs leading-relaxed">
+            {alcanzoLimiteIntercambiosTotal
+              ? `Llegaste a las ${trialLimits.maxIntercambiosTotal} preguntas incluidas en la prueba.`
+              : alcanzoLimiteTestigos
+                ? `Llegaste al máximo de ${trialLimits.maxTestigos} declarantes en la prueba.`
+                : `Llegaste al máximo de ${trialLimits.maxDocumentosAdicionales} documento(s) extra en la prueba.`}{' '}
+            Podés seguir viendo lo cargado. Para seguir agregando o enviarnos sugerencias, escribinos.
+          </p>
+          <Button
+            type="button"
+            size="sm"
+            className="mt-3"
+            onClick={() =>
+              abrirUpsell(
+                alcanzoLimiteIntercambiosTotal
+                  ? 'intercambios_total'
+                  : alcanzoLimiteTestigos
+                    ? 'testigos'
+                    : 'documentos'
+              )
+            }
+          >
+            Escribinos
+          </Button>
+        </div>
+      )}
       <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-transparent">
         <CardHeader>
           <div className="flex flex-wrap items-start justify-between gap-4">
@@ -1042,11 +1510,19 @@ export function AudienciaCopilot() {
                   {aiStatus.ready ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
                   {aiStatus.ready ? `Gemini · ${aiStatus.model}` : 'Falta API key'}
                 </Badge>
-                {aiStatus.ready && tokenUsage.totalTokens > 0 && (
+                {aiStatus.ready && (
                   <Badge
                     variant="outline"
                     className="gap-1"
-                    title={`Entrada: ${tokenUsage.inputTokens.toLocaleString('es-AR')} · Salida: ${tokenUsage.outputTokens.toLocaleString('es-AR')}`}
+                    title={
+                      tokenUsage.totalTokens > 0
+                        ? `Entrada: ${tokenUsage.inputTokens.toLocaleString('es-AR')} · Salida: ${tokenUsage.outputTokens.toLocaleString('es-AR')}${
+                            tokenUsage.lastUpdatedAt
+                              ? ` · Actualizado: ${new Date(tokenUsage.lastUpdatedAt).toLocaleString('es-AR')}`
+                              : ''
+                          }`
+                        : 'Se actualiza al usar la IA (cargar PDF, analizar, alegatos...)'
+                    }
                   >
                     <Coins className="h-3 w-3" />
                     {formatTokenCount(tokenUsage.totalTokens)} tokens
@@ -1121,7 +1597,8 @@ export function AudienciaCopilot() {
             1. Expediente
           </CardTitle>
           <CardDescription>
-            Subí el PDF exportado desde LegalMev. Gemini lee todo y entiende de qué va el caso.
+            Subí el PDF exportado desde LegalMev (con texto seleccionable, no escaneos). La IA
+            analiza el contenido y entiende de qué va el caso.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -1438,7 +1915,19 @@ export function AudienciaCopilot() {
                       value={nuevoRol}
                       onChange={(e) => setNuevoRol(e.target.value)}
                     />
-                    <Button type="button" size="icon" variant="outline" onClick={agregarTestigo}>
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="outline"
+                      disabled={!alcanzoLimiteTestigos && !nuevoNombre.trim()}
+                      onClick={() => {
+                        if (alcanzoLimiteTestigos) {
+                          abrirUpsell('testigos');
+                          return;
+                        }
+                        agregarTestigo();
+                      }}
+                    >
                       <Plus className="h-4 w-4" />
                     </Button>
                   </div>
@@ -1522,7 +2011,8 @@ export function AudienciaCopilot() {
                 <CardTitle className="text-base">3. Preguntas y respuestas</CardTitle>
                 <CardDescription>
                   Anotá lo que preguntás y lo que responde el declarante; el copiloto actualiza sugerencias,
-                  alertas y conclusiones al instante
+                  alertas y conclusiones al instante. Priorizá intercambios importantes (hechos clave,
+                  admisiones, contradicciones): no es necesario cargar cada pregunta de rutina.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -1564,8 +2054,8 @@ export function AudienciaCopilot() {
                         type="button"
                         variant="outline"
                         size="sm"
-                        disabled={isLoading || !testigoActivo.contextoDeclarante?.trim()}
-                        onClick={() => void analizarTestigo(testigoActivo)}
+                        disabled={!testigoActivo.contextoDeclarante?.trim()}
+                        onClick={() => analizarTestigo(testigoActivo)}
                       >
                         Actualizar sugerencias con este contexto
                       </Button>
@@ -1574,8 +2064,8 @@ export function AudienciaCopilot() {
                           type="button"
                           variant="secondary"
                           size="sm"
-                          disabled={isLoading}
-                          onClick={() => void analizarTestigo(testigoActivo)}
+                          disabled={analizandoTestigoActivo}
+                          onClick={() => analizarTestigo(testigoActivo)}
                         >
                           Re-analizar con posición de{' '}
                           {esPenal
@@ -1625,16 +2115,34 @@ export function AudienciaCopilot() {
                     <Button
                       type="button"
                       className="w-full"
-                      disabled={isLoading || !nuevaPregunta.trim() || !nuevaRespuesta.trim()}
-                      onClick={() => void agregarIntercambio()}
+                      disabled={!nuevaPregunta.trim() || !nuevaRespuesta.trim()}
+                      onClick={agregarIntercambio}
                     >
-                      {isLoading ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      ) : (
-                        <Plus className="mr-2 h-4 w-4" />
+                      <Plus className="mr-2 h-4 w-4" />
+                      Agregar pregunta y respuesta
+                      {analizandoTestigoActivo && (
+                        <Loader2 className="ml-2 h-4 w-4 animate-spin opacity-70" />
                       )}
-                      Agregar y obtener sugerencias
                     </Button>
+                    {alcanzoLimiteIntercambiosTestigo && !alcanzoLimiteIntercambiosTotal && (
+                      <p className="text-xs text-amber-800 dark:text-amber-200">
+                        Límite de preguntas para este declarante ({trialLimits?.maxIntercambiosPerTestigo}).
+                        {' '}
+                        <button
+                          type="button"
+                          className="underline font-medium"
+                          onClick={() => abrirUpsell('intercambios_testigo')}
+                        >
+                          Escribinos
+                        </button>
+                      </p>
+                    )}
+                    {analizandoTestigoActivo && (
+                      <p className="text-xs text-muted-foreground">
+                        La IA está actualizando sugerencias en segundo plano. Podés seguir cargando
+                        más intercambios.
+                      </p>
+                    )}
 
                     {testigoActivo && (
                       <label className="flex items-center gap-2 rounded-lg border border-dashed p-3 text-sm cursor-pointer">
@@ -1665,6 +2173,12 @@ export function AudienciaCopilot() {
                 <CardTitle className="flex items-center gap-2 text-base">
                   <Lightbulb className="h-4 w-4" />
                   Copiloto IA
+                  {analizandoTestigoActivo && (
+                    <Badge variant="outline" className="gap-1 text-[10px] font-normal">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      Analizando...
+                    </Badge>
+                  )}
                 </CardTitle>
                 <CardDescription>
                   Análisis en tiempo real del declarante activo
@@ -1832,12 +2346,110 @@ export function AudienciaCopilot() {
                 <Progress value={progresoTestimonios} className="h-2" />
               </div>
 
+              <div className="rounded-lg border border-dashed border-muted-foreground/30 bg-muted/20 p-4 space-y-3">
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold flex items-center gap-2">
+                    <Paperclip className="h-4 w-4" />
+                    Documentos adicionales (opcional)
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    PDF con texto seleccionable o .txt / .md: pericias, escritos, notas de
+                    estrategia, etc. La IA los usa al armar y refinar el alegato. No escaneos.
+                  </p>
+                </div>
+
+                <input
+                  ref={docAdicionalInputRef}
+                  type="file"
+                  accept=".pdf,application/pdf,.txt,.md,.csv,text/plain,text/markdown"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) void subirDocumentoAdicional(file);
+                    e.target.value = '';
+                  }}
+                />
+
+                <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                  <Input
+                    value={descripcionDocumento}
+                    onChange={(e) => setDescripcionDocumento(e.target.value)}
+                    placeholder="Etiqueta opcional (ej. Pericia topográfica, Escrito de clausura...)"
+                    className="text-sm bg-background"
+                    disabled={subiendoDocumento}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={subiendoDocumento || !sessionId}
+                    onClick={() => {
+                      if (alcanzoLimiteDocumentos) {
+                        abrirUpsell('documentos');
+                        return;
+                      }
+                      docAdicionalInputRef.current?.click();
+                    }}
+                  >
+                    {subiendoDocumento ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Paperclip className="mr-2 h-4 w-4" />
+                    )}
+                    Adjuntar archivo
+                  </Button>
+                </div>
+
+                {documentosAdicionales.length > 0 ? (
+                  <ul className="space-y-2">
+                    {documentosAdicionales.map((doc) => (
+                      <li
+                        key={doc.id}
+                        className="flex items-start justify-between gap-2 rounded-md border bg-background px-3 py-2 text-sm"
+                      >
+                        <div className="min-w-0">
+                          <p className="font-medium truncate">
+                            {doc.descripcion.trim() || doc.fileName}
+                          </p>
+                          {doc.descripcion.trim() ? (
+                            <p className="text-xs text-muted-foreground truncate">{doc.fileName}</p>
+                          ) : null}
+                          <p className="text-xs text-muted-foreground">
+                            {Math.round(doc.textoLength / 1000)}k caracteres ·{' '}
+                            {new Date(doc.uploadedAt).toLocaleString('es-AR', {
+                              day: '2-digit',
+                              month: '2-digit',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </p>
+                        </div>
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          className="shrink-0 h-8 w-8 text-muted-foreground hover:text-destructive"
+                          disabled={subiendoDocumento}
+                          onClick={() => void eliminarDocumentoAdicional(doc.id)}
+                          title="Quitar documento"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    Sin documentos extra. Podés armar alegatos igual; esto es opcional.
+                  </p>
+                )}
+              </div>
+
               <Button
                 type="button"
                 className="w-full sm:w-auto"
                 disabled={
                   generandoAlegatos ||
-                  isLoading ||
+                  analyzingTestigoId !== null ||
                   !todosTestimoniosCerrados ||
                   representacionDirty ||
                   !representacion.parte
@@ -1885,18 +2497,74 @@ export function AudienciaCopilot() {
                 )}
 
               {alegatoGlobal ? (
-                <div className="space-y-2">
-                  <Label className="text-sm font-semibold">Alegato de cierre (editable)</Label>
-                  <Textarea
-                    value={alegatoGlobal}
-                    onChange={(e) => setAlegatoGlobal(e.target.value)}
-                    className="min-h-[280px] resize-y text-sm leading-relaxed"
-                  />
-                  {alegatoGlobalMeta?.generadoAt && (
-                    <p className="text-[10px] text-muted-foreground">
-                      Generado: {new Date(alegatoGlobalMeta.generadoAt).toLocaleString('es-AR')}
-                    </p>
-                  )}
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label className="text-sm font-semibold">Alegato de cierre (editable)</Label>
+                    <Textarea
+                      value={alegatoGlobal}
+                      onChange={(e) => setAlegatoGlobal(e.target.value)}
+                      className="min-h-[280px] resize-y text-sm leading-relaxed"
+                    />
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-muted-foreground">
+                      {alegatoGlobalMeta?.generadoAt && (
+                        <span>
+                          Generado:{' '}
+                          {new Date(alegatoGlobalMeta.generadoAt).toLocaleString('es-AR')}
+                        </span>
+                      )}
+                      {alegatoGlobalMeta?.refinadoAt && (
+                        <span>
+                          Última mejora:{' '}
+                          {new Date(alegatoGlobalMeta.refinadoAt).toLocaleString('es-AR')}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg border border-dashed border-primary/40 bg-primary/5 p-4 space-y-3">
+                    <div className="space-y-1">
+                      <Label htmlFor="instrucciones-alegato" className="text-sm font-semibold">
+                        Instrucciones para mejorar el alegato
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        Pedile a la IA que ajuste el borrador: más énfasis en un testigo o pericia,
+                        acortar, profundizar la refutación, suavizar el tono, etc. Se usa el texto
+                        actual del cuadro (incluidas tus ediciones manuales).
+                      </p>
+                    </div>
+                    <Textarea
+                      id="instrucciones-alegato"
+                      value={instruccionesAlegato}
+                      onChange={(e) => setInstruccionesAlegato(e.target.value)}
+                      placeholder="Ej: Hacé más incapié en la pericia topográfica y en las admisiones del testigo Janin. Acortá la introducción."
+                      className="min-h-[88px] resize-y text-sm bg-background"
+                      disabled={refinandoAlegato}
+                    />
+                    {alegatoGlobalMeta?.ultimasInstrucciones && !instruccionesAlegato && (
+                      <p className="text-[11px] text-muted-foreground italic">
+                        Última instrucción aplicada: «{alegatoGlobalMeta.ultimasInstrucciones}»
+                      </p>
+                    )}
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      className="w-full sm:w-auto"
+                      disabled={
+                        refinandoAlegato ||
+                        generandoAlegatos ||
+                        !instruccionesAlegato.trim() ||
+                        representacionDirty
+                      }
+                      onClick={() => void refinarAlegatosGlobales()}
+                    >
+                      {refinandoAlegato ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Sparkles className="mr-2 h-4 w-4" />
+                      )}
+                      Mejorar con IA
+                    </Button>
+                  </div>
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground">
@@ -1907,6 +2575,40 @@ export function AudienciaCopilot() {
           </Card>
         </div>
       )}
+
+      <AlertDialog open={pdfEscaneadoOpen} onOpenChange={setPdfEscaneadoOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <ScanLine className="h-5 w-5 text-destructive" />
+              PDF no compatible
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-sm text-muted-foreground">
+                <p>{pdfEscaneadoMensaje}</p>
+                <p>
+                  <strong className="text-foreground">Qué usar:</strong> el PDF que exportás desde
+                  LegalMev o el sistema judicial (texto seleccionable con el mouse).
+                </p>
+                <p>
+                  <strong className="text-foreground">Qué no sirve:</strong> fotocopias escaneadas,
+                  fotos del expediente o PDFs que son solo imagen.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction>Entendido</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AudienciaCopilotUpgradeDialog
+        open={upgradeOpen}
+        onOpenChange={setUpgradeOpen}
+        reason={upgradeReason}
+        limits={trialLimits}
+      />
     </div>
   );
 }

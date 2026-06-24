@@ -37,6 +37,12 @@ export default function LandingPage() {
                 <Link href="/login">Ya tengo cuenta</Link>
               </Button>
             </div>
+            <p className="text-sm text-slate-400">
+              ¿Primera vez?{' '}
+              <Link href="/landing/instrucciones" className="text-[#7ec8ca] hover:underline font-medium">
+                Ver guía paso a paso y preguntas frecuentes
+              </Link>
+            </p>
           </div>
           <div className="relative z-10">
             <div className="rounded-xl border border-[#2A6A78]/40 bg-[#1e4a55]/50 p-2 shadow-2xl shadow-[#2A6A78]/10">
@@ -156,29 +162,34 @@ export default function LandingPage() {
               <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#54A6A8]/25 text-[#7ec8ca] font-bold text-xl ring-2 ring-[#54A6A8]/40">
                 1
               </div>
-              <h3 className="font-semibold text-slate-100 text-lg">Registrate</h3>
+              <h3 className="font-semibold text-slate-100 text-lg">Registrate y verificá</h3>
               <p className="text-base text-slate-300 leading-relaxed max-w-xs mx-auto">
-                Creá tu cuenta con tu email (ingresalo dos veces para confirmar).
+                Creá tu cuenta, confirmá tu email y obtené 5 descargas gratuitas.
               </p>
             </div>
             <div className="text-center space-y-4">
               <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#54A6A8]/25 text-[#7ec8ca] font-bold text-xl ring-2 ring-[#54A6A8]/40">
                 2
               </div>
-              <h3 className="font-semibold text-slate-100 text-lg">Listo</h3>
+              <h3 className="font-semibold text-slate-100 text-lg">Instalá y conectá</h3>
               <p className="text-base text-slate-300 leading-relaxed max-w-xs mx-auto">
-                Ya tenés acceso a 5 descargas gratuitas. Instalá la extensión y empezá a exportar.
+                Agregá la extensión en Chrome y vinculala con tu usuario de LegalMev.
               </p>
             </div>
             <div className="text-center space-y-4">
               <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#54A6A8]/25 text-[#7ec8ca] font-bold text-xl ring-2 ring-[#54A6A8]/40">
                 3
               </div>
-              <h3 className="font-semibold text-slate-100 text-lg">Descargá expedientes</h3>
+              <h3 className="font-semibold text-slate-100 text-lg">Exportá a PDF</h3>
               <p className="text-base text-slate-300 leading-relaxed max-w-xs mx-auto">
-                Instalá la extensión, entrá a MEV o PJN y exportá a PDF con un clic.
+                Entrá a MEV o PJN, abrí un expediente y descargalo con un clic.
               </p>
             </div>
+          </div>
+          <div className="text-center mt-10">
+            <Button variant="outline" className="border-[#54A6A8]/50 text-[#7ec8ca] hover:bg-[#54A6A8]/20" asChild>
+              <Link href="/landing/instrucciones">Ver guía completa y preguntas frecuentes</Link>
+            </Button>
           </div>
         </div>
       </section>

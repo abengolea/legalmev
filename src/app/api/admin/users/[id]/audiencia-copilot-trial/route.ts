@@ -6,7 +6,7 @@ import { AUDIENCIA_COPILOT_TRIAL_SESSIONS } from '@/lib/audiencia-copilot-access
 
 /**
  * POST /api/admin/users/[id]/audiencia-copilot-trial
- * Otorga prueba gratuita del copiloto de audiencias (3 sesiones).
+ * Otorga prueba gratuita del copiloto de audiencias (1 sesión).
  */
 export async function POST(
   request: NextRequest,

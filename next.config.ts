@@ -3,6 +3,7 @@ import path from 'path';
 
 const nextConfig: NextConfig = {
   outputFileTracingRoot: path.join(__dirname),
+  serverExternalPackages: ['pdf-parse'],
   // App Hosting / `next build`: errores de lint/TS legacy; corregir aparte.
   eslint: { ignoreDuringBuilds: true },
   typescript: { ignoreBuildErrors: true },

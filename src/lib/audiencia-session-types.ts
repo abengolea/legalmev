@@ -144,6 +144,17 @@ export type AudienciaSessionSummary = {
   pdfFileName?: string;
 };
 
+export type DocumentoAdicionalAudiencia = {
+  id: string;
+  fileName: string;
+  /** Etiqueta opcional del abogado (ej. "Pericia complementaria"). */
+  descripcion: string;
+  texto: string;
+  mimeType: string;
+  textoLength: number;
+  uploadedAt: string;
+};
+
 export type AudienciaSessionData = {
   id: string;
   userId: string;
@@ -162,8 +173,18 @@ export type AudienciaSessionData = {
     puntosFuertes?: string[];
     debilidadesContraria?: string[];
     generadoAt?: string;
+    refinadoAt?: string;
+    ultimasInstrucciones?: string;
   };
+  documentosAdicionales?: DocumentoAdicionalAudiencia[];
   tokenUsage?: AiTokenUsageMeta;
+  audienciaPagada?: boolean;
+  audienciaPagoMeta?: {
+    paymentId?: string;
+    monto?: number;
+    moneda?: string;
+    paidAt?: string;
+  };
   createdAt: string;
   updatedAt: string;
 };
