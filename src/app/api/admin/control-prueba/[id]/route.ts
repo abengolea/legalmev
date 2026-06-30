@@ -86,6 +86,10 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     if (body.resumenEjecutivo !== undefined) {
       update.resumenEjecutivo = body.resumenEjecutivo;
     }
+    if (body.parteRepresentada !== undefined) {
+      update.parteRepresentada =
+        body.parteRepresentada === 'demandado' ? 'demandado' : body.parteRepresentada === 'actor' ? 'actor' : '';
+    }
 
     await ref.update(update);
     const updated = await ref.get();

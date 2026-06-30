@@ -55,6 +55,7 @@ import {
   truncateTextoForAnalysis,
 } from '@/lib/control-prueba';
 import type { ImportPreviewPayload } from '@/lib/control-prueba-import-apply';
+import { resumenParaParteRepresentada } from '@/lib/control-prueba-resumen';
 import { extractTextFromPdfFile, PdfExtractError } from '@/lib/pdf-text-extract-client';
 import type {
   ControlPruebaExpediente,
@@ -65,6 +66,7 @@ import type {
   PruebaEstado,
   PruebaParte,
   ResumenEjecutivoImport,
+  ParteRepresentadaPrueba,
 } from '@/types/control-prueba';
 import { PRUEBA_ESTADOS as ESTADOS } from '@/types/control-prueba';
 import { useToast } from '@/hooks/use-toast';
@@ -140,6 +142,9 @@ function persistSnapshotFrom(
     fuero: header.fuero ?? '',
     expedienteUrl: header.expedienteUrl ?? '',
     notas: header.notas ?? '',
+    parteRepresentada: header.parteRepresentada ?? '',
+    actor: header.actor ?? '',
+    demandado: header.demandado ?? '',
     items,
     hitos,
     oficiosAutenticidadPendientes: oficios,
@@ -155,6 +160,9 @@ function syncDraftFromExpediente(exp: ControlPruebaExpediente) {
     fuero: exp.fuero,
     expedienteUrl: exp.expedienteUrl,
     notas: exp.notas,
+    parteRepresentada: exp.parteRepresentada ?? '',
+    actor: exp.actor ?? '',
+    demandado: exp.demandado ?? '',
   };
   const oficios = exp.oficiosAutenticidadPendientes ?? [];
   return {
@@ -251,6 +259,7 @@ function resetImportWizard() {
     importJuzgado: '',
     importExpedienteUrl: '',
     importMergeMode: 'replace' as 'append' | 'replace' | 'reconcile',
+    importParteRepresentada: '' as ParteRepresentadaPrueba | '',
     importStep: '',
     extracting: false,
     analyzing: false,
@@ -287,6 +296,7 @@ export function ControlPruebaPanel() {
   const [importFuero, setImportFuero] = useState('');
   const [importJuzgado, setImportJuzgado] = useState('');
   const [importMergeMode, setImportMergeMode] = useState<'append' | 'replace' | 'reconcile'>('reconcile');
+  const [importParteRepresentada, setImportParteRepresentada] = useState<ParteRepresentadaPrueba | ''>('');
   const [importExpedienteUrl, setImportExpedienteUrl] = useState('');
   const [extracting, setExtracting] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
@@ -509,6 +519,32 @@ export function ControlPruebaPanel() {
   const faltaLinkExpediente = !(headerDraft.expedienteUrl ?? selected?.expedienteUrl ?? '').trim();
   const tieneItemsProducidos = draftItems.some((i) => i.estado === 'producida');
 
+  const parteRepresentada = (headerDraft.parteRepresentada ?? selected?.parteRepresentada ?? '') as
+    | ParteRepresentadaPrueba
+    | '';
+
+  const resumenVisible = useMemo(
+    () =>
+      resumenParaParteRepresentada(
+        draftItems,
+        oficiosDraft,
+        parteRepresentada,
+        resumenDraft,
+        headerDraft.actor ?? selected?.actor,
+        headerDraft.demandado ?? selected?.demandado,
+      ),
+    [
+      draftItems,
+      oficiosDraft,
+      parteRepresentada,
+      resumenDraft,
+      headerDraft.actor,
+      headerDraft.demandado,
+      selected?.actor,
+      selected?.demandado,
+    ],
+  );
+
   const expedienteDraft = useMemo(
     (): ControlPruebaExpediente => ({
       id: selected?.id ?? '',
@@ -517,10 +553,15 @@ export function ControlPruebaPanel() {
       juzgado: headerDraft.juzgado ?? selected?.juzgado,
       fuero: headerDraft.fuero ?? selected?.fuero,
       expedienteUrl: headerDraft.expedienteUrl ?? selected?.expedienteUrl ?? '',
+      actor: headerDraft.actor ?? selected?.actor,
+      demandado: headerDraft.demandado ?? selected?.demandado,
+      parteRepresentada: headerDraft.parteRepresentada ?? selected?.parteRepresentada ?? '',
+      resumenEjecutivo: resumenVisible,
+      oficiosAutenticidadPendientes: oficiosDraft,
       items: draftItems,
       hitos: hitosDraft,
     }),
-    [selected, headerDraft, draftItems, hitosDraft],
+    [selected, headerDraft, draftItems, hitosDraft, oficiosDraft, resumenVisible],
   );
 
   const handleCreate = async () => {
@@ -573,7 +614,8 @@ export function ControlPruebaPanel() {
             items: draftItems,
             hitos: hitosDraft,
             oficiosAutenticidadPendientes: oficiosDraft,
-            resumenEjecutivo: resumenDraft,
+            resumenEjecutivo: resumenVisible ?? resumenDraft,
+            parteRepresentada: headerDraft.parteRepresentada ?? '',
           }),
         });
         const json = await safeResJson<{ ok?: boolean; expediente?: ControlPruebaExpediente; error?: string }>(res);
@@ -609,7 +651,7 @@ export function ControlPruebaPanel() {
         }
       }
     },
-    [selected, headerDraft, draftItems, hitosDraft, oficiosDraft, resumenDraft, buildPersistSnapshot, toast],
+    [selected, headerDraft, draftItems, hitosDraft, oficiosDraft, resumenDraft, resumenVisible, buildPersistSnapshot, toast],
   );
 
   const handleSaveRef = useRef(handleSave);
@@ -655,6 +697,7 @@ export function ControlPruebaPanel() {
     setImportJuzgado(reset.importJuzgado);
     setImportExpedienteUrl(reset.importExpedienteUrl);
     setImportMergeMode(reset.importMergeMode);
+    setImportParteRepresentada(reset.importParteRepresentada);
     setImportStep(reset.importStep);
     setExtracting(reset.extracting);
     setAnalyzing(reset.analyzing);
@@ -806,6 +849,7 @@ export function ControlPruebaPanel() {
           expedienteUrl: importExpedienteUrl,
           pdfFileName: importExtract.pdfFileName,
           previewOnly: true,
+          parteRepresentada: importParteRepresentada,
         }),
       });
       const json = await safeResJson<{
@@ -822,7 +866,11 @@ export function ControlPruebaPanel() {
       }>(res);
 
       if (json.ok && json.preview) {
-        setImportPreview(json.preview);
+        const preview: ImportPreviewPayload = {
+          ...json.preview,
+          parteRepresentada: importParteRepresentada || json.preview.parteRepresentada || '',
+        };
+        setImportPreview(preview);
         setPreviewOpen(true);
         toast({
           title: 'Análisis listo',
@@ -857,13 +905,17 @@ export function ControlPruebaPanel() {
 
   const handleConfirmImport = async (selectedItemIds: string[]) => {
     if (!importPreview || !importExtract) return;
+    const previewToSave: ImportPreviewPayload = {
+      ...importPreview,
+      parteRepresentada: importParteRepresentada || importPreview.parteRepresentada || '',
+    };
     setConfirmingImport(true);
     try {
       const res = await adminFetch('/api/admin/control-prueba/analyze-text', {
         method: 'POST',
         body: JSON.stringify({
           confirmImport: true,
-          preview: importPreview,
+          preview: previewToSave,
           selectedItemIds,
           caratula: importCaratula,
           numeroExpediente: importNumeroExpediente,
@@ -1530,6 +1582,32 @@ export function ControlPruebaPanel() {
                           </Alert>
                         )}
                       </div>
+                      <div>
+                        <Label>Representamos a</Label>
+                        <Select
+                          value={parteRepresentada || '_'}
+                          onValueChange={(v) => {
+                            const parte = v === '_' ? '' : (v as ParteRepresentadaPrueba);
+                            setHeaderDraft((h) => ({ ...h, parteRepresentada: parte }));
+                          }}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Seleccioná la parte…" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="_">Sin definir</SelectItem>
+                            <SelectItem value="actor">
+                              {headerDraft.actor?.trim() || selected?.actor?.trim() || 'Actor'}
+                            </SelectItem>
+                            <SelectItem value="demandado">
+                              {headerDraft.demandado?.trim() || selected?.demandado?.trim() || 'Demandada'}
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <p className="text-[11px] text-muted-foreground mt-1">
+                          El resumen ejecutivo y el informe PDF muestran solo la prueba de tu cliente.
+                        </p>
+                      </div>
                     </div>
                     <div className="flex shrink-0 flex-wrap gap-2">
                       <Button variant="outline" size="sm" onClick={() => {
@@ -1647,24 +1725,29 @@ export function ControlPruebaPanel() {
                 </CardContent>
               </Card>
 
-              {(resumenDraft?.aLibrar?.length ||
-                resumenDraft?.pendiente?.length ||
-                resumenDraft?.producida?.length ||
-                resumenDraft?.recomendaciones?.length) && (
+              {(resumenVisible?.aLibrar?.length ||
+                resumenVisible?.pendiente?.length ||
+                resumenVisible?.producida?.length ||
+                resumenVisible?.recomendaciones?.length) && (
                 <Card className="border-primary/15 bg-muted/20">
                   <CardHeader className="py-3">
-                    <CardTitle className="text-sm">Resumen ejecutivo</CardTitle>
+                    <CardTitle className="text-sm">
+                      Resumen ejecutivo
+                      {parteRepresentada ? ' — nuestra prueba' : ''}
+                    </CardTitle>
                     <CardDescription className="text-xs">
-                      Semáforo importado desde el PDF. Podés ajustar ítems y oficios abajo.
+                      {parteRepresentada
+                        ? `Solo la prueba de ${parteRepresentada === 'actor' ? headerDraft.actor || 'actor' : headerDraft.demandado || 'demandada'}. Cambiá "Representamos a" arriba para ver otra vista.`
+                        : 'Semáforo importado desde el PDF. Indicá a quién representás para filtrar a tu parte.'}
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="pt-0">
                     <div className="grid gap-2 sm:grid-cols-3 text-xs">
-                      {resumenDraft.producida?.length ? (
+                      {resumenVisible?.producida?.length ? (
                         <div className="rounded-lg border border-emerald-300/60 bg-emerald-50/80 p-2">
                           <p className="font-medium text-emerald-900 mb-1">Producida</p>
                           <ul className="text-emerald-900/90 space-y-0.5">
-                            {resumenDraft.producida.map((t, i) => (
+                            {resumenVisible.producida.map((t, i) => (
                               <li key={i} className="line-clamp-2">
                                 {t}
                               </li>
@@ -1672,11 +1755,11 @@ export function ControlPruebaPanel() {
                           </ul>
                         </div>
                       ) : null}
-                      {resumenDraft.pendiente?.length ? (
+                      {resumenVisible?.pendiente?.length ? (
                         <div className="rounded-lg border border-amber-300/60 bg-amber-50/80 p-2">
                           <p className="font-medium text-amber-900 mb-1">Pendiente</p>
                           <ul className="text-amber-900/90 space-y-0.5">
-                            {resumenDraft.pendiente.map((t, i) => (
+                            {resumenVisible.pendiente.map((t, i) => (
                               <li key={i} className="line-clamp-2">
                                 {t}
                               </li>
@@ -1684,11 +1767,11 @@ export function ControlPruebaPanel() {
                           </ul>
                         </div>
                       ) : null}
-                      {resumenDraft.aLibrar?.length ? (
+                      {resumenVisible?.aLibrar?.length ? (
                         <div className="rounded-lg border border-rose-300/60 bg-rose-50/80 p-2">
                           <p className="font-medium text-rose-900 mb-1">A librar</p>
                           <ul className="text-rose-900/90 space-y-0.5">
-                            {resumenDraft.aLibrar.map((t, i) => (
+                            {resumenVisible.aLibrar.map((t, i) => (
                               <li key={i} className="line-clamp-2">
                                 {t}
                               </li>
@@ -1697,9 +1780,9 @@ export function ControlPruebaPanel() {
                         </div>
                       ) : null}
                     </div>
-                    {resumenDraft.recomendaciones?.length ? (
+                    {resumenVisible?.recomendaciones?.length ? (
                       <ul className="mt-3 text-xs text-muted-foreground list-disc pl-4 space-y-0.5">
-                        {resumenDraft.recomendaciones.map((r, i) => (
+                        {resumenVisible.recomendaciones.map((r, i) => (
                           <li key={i}>{r}</li>
                         ))}
                       </ul>
@@ -2084,6 +2167,33 @@ export function ControlPruebaPanel() {
                     </Select>
                   </div>
                 )}
+
+                <div>
+                  <Label>Representamos a (opcional, recomendado)</Label>
+                  <Select
+                    value={importParteRepresentada || '_'}
+                    onValueChange={(v) =>
+                      setImportParteRepresentada(v === '_' ? '' : (v as ParteRepresentadaPrueba))
+                    }
+                    disabled={importBusy}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleccioná antes del análisis IA…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="_">Sin definir aún</SelectItem>
+                      <SelectItem value="actor">
+                        {importPreview?.actor?.trim() || headerDraft.actor?.trim() || selected?.actor?.trim() || 'Actor'}
+                      </SelectItem>
+                      <SelectItem value="demandado">
+                        {importPreview?.demandado?.trim() || headerDraft.demandado?.trim() || selected?.demandado?.trim() || 'Demandada'}
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    El resumen del import mostrará solo la prueba de tu cliente. Podés cambiarlo en la revisión previa.
+                  </p>
+                </div>
               </>
             )}
 
@@ -2133,6 +2243,9 @@ export function ControlPruebaPanel() {
         confirming={confirmingImport}
         onOpenChange={setPreviewOpen}
         onConfirm={(ids) => void handleConfirmImport(ids)}
+        onPreviewChange={setImportPreview}
+        parteRepresentada={importParteRepresentada}
+        onParteRepresentadaChange={setImportParteRepresentada}
       />
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
