@@ -7,7 +7,6 @@ import { ControlPruebaItemsTable } from '@/components/admin/ControlPruebaItemsTa
 import { ControlPruebaKanban } from '@/components/admin/ControlPruebaKanban';
 import { ControlPruebaMetricasPanel } from '@/components/admin/ControlPruebaMetricasPanel';
 import { ControlPruebaImportPreviewDialog } from '@/components/admin/ControlPruebaImportPreviewDialog';
-import { ControlPruebaOficiosAutenticidadBlock } from '@/components/admin/ControlPruebaOficiosAutenticidadBlock';
 import { downloadBlob, exportControlPruebaExcel, exportControlPruebaJson, exportControlPruebaPdf, exportControlPruebaRevisionText, exportFilename } from '@/lib/control-prueba-export';
 import { patchItemConHistorial } from '@/lib/control-prueba-item-utils';
 import { progresoExpedienteHeader } from '@/lib/control-prueba-metricas';
@@ -18,6 +17,11 @@ import {
   syncFechaLimiteDocumentalEnPoder,
 } from '@/lib/control-prueba-documental-poder';
 import { ensureDocumentalMeta } from '@/lib/control-prueba-documental-autenticidad';
+import {
+  collectOficiosAutenticidadFromItems,
+  consolidarAutenticidadDocumentalExpediente,
+  itemsVisiblesControlExpediente,
+} from '@/lib/control-prueba-documental-autenticidad-consolidate';
 import {
   crearCedulaManualVinculada,
   crearCedulaReintentoVinculada,
@@ -164,14 +168,18 @@ function syncDraftFromExpediente(exp: ControlPruebaExpediente) {
     actor: exp.actor ?? '',
     demandado: exp.demandado ?? '',
   };
-  const oficios = exp.oficiosAutenticidadPendientes ?? [];
+  const { items } = consolidarAutenticidadDocumentalExpediente(
+    exp.items.map((item) => ({ ...item })),
+    exp.oficiosAutenticidadPendientes ?? [],
+  );
+  const oficios = collectOficiosAutenticidadFromItems(items);
   return {
     header,
-    items: exp.items.map((item) => ({ ...item })),
+    items,
     hitos: exp.hitos ?? [],
     oficios,
     resumen: exp.resumenEjecutivo,
-    snapshot: persistSnapshotFrom(header, exp.items, exp.hitos ?? [], oficios, exp.resumenEjecutivo),
+    snapshot: persistSnapshotFrom(header, items, exp.hitos ?? [], oficios, exp.resumenEjecutivo),
   };
 }
 
@@ -315,9 +323,15 @@ export function ControlPruebaPanel() {
   } | null>(null);
   const [draftItems, setDraftItems] = useState<ControlPruebaItem[]>([]);
   const [headerDraft, setHeaderDraft] = useState<Partial<ControlPruebaExpediente>>({});
-  const [oficiosDraft, setOficiosDraft] = useState<OficioAutenticidadPendiente[]>([]);
   const [resumenDraft, setResumenDraft] = useState<ResumenEjecutivoImport | undefined>(undefined);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
+  const [quota, setQuota] = useState<{
+    remaining: number;
+    limit: number;
+    used: number;
+    canCreate: boolean;
+    monthlyResetAt?: string | null;
+  } | null>(null);
   const lastSavedSnapshotRef = useRef('');
   const saveInFlightRef = useRef(false);
   const pendingSaveRef = useRef(false);
@@ -326,6 +340,8 @@ export function ControlPruebaPanel() {
     () => expedientes.find((e) => e.id === selectedId) ?? null,
     [expedientes, selectedId],
   );
+
+  const oficiosDraft = useMemo(() => collectOficiosAutenticidadFromItems(draftItems), [draftItems]);
 
   const buildPersistSnapshot = useCallback(
     () => persistSnapshotFrom(headerDraft, draftItems, hitosDraft, oficiosDraft, resumenDraft),
@@ -341,9 +357,21 @@ export function ControlPruebaPanel() {
     setLoading(true);
     try {
       const res = await adminFetch('/api/admin/control-prueba');
-      const json = await safeResJson<{ ok?: boolean; expedientes?: ControlPruebaExpediente[]; error?: string }>(res);
+      const json = await safeResJson<{
+        ok?: boolean;
+        expedientes?: ControlPruebaExpediente[];
+        quota?: {
+          remaining: number;
+          limit: number;
+          used: number;
+          canCreate: boolean;
+          monthlyResetAt?: string | null;
+        } | null;
+        error?: string;
+      }>(res);
       if (json.ok && json.expedientes) {
         setExpedientes(json.expedientes);
+        setQuota(json.quota ?? null);
       } else {
         toast({ variant: 'destructive', title: 'Error', description: json.error ?? 'No se pudo cargar' });
       }
@@ -374,7 +402,6 @@ export function ControlPruebaPanel() {
       setDraftItems([]);
       setHeaderDraft({});
       setHitosDraft([]);
-      setOficiosDraft([]);
       setResumenDraft(undefined);
       setParteTab('actor');
       lastSavedSnapshotRef.current = '';
@@ -387,7 +414,6 @@ export function ControlPruebaPanel() {
     setDraftItems(synced.items);
     setHeaderDraft(synced.header);
     setHitosDraft(synced.hitos);
-    setOficiosDraft(synced.oficios);
     setResumenDraft(synced.resumen);
     setParteTab('actor');
     lastSavedSnapshotRef.current = synced.snapshot;
@@ -421,7 +447,7 @@ export function ControlPruebaPanel() {
   );
 
   const baseFilteredItems = useMemo(() => {
-    let list = draftItems;
+    let list = itemsVisiblesControlExpediente(draftItems);
     const q = busquedaItem.trim().toLowerCase();
     if (q) {
       list = list.filter(
@@ -557,7 +583,7 @@ export function ControlPruebaPanel() {
       demandado: headerDraft.demandado ?? selected?.demandado,
       parteRepresentada: headerDraft.parteRepresentada ?? selected?.parteRepresentada ?? '',
       resumenEjecutivo: resumenVisible,
-      oficiosAutenticidadPendientes: oficiosDraft,
+      oficiosAutenticidadPendientes: [],
       items: draftItems,
       hitos: hitosDraft,
     }),
@@ -582,6 +608,7 @@ export function ControlPruebaPanel() {
         setCreateOpen(false);
         setCreateForm(EMPTY_FORM);
         toast({ title: 'Expediente creado' });
+        void loadExpedientes();
       } else {
         toast({ variant: 'destructive', title: 'Error', description: json.error });
       }
@@ -613,7 +640,7 @@ export function ControlPruebaPanel() {
             ...headerDraft,
             items: draftItems,
             hitos: hitosDraft,
-            oficiosAutenticidadPendientes: oficiosDraft,
+            oficiosAutenticidadPendientes: [],
             resumenEjecutivo: resumenVisible ?? resumenDraft,
             parteRepresentada: headerDraft.parteRepresentada ?? '',
           }),
@@ -956,7 +983,6 @@ export function ControlPruebaPanel() {
         setDraftItems(synced.items);
         setHeaderDraft(synced.header);
         setHitosDraft(synced.hitos);
-        setOficiosDraft(synced.oficios);
         setResumenDraft(synced.resumen);
         lastSavedSnapshotRef.current = synced.snapshot;
         setSaveStatus('saved');
@@ -976,6 +1002,7 @@ export function ControlPruebaPanel() {
               : ''
           }.`,
         });
+        void loadExpedientes();
       } else {
         toast({ variant: 'destructive', title: 'Error al confirmar import', description: json.error });
       }
@@ -1379,6 +1406,26 @@ export function ControlPruebaPanel() {
 
   return (
     <div className="space-y-6">
+      {quota && (
+        <Alert>
+          <AlertDescription className="text-sm">
+            Prueba: {quota.used}/{quota.limit} controles este mes
+            {quota.remaining > 0
+              ? ` · te quedan ${quota.remaining}`
+              : ' · límite alcanzado; podés seguir editando los existentes'}
+            {quota.monthlyResetAt && (
+              <span className="text-muted-foreground">
+                {' '}
+                · se renueva el{' '}
+                {new Date(quota.monthlyResetAt).toLocaleDateString('es-AR', {
+                  day: '2-digit',
+                  month: 'short',
+                })}
+              </span>
+            )}
+          </AlertDescription>
+        </Alert>
+      )}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-xl font-semibold font-headline flex items-center gap-2">
@@ -1394,11 +1441,28 @@ export function ControlPruebaPanel() {
             <RefreshCw className={cn('mr-2 h-4 w-4', loading && 'animate-spin')} />
             Actualizar
           </Button>
-          <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setImportOpen(true)}
+            disabled={quota != null && !quota.canCreate && !selectedId}
+            title={
+              quota != null && !quota.canCreate && !selectedId
+                ? 'Alcanzaste el límite mensual de controles'
+                : undefined
+            }
+          >
             <FileUp className="mr-2 h-4 w-4" />
             Importar PDF
           </Button>
-          <Button size="sm" onClick={() => setCreateOpen(true)}>
+          <Button
+            size="sm"
+            onClick={() => setCreateOpen(true)}
+            disabled={quota != null && !quota.canCreate}
+            title={
+              quota != null && !quota.canCreate ? 'Alcanzaste el límite mensual de controles' : undefined
+            }
+          >
             <Plus className="mr-2 h-4 w-4" />
             Nuevo expediente
           </Button>
@@ -1791,11 +1855,6 @@ export function ControlPruebaPanel() {
                 </Card>
               )}
 
-              <ControlPruebaOficiosAutenticidadBlock
-                oficios={oficiosDraft}
-                onChange={setOficiosDraft}
-              />
-
               <Tabs value={vistaExpediente} onValueChange={(v) => setVistaExpediente(v as typeof vistaExpediente)}>
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <TabsList>
@@ -1885,7 +1944,7 @@ export function ControlPruebaPanel() {
 
                 <TabsContent value="kanban" className="mt-4">
                   <ControlPruebaKanban
-                    items={draftItems.filter(
+                    items={itemsVisiblesControlExpediente(draftItems).filter(
                       (i) =>
                         usaEstadosProduccionPrueba(i) &&
                         (estadoFilter === 'all' || itemVisibleConFiltroEstado(i, estadoFilter)),

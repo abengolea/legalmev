@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import type { ImportPreviewPayload } from '@/lib/control-prueba-import-apply';
+import { collectOficiosAutenticidadFromItems } from '@/lib/control-prueba-documental-autenticidad-consolidate';
 import { PARTE_LABELS, TIPO_LABELS, getEstadoConfig } from '@/lib/control-prueba';
 import { resumenParaParteRepresentada } from '@/lib/control-prueba-resumen';
 import type { ControlPruebaItem, ItemCategoria, ParteRepresentadaPrueba, PruebaParte } from '@/types/control-prueba';
@@ -61,17 +62,22 @@ export function ControlPruebaImportPreviewDialog({
     }
   }, [preview?.items]);
 
+  const oficiosPreview = useMemo(
+    () => (preview ? collectOficiosAutenticidadFromItems(preview.items) : []),
+    [preview],
+  );
+
   const resumenVisible = useMemo(() => {
     if (!preview) return undefined;
     return resumenParaParteRepresentada(
       preview.items,
-      preview.oficiosAutenticidadPendientes,
+      oficiosPreview,
       parteRepresentada,
       preview.resumenEjecutivo,
       preview.actor,
       preview.demandado,
     );
-  }, [preview, parteRepresentada]);
+  }, [preview, parteRepresentada, oficiosPreview]);
 
   const updatePreviewItems = (items: ControlPruebaItem[]) => {
     if (!preview) return;
@@ -81,7 +87,7 @@ export function ControlPruebaImportPreviewDialog({
       parteRepresentada,
       resumenEjecutivo: resumenParaParteRepresentada(
         items,
-        preview.oficiosAutenticidadPendientes,
+        collectOficiosAutenticidadFromItems(items),
         parteRepresentada,
         preview.resumenEjecutivo,
         preview.actor,
@@ -113,7 +119,7 @@ export function ControlPruebaImportPreviewDialog({
       parteRepresentada: parte,
       resumenEjecutivo: resumenParaParteRepresentada(
         preview.items,
-        preview.oficiosAutenticidadPendientes,
+        oficiosPreview,
         parte,
         preview.resumenEjecutivo,
         preview.actor,
@@ -184,12 +190,12 @@ export function ControlPruebaImportPreviewDialog({
               <ResumenBlock resumen={resumenVisible} nuestraParte={!!parteRepresentada} />
             )}
 
-            {preview.oficiosAutenticidadPendientes.length > 0 && (
+            {oficiosPreview.length > 0 && (
               <Alert className="border-rose-300/80 bg-rose-50/90 text-rose-950">
                 <AlertTriangle className="h-4 w-4" />
                 <AlertDescription className="text-xs leading-relaxed">
-                  <strong>{preview.oficiosAutenticidadPendientes.length} oficio(s) de autenticidad</strong>{' '}
-                  detectados (documental negada). Se cargarán en el panel para seguimiento al confirmar.
+                  <strong>{oficiosPreview.length} oficio(s) de autenticidad</strong>{' '}
+                  en documental negada. Quedan embebidos en cada ítem documental al confirmar.
                 </AlertDescription>
               </Alert>
             )}

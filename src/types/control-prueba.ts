@@ -301,12 +301,14 @@ export type DocumentalEnPoderMeta = {
   intimacionOrdenada?: boolean;
 };
 
-/** Documental acompañada al escrito (demanda, contestación, ampliación). Si impugnan autenticidad → informativa + oficio. */
+/** Documental acompañada al escrito (demanda, contestación, ampliación). Si impugnan autenticidad → oficios a librar. */
 export type DocumentalPruebaMeta = {
   autenticidadImpugnada?: boolean;
   fechaImpugnacion?: string | null;
-  /** Destinatario del oficio informativo (banco, escribano, etc.) */
+  /** @deprecated usar oficiosAutenticidad — se mantiene como alias del primer destinatario */
   destinatarioOficio?: string | null;
+  /** Oficios para certificar autenticidad (documental negada), embebidos en el ítem documental */
+  oficiosAutenticidad?: OficioAutenticidadPendiente[];
 };
 
 /** Confesional / testimonial: fijación de audiencia (cédulas = ítems diligencia vinculados) */

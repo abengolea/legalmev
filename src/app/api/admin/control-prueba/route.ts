@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { FieldValue } from 'firebase-admin/firestore';
 import { getAdminDb } from '@/lib/firebase-admin';
-import { requireControlPruebaSuperAdmin } from '@/lib/api-auth';
+import { authorizeControlPrueba } from '@/lib/control-prueba-api-auth';
+import {
+  consumeControlPruebaQuota,
+  type ControlPruebaTrial,
+} from '@/lib/control-prueba-access';
 import {
   CONTROL_PRUEBA_COLLECTION,
   detectSistemaFromUrl,
@@ -22,20 +26,29 @@ function validateInput(body: Partial<ControlPruebaExpedienteInput>): string | nu
 /** GET /api/admin/control-prueba — lista expedientes con control de prueba */
 export async function GET(request: NextRequest) {
   try {
-    const auth = await requireControlPruebaSuperAdmin(request);
+    const auth = await authorizeControlPrueba(request);
     if (auth instanceof NextResponse) return auth;
 
     const adminDb = getAdminDb();
     const { searchParams } = new URL(request.url);
     const q = searchParams.get('q')?.trim().toLowerCase();
 
-    const snap = await adminDb
-      .collection(CONTROL_PRUEBA_COLLECTION)
-      .orderBy('updatedAt', 'desc')
-      .limit(100)
-      .get();
+    let query = adminDb.collection(CONTROL_PRUEBA_COLLECTION).orderBy('updatedAt', 'desc').limit(100);
+    if (!auth.unlimited) {
+      query = adminDb
+        .collection(CONTROL_PRUEBA_COLLECTION)
+        .where('createdBy', '==', auth.uid)
+        .limit(100);
+    }
 
+    const snap = await query.get();
     let expedientes = snap.docs.map((d) => serializeDoc(d.id, d.data()));
+
+    expedientes.sort((a, b) => {
+      const ta = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+      const tb = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+      return tb - ta;
+    });
 
     if (q) {
       expedientes = expedientes.filter((exp) => {
@@ -54,7 +67,19 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    return NextResponse.json({ ok: true, expedientes });
+    return NextResponse.json({
+      ok: true,
+      expedientes,
+      quota: auth.unlimited
+        ? null
+        : {
+            remaining: auth.access.remaining,
+            limit: auth.access.limit,
+            used: auth.access.used,
+            canCreate: auth.access.canCreate,
+            monthlyResetAt: auth.access.monthlyResetAt ?? null,
+          },
+    });
   } catch (err) {
     return NextResponse.json(
       { ok: false, error: err instanceof Error ? err.message : 'Error' },
@@ -66,8 +91,18 @@ export async function GET(request: NextRequest) {
 /** POST /api/admin/control-prueba — crea un expediente de control de prueba */
 export async function POST(request: NextRequest) {
   try {
-    const auth = await requireControlPruebaSuperAdmin(request);
+    const auth = await authorizeControlPrueba(request);
     if (auth instanceof NextResponse) return auth;
+
+    if (!auth.unlimited && !auth.access.canCreate) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: `Alcanzaste el límite de ${auth.access.limit ?? 10} controles este mes. Se renueva automáticamente.`,
+        },
+        { status: 403 },
+      );
+    }
 
     const body = (await request.json()) as Partial<ControlPruebaExpedienteInput>;
     const error = validateInput(body);
@@ -76,6 +111,17 @@ export async function POST(request: NextRequest) {
     }
 
     const adminDb = getAdminDb();
+
+    if (!auth.unlimited) {
+      const quota = await consumeControlPruebaQuota(adminDb, auth.uid, {
+        email: auth.userData.email as string | undefined,
+        controlPruebaTrial: auth.userData.controlPruebaTrial as ControlPruebaTrial | undefined,
+      });
+      if (!quota.ok) {
+        return NextResponse.json({ ok: false, error: quota.error }, { status: 403 });
+      }
+    }
+
     const now = FieldValue.serverTimestamp();
     const expedienteUrl = body.expedienteUrl?.trim() ?? '';
     const record = {

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import * as cheerio from 'cheerio';
-import { requireControlPruebaSuperAdmin } from '@/lib/api-auth';
+import { authorizeControlPrueba } from '@/lib/control-prueba-api-auth';
 import {
   extractMetadataFromExpedienteText,
   mergeMetadataLocal,
@@ -9,7 +9,7 @@ import {
 /** POST /api/admin/control-prueba/scrape-url — extrae texto del expediente virtual */
 export async function POST(request: NextRequest) {
   try {
-    const auth = await requireControlPruebaSuperAdmin(request);
+    const auth = await authorizeControlPrueba(request);
     if (auth instanceof NextResponse) return auth;
 
     const body = (await request.json()) as { url?: string };

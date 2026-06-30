@@ -18,6 +18,7 @@ import {
   normalizeOficiosAutenticidad,
   normalizeResumenEjecutivo,
 } from '@/lib/control-prueba-import-meta';
+import { collectOficiosAutenticidadFromItems } from '@/lib/control-prueba-documental-autenticidad-consolidate';
 import { resumenParaParteRepresentada } from '@/lib/control-prueba-resumen';
 import type { ParteRepresentadaPrueba } from '@/types/control-prueba';
 
@@ -122,7 +123,7 @@ export async function runImportAnalysis(input: RunImportAnalysisInput) {
   console.info('[control-prueba/import] Preview listo', {
     pdfFileName: input.pdfFileName ?? '',
     items: preview.items.length,
-    oficiosAutenticidad: preview.oficiosAutenticidadPendientes.length,
+    oficiosAutenticidad: collectOficiosAutenticidadFromItems(preview.items).length,
     ms: Date.now() - started,
   });
   return { ok: true as const, preview, usage, analysis };
@@ -221,17 +222,19 @@ export async function applyImportToFirestore(input: ApplyImportInput) {
     mergedItems = importedItems;
   }
 
+  const oficiosImport = collectOficiosAutenticidadFromItems(mergedItems);
+
   const importMeta = {
     pdfFileName: input.pdfFileName?.trim() || '',
     pdfImportedAt: nowIso,
     actor: preview.actor,
     demandado: preview.demandado,
     parteRepresentada: preview.parteRepresentada ?? '',
-    oficiosAutenticidadPendientes: normalizeOficiosAutenticidad(preview.oficiosAutenticidadPendientes),
+    oficiosAutenticidadPendientes: [],
     resumenEjecutivo: normalizeResumenEjecutivo(
       resumenParaParteRepresentada(
-        importedItems,
-        preview.oficiosAutenticidadPendientes,
+        mergedItems,
+        oficiosImport,
         preview.parteRepresentada,
         preview.resumenEjecutivo,
         preview.actor,

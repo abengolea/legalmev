@@ -1,5 +1,6 @@
 import type { ControlPruebaExpediente, ControlPruebaItem, ItemCategoria } from '@/types/control-prueba';
 import { getEstadoConfig, PARTE_LABELS, resolveCategoria, TIPO_LABELS } from '@/lib/control-prueba';
+import { collectOficiosAutenticidadFromItems } from '@/lib/control-prueba-documental-autenticidad-consolidate';
 import { labelTipoPrueba } from '@/lib/control-prueba-pericial';
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
@@ -311,8 +312,8 @@ export function exportControlPruebaPdf(exp: ControlPruebaExpediente): Blob {
     y += 2;
   }
 
-  // —— Oficios de autenticidad ——
-  const oficios = exp.oficiosAutenticidadPendientes ?? [];
+  // —— Oficios de autenticidad (embebidos en ítems documental) ——
+  const oficios = collectOficiosAutenticidadFromItems(exp.items);
   if (oficios.length > 0) {
     drawSectionTitle('Oficios de autenticidad pendientes');
     for (const o of oficios) {

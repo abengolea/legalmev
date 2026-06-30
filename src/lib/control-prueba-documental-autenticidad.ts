@@ -1,5 +1,6 @@
-import type { ControlPruebaItem, DocumentalPruebaMeta } from '@/types/control-prueba';
+import type { ControlPruebaItem, DocumentalPruebaMeta, OficioAutenticidadPendiente } from '@/types/control-prueba';
 import { esCierrePrueba } from '@/lib/control-prueba-cierre';
+import { normalizeOficiosAutenticidad } from '@/lib/control-prueba-import-meta';
 
 export const TIPO_DOCUMENTAL = 'documental' as const;
 
@@ -27,14 +28,63 @@ export function ensureDocumentalMeta(item: ControlPruebaItem): ControlPruebaItem
   if (!requiereFlujoAutenticidadDocumental(item.tipo)) return item;
   const prev = item.documental ?? {};
   const autenticidadImpugnada = item.estado === 'autenticidad_impugnada';
+  const oficios = normalizeOficiosAutenticidad(prev.oficiosAutenticidad);
+  const destinatarioOficio =
+    prev.destinatarioOficio?.trim() || oficios[0]?.destinatarioOficio?.trim() || null;
   return {
     ...item,
     documental: {
       autenticidadImpugnada,
       fechaImpugnacion: prev.fechaImpugnacion ?? null,
-      destinatarioOficio: prev.destinatarioOficio ?? null,
+      destinatarioOficio,
+      oficiosAutenticidad: oficios.length ? oficios : undefined,
     },
   };
+}
+
+export function ensureOficiosAutenticidadDocumental(item: ControlPruebaItem): ControlPruebaItem {
+  if (!requiereFlujoAutenticidadDocumental(item.tipo) || item.estado !== 'autenticidad_impugnada') {
+    return item;
+  }
+  const prev = item.documental ?? {};
+  const oficios = normalizeOficiosAutenticidad(prev.oficiosAutenticidad);
+  const dest = prev.destinatarioOficio?.trim();
+  if (oficios.length > 0) {
+    return {
+      ...item,
+      documental: {
+        ...prev,
+        autenticidadImpugnada: true,
+        oficiosAutenticidad: oficios,
+        destinatarioOficio: dest || oficios[0]?.destinatarioOficio || null,
+      },
+    };
+  }
+  if (!dest) return ensureDocumentalMeta(item);
+  const nuevo: OficioAutenticidadPendiente = {
+    id: crypto.randomUUID(),
+    referencia: null,
+    descripcionDocumento: item.descripcion,
+    destinatarioOficio: dest,
+    objetoOficio: `Autenticidad — ${item.descripcion.slice(0, 100)}`,
+    estado: 'a_librar',
+    itemPruebaId: item.id,
+    observaciones: null,
+  };
+  return {
+    ...item,
+    documental: {
+      ...prev,
+      autenticidadImpugnada: true,
+      destinatarioOficio: dest,
+      oficiosAutenticidad: [nuevo],
+    },
+  };
+}
+
+export function contarOficiosAutenticidadDocumental(item: ControlPruebaItem): number {
+  if (item.tipo !== 'documental') return 0;
+  return item.documental?.oficiosAutenticidad?.filter((o) => o.estado === 'a_librar').length ?? 0;
 }
 
 export function patchDocumentalMeta(

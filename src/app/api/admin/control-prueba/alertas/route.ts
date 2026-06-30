@@ -1,17 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminDb } from '@/lib/firebase-admin';
-import { requireControlPruebaSuperAdmin } from '@/lib/api-auth';
+import { authorizeControlPrueba } from '@/lib/control-prueba-api-auth';
 import { CONTROL_PRUEBA_COLLECTION, normalizeItems } from '@/lib/control-prueba';
 import { listarAlertasItems, resumirAlertas } from '@/lib/control-prueba-alertas';
 
 /** GET /api/admin/control-prueba/alertas — resumen global para badge de navegación */
 export async function GET(request: NextRequest) {
   try {
-    const auth = await requireControlPruebaSuperAdmin(request);
+    const auth = await authorizeControlPrueba(request);
     if (auth instanceof NextResponse) return auth;
 
     const adminDb = getAdminDb();
-    const snap = await adminDb.collection(CONTROL_PRUEBA_COLLECTION).limit(100).get();
+    const snap = auth.unlimited
+      ? await adminDb.collection(CONTROL_PRUEBA_COLLECTION).limit(100).get()
+      : await adminDb
+          .collection(CONTROL_PRUEBA_COLLECTION)
+          .where('createdBy', '==', auth.uid)
+          .limit(100)
+          .get();
 
     let totalRiesgo = 0;
     let rojo = 0;

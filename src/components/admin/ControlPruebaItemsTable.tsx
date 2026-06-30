@@ -340,7 +340,7 @@ export function ControlPruebaItemsTable({
                   )}
                   {usaFlujoAutenticidadDocumental(item) && item.estado === 'autenticidad_impugnada' && (
                     <p className="text-[10px] mt-0.5 text-fuchsia-800">
-                      Autenticidad impugnada · expandir para informativa/oficio
+                      Documental negada · expandir para oficios a librar
                     </p>
                   )}
                   {usaFlujoAudienciaParte(item) && (
@@ -450,7 +450,7 @@ export function ControlPruebaItemsTable({
                         )}
                         {contarSubprocesosActivos(item.id, allItems) > 0 && (
                           <p className="text-[10px] text-muted-foreground">
-                            {contarSubprocesosActivos(item.id, allItems)} trámite(s) vinculado(s)
+                            {contarSubprocesosActivos(item.id, allItems)} oficio(s) a librar
                           </p>
                         )}
                       </>

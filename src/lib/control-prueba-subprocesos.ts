@@ -13,7 +13,7 @@ import {
   parteContrariaDefault,
   requiereFlujoDocumentalEnPoder,
 } from '@/lib/control-prueba-documental-poder';
-import { requiereFlujoAutenticidadDocumental } from '@/lib/control-prueba-documental-autenticidad';
+import { requiereFlujoAutenticidadDocumental, ensureOficiosAutenticidadDocumental, contarOficiosAutenticidadDocumental } from '@/lib/control-prueba-documental-autenticidad';
 import type { CedulaNotifMedio } from '@/types/control-prueba';
 import { restarDiasHabiles } from '@/lib/control-prueba-plazos';
 
@@ -578,7 +578,8 @@ function evaluarSubProcesosDocumentalAutenticidad(ctx: SubprocesoEvalContext): S
   const creados: ControlPruebaItem[] = [];
   let items = [...ctx.items];
 
-  const padre = items.find((i) => i.id === ctx.itemId);
+  const padreIdx = items.findIndex((i) => i.id === ctx.itemId);
+  const padre = padreIdx >= 0 ? items[padreIdx] : undefined;
   if (!padre || !requiereFlujoAutenticidadDocumental(padre.tipo)) {
     return { items, creados, alertas };
   }
@@ -591,43 +592,21 @@ function evaluarSubProcesosDocumentalAutenticidad(ctx: SubprocesoEvalContext): S
     estadoAnterior === 'autenticidad_impugnada'
   ) {
     items = eliminarHijosAutenticidadAutoCreados(items, padre.id);
-    alertas.push('Informativa y oficio de autenticidad eliminados (impugnación revertida o postergada).');
+    items[padreIdx] = {
+      ...items[padreIdx]!,
+      documental: {
+        ...items[padreIdx]!.documental,
+        autenticidadImpugnada: false,
+        oficiosAutenticidad: [],
+      },
+    };
+    alertas.push('Oficios de autenticidad eliminados (impugnación revertida o postergada).');
     return { items, creados, alertas };
   }
 
   if (padreConAutenticidadImpugnada(padre)) {
-    const tkInfo = triggerKeyInformativaAutenticidad(padre.id);
-    let informativa = hijosInformativaAutenticidad(items, padre.id)[0];
-
-    if (!informativa && !existeHijoConTrigger(items, tkInfo)) {
-      informativa = buildInformativaAutenticidadDocumental(padre, {
-        autoCreated: true,
-        triggerKey: tkInfo,
-        orden: items.length + 1,
-      });
-      items = [...items, informativa];
-      creados.push(informativa);
-    }
-
-    if (informativa) {
-      const tkOficio = triggerKeyOficioInformativaAutenticidad(padre.id, informativa.id);
-      const tieneOficio =
-        oficiosInformativaAutenticidad(items, informativa.id).length > 0 || existeHijoConTrigger(items, tkOficio);
-
-      if (!tieneOficio) {
-        const oficio = buildOficioInformativaAutenticidad(padre, informativa, {
-          autoCreated: true,
-          triggerKey: tkOficio,
-          orden: items.length + 1,
-        });
-        items = [...items, oficio];
-        creados.push(oficio);
-      }
-    }
-
-    if (creados.length > 0) {
-      alertas.push('Se crearon ítems de informativa y oficio para resolver autenticidad documental.');
-    }
+    items = eliminarHijosAutenticidadAutoCreados(items, padre.id);
+    items[padreIdx] = ensureOficiosAutenticidadDocumental(items[padreIdx]!);
   }
 
   return { items, creados, alertas };
@@ -780,14 +759,11 @@ export function crearMandamientoConduccionTestigo(
 
 export function contarSubprocesosActivos(parentId: string, items: ControlPruebaItem[]): number {
   const padre = items.find((i) => i.id === parentId);
-  const directos = hijosDePadre(parentId, items);
+  const directos = hijosDePadre(parentId, items).filter(
+    (i) => i.vinculo?.rol !== 'informativa_autenticidad',
+  );
   if (padre?.tipo === 'documental') {
-    const oficios = items.filter(
-      (i) =>
-        i.vinculo?.rol === 'oficio_informativa' &&
-        i.diligencia?.pruebaVinculadaId === parentId,
-    );
-    return directos.length + oficios.length;
+    return directos.length + contarOficiosAutenticidadDocumental(padre);
   }
   return directos.length;
 }

@@ -166,8 +166,8 @@ ofrecidaPor: **solo actor o demandado**
 - Si en contestación/trámite la contraparte **niega o impugna la autenticidad**:
   - estadoSugerido: autenticidad_impugnada
   - impugnacionAutenticidad: true
-  - destinatarioOficio: entidad que debe informar (ej. otro juzgado, banco, registro)
-  - El sistema creará prueba informativa + oficio automáticamente.
+  - destinatarioOficio: entidad que debe informar (ej. otro juzgado, banco, registro, ARBA)
+  - **NO crear ítem informativa separado** — la documental negada queda en el mismo ítem documental con oficios en oficiosAutenticidadPendientes
 
 **B) documental_en_poder** — Documentación en poder de la **contraparte**, ofrecida en apertura pero NO adjunta al escrito.
 - parteConDocumentos: actor | demandado | tercero (quien tiene los documentos)
@@ -202,8 +202,8 @@ fechaLimite = fecha de audiencia si está fijada → estadoSugerido: audiencia_f
 ## EJEMPLO DE RAZONAMIENTO (autenticidad documental)
 Si en autos: actor acompañó contrato con la demanda; demandado en contestación niega autenticidad; tribunal ordena oficio al juzgado donde se otorgó la escritura:
 1. Ítem prueba tipo documental (ofrecida en demanda) — NO duplicar cada "acompaña" posterior
-2. Si consta la negación → estadoSugerido autenticidad_impugnada, destinatarioOficio = juzgado oficiado
-3. Diligencia oficio pendiente vinculada, con destinatario y plazo
+2. Si consta la negación → estadoSugerido autenticidad_impugnada, destinatarioOficio = entidad oficiada, oficio en oficiosAutenticidadPendientes
+3. **No** duplicar como prueba informativa suelta
 
 ## EJEMPLO (documental en poder)
 Si en auto de apertura: "prueba documental en poder de la demandada: extractos bancarios" y el juez intimó a exhibir en 10 días:

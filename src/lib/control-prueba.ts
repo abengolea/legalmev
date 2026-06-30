@@ -56,6 +56,11 @@ import {
   syncFechaLimiteDocumentalEnPoder,
 } from '@/lib/control-prueba-documental-poder';
 import { ensureDocumentalMeta } from '@/lib/control-prueba-documental-autenticidad';
+import {
+  consolidarAutenticidadDocumentalExpediente,
+  attachOficiosToDocumentalItems,
+  consolidarInformativasAutenticidadImport,
+} from '@/lib/control-prueba-documental-autenticidad-consolidate';
 import { migrarCedulasEmbebidas } from '@/lib/control-prueba-subprocesos';
 import {
   CEDULA_NOTIF_ESTADO_STYLE,
@@ -686,10 +691,12 @@ function normalizeDocumentalEnPoder(raw: unknown): DocumentalEnPoderMeta | undef
 function normalizeDocumental(raw: unknown): DocumentalPruebaMeta | undefined {
   if (!raw || typeof raw !== 'object') return undefined;
   const d = raw as DocumentalPruebaMeta;
+  const oficios = normalizeOficiosAutenticidad(d.oficiosAutenticidad);
   return {
     autenticidadImpugnada: Boolean(d.autenticidadImpugnada),
     fechaImpugnacion: d.fechaImpugnacion || null,
-    destinatarioOficio: d.destinatarioOficio?.trim() || null,
+    destinatarioOficio: d.destinatarioOficio?.trim() || oficios[0]?.destinatarioOficio?.trim() || null,
+    oficiosAutenticidad: oficios.length ? oficios : undefined,
   };
 }
 
@@ -792,9 +799,12 @@ export function normalizeItems(items: ControlPruebaItem[] | undefined): ControlP
     .filter((item) => item.descripcion.length > 0)
     .sort((a, b) => a.orden - b.orden);
 
-  return migrarCedulasEmbebidas(mapped)
-    .map(normalizarEstadosComunicacion)
-    .map((item, index) => sanitizeForFirestore({ ...item, orden: index + 1 }));
+  return consolidarAutenticidadDocumentalExpediente(
+    migrarCedulasEmbebidas(mapped)
+      .map(normalizarEstadosComunicacion)
+      .map((item, index) => sanitizeForFirestore({ ...item, orden: index + 1 })),
+    [],
+  ).items;
 }
 
 export function countByEstado(items: ControlPruebaItem[]): Record<PruebaEstado, number> {
@@ -981,9 +991,11 @@ export function mapImportToItemsWithFilter(
 } {
   const rawItems = analysis.items ?? analysis.pruebas ?? [];
   const filtered = filtrarItemsImportados(rawItems, startOrden);
-  const items = normalizeItems(filtered.items);
+  let items = normalizeItems(filtered.items);
   const meta = buildImportMeta(analysis, items);
-  return { ...filtered, items, ...meta };
+  items = attachOficiosToDocumentalItems(items, meta.oficiosAutenticidadPendientes);
+  items = consolidarInformativasAutenticidadImport(items);
+  return { ...filtered, items, oficiosAutenticidadPendientes: [], resumenEjecutivo: meta.resumenEjecutivo };
 }
 
 export function serializeControlPruebaDoc(
@@ -1004,7 +1016,10 @@ export function serializeControlPruebaDoc(
     actor: data.actor ?? undefined,
     demandado: data.demandado ?? undefined,
     parteRepresentada: data.parteRepresentada === 'demandado' ? 'demandado' : data.parteRepresentada === 'actor' ? 'actor' : '',
-    items: normalizeItems(data.items),
+    items: consolidarAutenticidadDocumentalExpediente(
+      normalizeItems(data.items),
+      normalizeOficiosAutenticidad(data.oficiosAutenticidadPendientes as OficioAutenticidadPendiente[] | undefined),
+    ).items,
     hitos: Array.isArray(data.hitos)
       ? (data.hitos as ExpedienteHito[]).map((h) => ({
           id: String(h.id || crypto.randomUUID()),
@@ -1013,9 +1028,7 @@ export function serializeControlPruebaDoc(
           label: h.label,
         }))
       : undefined,
-    oficiosAutenticidadPendientes: normalizeOficiosAutenticidad(
-      data.oficiosAutenticidadPendientes as OficioAutenticidadPendiente[] | undefined,
-    ),
+    oficiosAutenticidadPendientes: [],
     resumenEjecutivo: normalizeResumenEjecutivo(
       data.resumenEjecutivo as ResumenEjecutivoImport | undefined,
     ),

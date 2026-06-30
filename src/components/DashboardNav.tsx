@@ -41,8 +41,10 @@ export function DashboardNav() {
     role?: string;
     isPlatformAdmin?: boolean;
     canAccessControlPrueba?: boolean;
+    controlPrueba?: { hasAccess?: boolean };
   } | null>(null);
   const [canAccessCopilot, setCanAccessCopilot] = useState(false);
+  const [canUseControlPrueba, setCanUseControlPrueba] = useState(false);
   const [isColegioAdmin, setIsColegioAdmin] = useState(false);
   const [controlPruebaRiesgo, setControlPruebaRiesgo] = useState(0);
 
@@ -65,16 +67,21 @@ export function DashboardNav() {
               setUserData(j.user);
               setIsColegioAdmin(!!j.user.isColegioAdmin);
               setCanAccessCopilot(!!j.user.audienciaCopilot?.hasAccess);
+              setCanUseControlPrueba(
+                !!j.user.canAccessControlPrueba || !!j.user.controlPrueba?.hasAccess,
+              );
             } else {
               setUserData(null);
               setIsColegioAdmin(false);
               setCanAccessCopilot(false);
+              setCanUseControlPrueba(false);
             }
           })
           .catch(() => {
             setUserData(null);
             setIsColegioAdmin(false);
             setCanAccessCopilot(false);
+            setCanUseControlPrueba(false);
           });
       });
     });
@@ -82,7 +89,7 @@ export function DashboardNav() {
   }, []);
 
   useEffect(() => {
-    if (!userData?.canAccessControlPrueba) {
+    if (!canUseControlPrueba) {
       setControlPruebaRiesgo(0);
       return;
     }
@@ -112,7 +119,7 @@ export function DashboardNav() {
       cancelled = true;
       window.clearInterval(interval);
     };
-  }, [userData?.canAccessControlPrueba]);
+  }, [canUseControlPrueba]);
 
   const isColegioOnly = isColegioAdmin && !userData?.isPlatformAdmin;
 
@@ -206,6 +213,23 @@ export function DashboardNav() {
               >
                 <Link href="/dashboard/copiloto-audiencias">Copiloto Audiencias</Link>
               </SidebarMenuButton>
+            </SidebarMenuItem>
+          )}
+          {canUseControlPrueba && !userData?.isPlatformAdmin && (
+            <SidebarMenuItem className="relative">
+              <SidebarMenuButton
+                asChild
+                isActive={isActive('/dashboard/control-prueba')}
+                icon={<FileSearch />}
+                tooltip={{ children: 'Control de prueba' }}
+              >
+                <Link href="/dashboard/control-prueba">Control de prueba</Link>
+              </SidebarMenuButton>
+              {controlPruebaRiesgo > 0 && (
+                <SidebarMenuBadge className="bg-red-500 text-white">
+                  {controlPruebaRiesgo > 99 ? '99+' : controlPruebaRiesgo}
+                </SidebarMenuBadge>
+              )}
             </SidebarMenuItem>
           )}
             </>

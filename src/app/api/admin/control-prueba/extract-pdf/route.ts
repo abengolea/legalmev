@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireControlPruebaSuperAdmin } from '@/lib/api-auth';
+import { authorizeControlPrueba } from '@/lib/control-prueba-api-auth';
 import {
   extractMetadataFromExpedienteText,
   extractMetadataFromFilename,
@@ -33,7 +33,7 @@ async function readUploadFile(file: FormDataEntryValue | null): Promise<{
  */
 export async function POST(request: NextRequest) {
   try {
-    const auth = await requireControlPruebaSuperAdmin(request);
+    const auth = await authorizeControlPrueba(request);
     if (auth instanceof NextResponse) return auth;
 
     const form = await request.formData();

@@ -37,6 +37,10 @@ import {
   AUDIENCIA_COPILOT_TRIAL_SESSIONS,
   type AudienciaCopilotTrial,
 } from '@/lib/audiencia-copilot-access';
+import {
+  CONTROL_PRUEBA_TRIAL_MONTHLY_LIMIT,
+  type ControlPruebaTrial,
+} from '@/lib/control-prueba-access';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { clientIntakeAutomation } from '@/ai/flows/client-intake-automation';
@@ -89,6 +93,7 @@ type User = {
   premiumForever?: boolean;
   adminNotes?: string | null;
   audienciaCopilotTrial?: AudienciaCopilotTrial | null;
+  controlPruebaTrial?: ControlPruebaTrial | null;
   createdAt?: string;
 };
 
@@ -556,6 +561,66 @@ function UserManagement() {
     }
   };
 
+  const handleGrantControlPruebaTrial = async (userId: string, renew = false) => {
+    const target = users.find((u) => u.id === userId);
+    const msg = renew
+      ? `¿Renovar Control de prueba (${CONTROL_PRUEBA_TRIAL_MONTHLY_LIMIT}/mes) para ${target?.email ?? 'este usuario'}?`
+      : `¿Habilitar Control de prueba (${CONTROL_PRUEBA_TRIAL_MONTHLY_LIMIT} controles/mes) para ${target?.email ?? 'este usuario'}?`;
+    if (!confirm(msg)) return;
+
+    setUpdatingId(userId);
+    try {
+      const { auth } = await import('@/lib/firebase');
+      const user = auth.currentUser;
+      if (!user) throw new Error('No autenticado');
+      const token = await user.getIdToken();
+      const res = await fetch(`/api/admin/users/${userId}/control-prueba-trial`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await safeResJson<{ ok?: boolean; message?: string; error?: string }>(res);
+      if (json.ok) {
+        toast({
+          title: 'Control de prueba habilitado',
+          description: json.message ?? `${CONTROL_PRUEBA_TRIAL_MONTHLY_LIMIT} controles por mes.`,
+        });
+      } else {
+        toast({ variant: 'destructive', title: 'Error', description: json.error ?? 'No se pudo habilitar.' });
+      }
+    } catch (e) {
+      console.error(e);
+      toast({ variant: 'destructive', title: 'Error', description: 'No se pudo habilitar Control de prueba.' });
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const handleRevokeControlPruebaTrial = async (userId: string) => {
+    if (!confirm('¿Quitar el acceso de Control de prueba a este usuario?')) return;
+    setUpdatingId(userId);
+    try {
+      const { auth } = await import('@/lib/firebase');
+      const user = auth.currentUser;
+      if (!user) throw new Error('No autenticado');
+      const token = await user.getIdToken();
+      const res = await fetch(`/api/admin/users/${userId}/control-prueba-trial`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await safeResJson<{ ok?: boolean; message?: string; error?: string }>(res);
+      if (json.ok) {
+        toast({ title: 'Acceso revocado', description: 'El usuario ya no tiene Control de prueba.' });
+      } else {
+        toast({ variant: 'destructive', title: 'Error', description: json.error ?? 'No se pudo revocar.' });
+      }
+    } catch (e) {
+      console.error(e);
+      toast({ variant: 'destructive', title: 'Error', description: 'No se pudo revocar el acceso.' });
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
   const handleResetDownloads = async (userId: string) => {
     setUpdatingId(userId);
     try {
@@ -833,6 +898,11 @@ function UserManagement() {
                         Copiloto {user.audienciaCopilotTrial.used ?? 0}/{user.audienciaCopilotTrial.limit}
                       </Badge>
                     )}
+                    {user.controlPruebaTrial && user.controlPruebaTrial.limit > 0 && (
+                      <Badge variant="outline" className="ml-1 text-xs">
+                        Prueba {user.controlPruebaTrial.used ?? 0}/{user.controlPruebaTrial.limit}
+                      </Badge>
+                    )}
                   </TableCell>
                   <TableCell>{user.colegioName || '-'}</TableCell>
                   <TableCell className="text-right">
@@ -926,6 +996,23 @@ function UserManagement() {
                           ) : (
                             <DropdownMenuItem onClick={() => handleGrantAudienciaCopilotTrial(user.id)}>
                               <Gavel className="h-4 w-4 mr-2" /> Prueba Copiloto ({AUDIENCIA_COPILOT_TRIAL_SESSIONS} audiencias)
+                            </DropdownMenuItem>
+                          )}
+                          {user.controlPruebaTrial?.limit ? (
+                            <>
+                              <DropdownMenuItem onClick={() => handleGrantControlPruebaTrial(user.id, true)}>
+                                <FileSearch className="h-4 w-4 mr-2" /> Renovar Control de prueba ({CONTROL_PRUEBA_TRIAL_MONTHLY_LIMIT}/mes)
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                className="text-destructive focus:text-destructive"
+                                onClick={() => handleRevokeControlPruebaTrial(user.id)}
+                              >
+                                <FileSearch className="h-4 w-4 mr-2" /> Quitar Control de prueba
+                              </DropdownMenuItem>
+                            </>
+                          ) : (
+                            <DropdownMenuItem onClick={() => handleGrantControlPruebaTrial(user.id)}>
+                              <FileSearch className="h-4 w-4 mr-2" /> Control de prueba ({CONTROL_PRUEBA_TRIAL_MONTHLY_LIMIT}/mes)
                             </DropdownMenuItem>
                           )}
                         </DropdownMenuContent>

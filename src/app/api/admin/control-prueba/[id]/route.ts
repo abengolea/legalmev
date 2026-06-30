@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { FieldValue } from 'firebase-admin/firestore';
 import { getAdminDb } from '@/lib/firebase-admin';
-import { requireControlPruebaSuperAdmin } from '@/lib/api-auth';
+import { authorizeControlPrueba } from '@/lib/control-prueba-api-auth';
+import { assertControlPruebaExpedienteOwner } from '@/lib/control-prueba-access';
 import {
   CONTROL_PRUEBA_COLLECTION,
   detectSistemaFromUrl,
@@ -19,18 +20,17 @@ function serializeDoc(id: string, data: FirebaseFirestore.DocumentData) {
 /** GET /api/admin/control-prueba/[id] */
 export async function GET(request: NextRequest, context: RouteContext) {
   try {
-    const auth = await requireControlPruebaSuperAdmin(request);
+    const auth = await authorizeControlPrueba(request);
     if (auth instanceof NextResponse) return auth;
 
     const { id } = await context.params;
     const adminDb = getAdminDb();
-    const snap = await adminDb.collection(CONTROL_PRUEBA_COLLECTION).doc(id).get();
-
-    if (!snap.exists) {
-      return NextResponse.json({ ok: false, error: 'Expediente no encontrado' }, { status: 404 });
+    const owned = await assertControlPruebaExpedienteOwner(adminDb, id, auth.uid, auth.unlimited);
+    if (!owned.ok) {
+      return NextResponse.json({ ok: false, error: owned.error }, { status: owned.status });
     }
 
-    return NextResponse.json({ ok: true, expediente: serializeDoc(snap.id, snap.data() ?? {}) });
+    return NextResponse.json({ ok: true, expediente: serializeDoc(id, owned.data) });
   } catch (err) {
     return NextResponse.json(
       { ok: false, error: err instanceof Error ? err.message : 'Error' },
@@ -42,18 +42,19 @@ export async function GET(request: NextRequest, context: RouteContext) {
 /** PATCH /api/admin/control-prueba/[id] */
 export async function PATCH(request: NextRequest, context: RouteContext) {
   try {
-    const auth = await requireControlPruebaSuperAdmin(request);
+    const auth = await authorizeControlPrueba(request);
     if (auth instanceof NextResponse) return auth;
 
     const { id } = await context.params;
     const body = (await request.json()) as Partial<ControlPruebaExpedienteInput>;
     const adminDb = getAdminDb();
+    const owned = await assertControlPruebaExpedienteOwner(adminDb, id, auth.uid, auth.unlimited);
+    if (!owned.ok) {
+      return NextResponse.json({ ok: false, error: owned.error }, { status: owned.status });
+    }
+
     const ref = adminDb.collection(CONTROL_PRUEBA_COLLECTION).doc(id);
     const snap = await ref.get();
-
-    if (!snap.exists) {
-      return NextResponse.json({ ok: false, error: 'Expediente no encontrado' }, { status: 404 });
-    }
 
     const update: Record<string, unknown> = { updatedAt: FieldValue.serverTimestamp() };
 
@@ -106,19 +107,17 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 /** DELETE /api/admin/control-prueba/[id] */
 export async function DELETE(request: NextRequest, context: RouteContext) {
   try {
-    const auth = await requireControlPruebaSuperAdmin(request);
+    const auth = await authorizeControlPrueba(request);
     if (auth instanceof NextResponse) return auth;
 
     const { id } = await context.params;
     const adminDb = getAdminDb();
-    const ref = adminDb.collection(CONTROL_PRUEBA_COLLECTION).doc(id);
-    const snap = await ref.get();
-
-    if (!snap.exists) {
-      return NextResponse.json({ ok: false, error: 'Expediente no encontrado' }, { status: 404 });
+    const owned = await assertControlPruebaExpedienteOwner(adminDb, id, auth.uid, auth.unlimited);
+    if (!owned.ok) {
+      return NextResponse.json({ ok: false, error: owned.error }, { status: owned.status });
     }
 
-    await ref.delete();
+    await adminDb.collection(CONTROL_PRUEBA_COLLECTION).doc(id).delete();
     return NextResponse.json({ ok: true });
   } catch (err) {
     return NextResponse.json(

@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireControlPruebaSuperAdmin } from '@/lib/api-auth';
+import { getAdminDb } from '@/lib/firebase-admin';
+import { authorizeControlPrueba } from '@/lib/control-prueba-api-auth';
+import {
+  assertControlPruebaExpedienteOwner,
+  consumeControlPruebaQuota,
+  type ControlPruebaTrial,
+} from '@/lib/control-prueba-access';
 import type { ControlPruebaItem } from '@/types/control-prueba';
 import {
   applyImportToFirestore,
@@ -56,15 +62,47 @@ function countByParte(items: ControlPruebaItem[]): Record<string, number> {
  */
 export async function POST(request: NextRequest) {
   try {
-    const auth = await requireControlPruebaSuperAdmin(request);
+    const auth = await authorizeControlPrueba(request);
     if (auth instanceof NextResponse) return auth;
 
     const body = (await request.json()) as AnalyzeBody;
     const mergeMode = body.mergeMode === 'append' ? 'append' : body.mergeMode === 'reconcile' ? 'reconcile' : 'replace';
 
     if (body.confirmImport && body.preview) {
+      const expedienteId = body.expedienteId?.trim() || null;
+      const adminDb = getAdminDb();
+
+      if (expedienteId) {
+        const owned = await assertControlPruebaExpedienteOwner(
+          adminDb,
+          expedienteId,
+          auth.uid,
+          auth.unlimited,
+        );
+        if (!owned.ok) {
+          return NextResponse.json({ ok: false, error: owned.error }, { status: owned.status });
+        }
+      } else if (!auth.unlimited) {
+        if (!auth.access.canCreate) {
+          return NextResponse.json(
+            {
+              ok: false,
+              error: `Alcanzaste el límite de ${auth.access.limit ?? 10} controles este mes. Se renueva automáticamente.`,
+            },
+            { status: 403 },
+          );
+        }
+        const quota = await consumeControlPruebaQuota(adminDb, auth.uid, {
+          email: auth.userData.email as string | undefined,
+          controlPruebaTrial: auth.userData.controlPruebaTrial as ControlPruebaTrial | undefined,
+        });
+        if (!quota.ok) {
+          return NextResponse.json({ ok: false, error: quota.error }, { status: 403 });
+        }
+      }
+
       const applied = await applyImportToFirestore({
-        expedienteId: body.expedienteId?.trim() || null,
+        expedienteId,
         mergeMode,
         pdfFileName: body.pdfFileName,
         preview: body.preview,

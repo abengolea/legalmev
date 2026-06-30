@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuth, getAdminDb } from '@/lib/firebase-admin';
 import { isColegioAdminUser, isControlPruebaSuperAdminUser, isPlatformAdminUser } from '@/lib/platform-admin';
 import { resolveAudienciaCopilotAccess } from '@/lib/audiencia-copilot-access';
+import { resolveControlPruebaAccessForUser } from '@/lib/control-prueba-access';
 
 /**
  * GET /api/user/me
@@ -42,6 +43,13 @@ export async function GET(request: NextRequest) {
         | undefined,
     });
 
+    const controlPrueba = await resolveControlPruebaAccessForUser(adminDb, uid, {
+      email: data.email as string | undefined,
+      controlPruebaTrial: data.controlPruebaTrial as
+        | import('@/lib/control-prueba-access').ControlPruebaTrial
+        | undefined,
+    });
+
     return NextResponse.json({
       ok: true,
       user: {
@@ -55,6 +63,8 @@ export async function GET(request: NextRequest) {
         isPlatformAdmin,
         isColegioAdmin,
         canAccessControlPrueba,
+        controlPrueba,
+        controlPruebaTrial: data.controlPruebaTrial ?? null,
         audienciaCopilot,
         audienciaCopilotTrial: data.audienciaCopilotTrial ?? null,
         premiumSource: data.premiumSource ?? null,

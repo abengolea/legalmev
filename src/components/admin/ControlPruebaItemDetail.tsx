@@ -337,13 +337,7 @@ export function ControlPruebaItemDetail({
       )}
 
       {cat === 'prueba' && requiereFlujoAutenticidadDocumental(item.tipo) && (
-        <ControlPruebaDocumentalAutenticidadBlock
-          item={item}
-          allItems={allItems}
-          onUpdate={onUpdate}
-          onFocusSubproceso={onFocusItem}
-          compact={compact}
-        />
+        <ControlPruebaDocumentalAutenticidadBlock item={item} onUpdate={onUpdate} compact={compact} />
       )}
 
       {cat === 'diligencia' && (
