@@ -1,15 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { MercadoPagoConfig, Preference } from 'mercadopago';
 import { getAuth, getAdminDb } from '@/lib/firebase-admin';
+import { getPaymentsBaseUrl } from '@/lib/payments-base-url';
 
 const SETTINGS_DOC = 'settings/payments';
-
-function getBaseUrl(): string {
-  const env = process.env.NEXT_PUBLIC_SITE_URL;
-  if (env) return env.replace(/\/$/, '');
-  if (process.env.NODE_ENV === 'production') return 'https://www.legalmev.com.ar';
-  return process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:9002';
-}
 
 /**
  * POST /api/payments/create-preference
@@ -54,7 +48,7 @@ export async function POST(request: NextRequest) {
       ? payData.premiumPriceAmount
       : 9999;
     const currency = payData?.currency ?? 'ARS';
-    const baseUrl = getBaseUrl();
+    const baseUrl = getPaymentsBaseUrl();
 
     const client = new MercadoPagoConfig({
       accessToken,

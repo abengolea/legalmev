@@ -1001,7 +1001,7 @@ export function AudienciaCopilot() {
               </div>
             </button>
             <div className="flex flex-wrap items-center justify-between gap-2 border-t px-2 py-1.5">
-              <label className="flex items-center gap-2 text-[11px] text-muted-foreground cursor-pointer">
+              <label className="flex min-w-0 items-center gap-2 text-[11px] text-muted-foreground cursor-pointer">
                 <Checkbox
                   checked={t.testimonioCerrado}
                   onCheckedChange={(v) => actualizarTestimonioCerrado(t.id, v === true)}
@@ -1012,7 +1012,7 @@ export function AudienciaCopilot() {
                 value={t.bandeja}
                 onValueChange={(v) => actualizarBandejaDeclarante(t.id, v as BandejaDeclarante)}
               >
-                <SelectTrigger className="h-7 border-0 bg-transparent text-[10px] shadow-none">
+                <SelectTrigger className="h-7 max-w-[9rem] border-0 bg-transparent text-[10px] shadow-none sm:max-w-none">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -1421,7 +1421,7 @@ export function AudienciaCopilot() {
   ]);
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 max-w-full space-y-6 overflow-x-hidden">
       {trialLimits && !audienciaPagada && (
         <div className="rounded-lg border border-amber-300/70 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
           <p className="font-semibold">Fase de prueba — 1 audiencia gratuita</p>
@@ -1483,12 +1483,12 @@ export function AudienciaCopilot() {
       )}
       <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-transparent">
         <CardHeader>
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="rounded-lg bg-primary/10 p-2">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex min-w-0 items-start gap-3">
+              <div className="rounded-lg bg-primary/10 p-2 shrink-0">
                 <Gavel className="h-6 w-6 text-primary" />
               </div>
-              <div>
+              <div className="min-w-0">
                 <CardTitle>Copiloto de Audiencias</CardTitle>
                 <CardDescription className="max-w-2xl">
                   Asistente de IA para todo lo que pasa en la audiencia: explica el expediente, sugiere
@@ -1543,9 +1543,9 @@ export function AudienciaCopilot() {
               </div>
             )}
           </div>
-          <div className="mt-4 flex flex-wrap items-end gap-3">
+          <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
             {sessions.length > 0 && (
-              <div className="min-w-[240px] flex-1 space-y-1">
+              <div className="min-w-0 w-full flex-1 space-y-1 sm:min-w-[200px]">
                 <Label className="text-xs">Audiencias guardadas</Label>
                 <Select
                   value={sessionId ?? ''}
@@ -1571,7 +1571,7 @@ export function AudienciaCopilot() {
               variant="default"
               disabled={isLoading}
               onClick={handleNuevaAudiencia}
-              className="shrink-0"
+              className="w-full shrink-0 sm:w-auto"
             >
               {isLoading ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -1904,21 +1904,24 @@ export function AudienciaCopilot() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex flex-col gap-2 sm:flex-row">
                     <Input
                       placeholder="Nombre"
                       value={nuevoNombre}
                       onChange={(e) => setNuevoNombre(e.target.value)}
+                      className="min-w-0"
                     />
                     <Input
                       placeholder="Rol"
                       value={nuevoRol}
                       onChange={(e) => setNuevoRol(e.target.value)}
+                      className="min-w-0 sm:max-w-[140px]"
                     />
                     <Button
                       type="button"
                       size="icon"
                       variant="outline"
+                      className="shrink-0 self-end sm:self-auto"
                       disabled={!alcanzoLimiteTestigos && !nuevoNombre.trim()}
                       onClick={() => {
                         if (alcanzoLimiteTestigos) {

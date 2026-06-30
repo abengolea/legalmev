@@ -52,13 +52,13 @@ npm install
 npm run dev
 ```
 
-La app corre en [http://localhost:9002](http://localhost:9002).
+La app corre en [http://localhost:9007](http://localhost:9007).
 
 ## Scripts
 
 | Comando | Descripción |
 |---------|-------------|
-| `npm run dev` | Servidor de desarrollo (Turbopack, puerto 9002) |
+| `npm run dev` | Servidor de desarrollo (Turbopack, puerto 9007) |
 | `npm run build` | Build de producción |
 | `npm run start` | Servidor de producción |
 | `npm run lint` | Ejecutar ESLint |

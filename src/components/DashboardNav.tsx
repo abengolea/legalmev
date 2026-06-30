@@ -15,6 +15,7 @@ import {
   SidebarMenuSub,
   SidebarMenuSubItem,
   SidebarMenuSubButton,
+  SidebarMenuBadge,
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
@@ -23,7 +24,7 @@ import {
 import { Separator } from './ui/separator';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Button } from './ui/button';
-import { LayoutDashboard, LogOut, Shield, Users, Building2, BarChart3, CreditCard, Settings, Landmark, Receipt, Gavel } from 'lucide-react';
+import { LayoutDashboard, LogOut, Shield, Users, Building2, BarChart3, CreditCard, Settings, Landmark, Receipt, Gavel, FileSearch } from 'lucide-react';
 import { Logo } from './Logo';
 import { useSidebar } from '@/components/ui/sidebar';
 
@@ -39,9 +40,11 @@ export function DashboardNav() {
     email?: string;
     role?: string;
     isPlatformAdmin?: boolean;
+    canAccessControlPrueba?: boolean;
   } | null>(null);
   const [canAccessCopilot, setCanAccessCopilot] = useState(false);
   const [isColegioAdmin, setIsColegioAdmin] = useState(false);
+  const [controlPruebaRiesgo, setControlPruebaRiesgo] = useState(0);
 
   useEffect(() => {
     if (isMobile) setOpenMobile(false);
@@ -78,6 +81,39 @@ export function DashboardNav() {
     return () => unsubAuth();
   }, []);
 
+  useEffect(() => {
+    if (!userData?.canAccessControlPrueba) {
+      setControlPruebaRiesgo(0);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadAlertas = async () => {
+      const user = auth.currentUser;
+      if (!user) return;
+      try {
+        const token = await user.getIdToken();
+        const res = await fetch('/api/admin/control-prueba/alertas', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json();
+        if (!cancelled && data?.ok) {
+          setControlPruebaRiesgo(Number(data.totalRiesgo) || 0);
+        }
+      } catch {
+        if (!cancelled) setControlPruebaRiesgo(0);
+      }
+    };
+
+    void loadAlertas();
+    const interval = window.setInterval(loadAlertas, 5 * 60 * 1000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [userData?.canAccessControlPrueba]);
+
   const isColegioOnly = isColegioAdmin && !userData?.isPlatformAdmin;
 
   const isActive = (path: string) => {
@@ -95,7 +131,7 @@ export function DashboardNav() {
     .slice(0, 2) || 'U';
 
   return (
-    <Sidebar>
+    <Sidebar collapsible="icon">
       <SidebarHeader>
         <div className="text-sidebar-foreground">
           <Logo />
@@ -208,6 +244,18 @@ export function DashboardNav() {
                         <Link href="/admin?tab=stats"><BarChart3 className="size-4" /> Estadísticas</Link>
                       </SidebarMenuSubButton>
                     </SidebarMenuSubItem>
+                    {userData?.canAccessControlPrueba && (
+                    <SidebarMenuSubItem className="relative">
+                      <SidebarMenuSubButton asChild isActive={adminTab === 'control-prueba'}>
+                        <Link href="/admin?tab=control-prueba"><FileSearch className="size-4" /> Control de prueba</Link>
+                      </SidebarMenuSubButton>
+                      {controlPruebaRiesgo > 0 && (
+                        <SidebarMenuBadge className="bg-red-500 text-white">
+                          {controlPruebaRiesgo > 99 ? '99+' : controlPruebaRiesgo}
+                        </SidebarMenuBadge>
+                      )}
+                    </SidebarMenuSubItem>
+                    )}
                     <SidebarMenuSubItem>
                       <SidebarMenuSubButton asChild isActive={adminTab === 'payments'}>
                         <Link href="/admin?tab=payments"><CreditCard className="size-4" /> Pagos</Link>

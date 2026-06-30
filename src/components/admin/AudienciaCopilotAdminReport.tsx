@@ -182,7 +182,7 @@ export function AudienciaCopilotAdminReport() {
   }, [tipoFilter, searchDebounced]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 min-w-0 max-w-full overflow-x-hidden">
       <SummaryCards summary={summaryAll ?? summary} loading={loading && !summary} />
 
       <Card>

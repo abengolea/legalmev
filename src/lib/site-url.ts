@@ -1,3 +1,5 @@
+import { LOCAL_DEV_URL } from '@/lib/local-dev';
+
 /**
  * URL base del sitio según el entorno.
  * Producción: https://www.legalmev.com.ar
@@ -12,9 +14,9 @@ export function getSiteUrl(): string {
   const env = process.env.NEXT_PUBLIC_SITE_URL;
   if (env) return env.endsWith('/') ? env.slice(0, -1) : env;
   if (process.env.NODE_ENV === 'production') return PRODUCTION_URL;
-  return process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:9002';
+  return process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : LOCAL_DEV_URL;
 }
 
 export const SITE_URL = typeof window === 'undefined'
-  ? (process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, '') || (process.env.NODE_ENV === 'production' ? PRODUCTION_URL : 'http://localhost:9002'))
+  ? (process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, '') || (process.env.NODE_ENV === 'production' ? PRODUCTION_URL : LOCAL_DEV_URL))
   : '';

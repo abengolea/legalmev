@@ -23,6 +23,35 @@ export function isKnownPlatformAdminEmail(email: string | undefined | null): boo
   return getPlatformAdminEmails().has(normalizeEmail(email));
 }
 
+/** Único superadmin autorizado para Control de prueba (configurable por env). */
+export function getControlPruebaSuperAdminEmails(): Set<string> {
+  const raw =
+    process.env.CONTROL_PRUEBA_SUPERADMIN_EMAIL ||
+    process.env.CONTROL_PRUEBA_SUPERADMIN_EMAILS ||
+    'abengolea1@gmail.com';
+  return new Set(
+    raw
+      .split(',')
+      .map((e) => normalizeEmail(e))
+      .filter(Boolean),
+  );
+}
+
+export function isControlPruebaSuperAdminEmail(email: string | undefined | null): boolean {
+  return getControlPruebaSuperAdminEmails().has(normalizeEmail(email));
+}
+
+export async function isControlPruebaSuperAdminUser(
+  adminDb: Firestore,
+  uid: string,
+): Promise<boolean> {
+  const userSnap = await adminDb.collection('users').doc(uid).get();
+  const userData = userSnap.data();
+  if (!userSnap.exists || !userData) return false;
+  if (!(await isPlatformAdminUser(adminDb, uid))) return false;
+  return isControlPruebaSuperAdminEmail(userData.email as string | undefined);
+}
+
 /** True si el email figura como responsable en algún colegio. */
 export async function isColegioResponsableEmail(
   adminDb: Firestore,

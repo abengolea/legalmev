@@ -6,6 +6,7 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import type { ScbaSentencia } from '@/lib/scba-scraper';
 import { GEMINI_MODEL_ID } from '@/lib/gemini-model';
+import { reportAiUsageToHub } from '@/lib/notificashub-ai-usage';
 
 const MAX_RESUMEN_CHARS = 2000;
 
@@ -47,5 +48,13 @@ export async function summarizeScbaSentencia(
   }
 
   const text = response.text?.();
+  const meta = response.usageMetadata;
+  void reportAiUsageToHub({
+    provider: 'gemini',
+    model: GEMINI_MODEL_ID,
+    inputTokens: meta?.promptTokenCount ?? 0,
+    outputTokens: meta?.candidatesTokenCount ?? 0,
+    feature: 'scba-summarize',
+  });
   return (text ?? '').trim() || '(Sin resumen)';
 }

@@ -1,13 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { MercadoPagoConfig, Preference } from 'mercadopago';
 import { getAuth, getAdminDb } from '@/lib/firebase-admin';
-
-function getBaseUrl(): string {
-  const env = process.env.NEXT_PUBLIC_SITE_URL;
-  if (env) return env.replace(/\/$/, '');
-  if (process.env.NODE_ENV === 'production') return 'https://www.legalmev.com.ar';
-  return process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:9002';
-}
+import { getPaymentsBaseUrl } from '@/lib/payments-base-url';
 
 /**
  * POST /api/colegio/create-payment-link
@@ -86,7 +80,7 @@ export async function POST(request: NextRequest) {
     const periodo = typeof body.periodo === 'string' && body.periodo.trim()
       ? body.periodo.trim()
       : `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    const siteBaseUrl = getBaseUrl();
+    const siteBaseUrl = getPaymentsBaseUrl();
 
     const externalRef = `colegio-${colegioId}-${periodo}`;
     const client = new MercadoPagoConfig({ accessToken });
