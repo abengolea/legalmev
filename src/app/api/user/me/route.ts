@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuth, getAdminDb } from '@/lib/firebase-admin';
-import { isColegioAdminUser, isPlatformAdminUser } from '@/lib/platform-admin';
+import { isColegioAdminUser, isControlPruebaSuperAdminUser, isPlatformAdminUser } from '@/lib/platform-admin';
 import { resolveAudienciaCopilotAccess } from '@/lib/audiencia-copilot-access';
 
 /**
@@ -29,9 +29,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ ok: false, error: 'Usuario no encontrado' }, { status: 404 });
     }
 
-    const [isPlatformAdmin, isColegioAdmin] = await Promise.all([
+    const [isPlatformAdmin, isColegioAdmin, canAccessControlPrueba] = await Promise.all([
       isPlatformAdminUser(adminDb, uid),
       isColegioAdminUser(adminDb, uid),
+      isControlPruebaSuperAdminUser(adminDb, uid),
     ]);
 
     const audienciaCopilot = resolveAudienciaCopilotAccess({
@@ -53,6 +54,7 @@ export async function GET(request: NextRequest) {
         cuit: data.cuit ?? '',
         isPlatformAdmin,
         isColegioAdmin,
+        canAccessControlPrueba,
         audienciaCopilot,
         audienciaCopilotTrial: data.audienciaCopilotTrial ?? null,
         premiumSource: data.premiumSource ?? null,

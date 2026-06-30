@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, type ReactNode } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { collection, onSnapshot, doc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -28,10 +28,11 @@ import {
 } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Cpu, Database, Users, XCircle, FileText, MessageSquare, Bot, Send, PlusCircle, Zap, CreditCard, BarChart3, Building2, Upload, AlertTriangle, Receipt, Link2, UserPlus, LayoutDashboard, TrendingUp, DollarSign, FileOutput, ArrowRight, Settings, Mail, MoreHorizontal, Ban, Unlock, RefreshCw, History, StickyNote, Gavel, Search } from 'lucide-react';
+import { Cpu, Database, Users, XCircle, FileText, MessageSquare, Bot, Send, PlusCircle, Zap, CreditCard, BarChart3, Building2, Upload, AlertTriangle, Receipt, Link2, UserPlus, LayoutDashboard, TrendingUp, DollarSign, FileOutput, ArrowRight, Settings, Mail, MoreHorizontal, Ban, Unlock, RefreshCw, History, StickyNote, Gavel, Search, FileSearch } from 'lucide-react';
 import { AudienciaCopilot } from '@/components/admin/AudienciaCopilot';
 import { AudienciaCopilotAdminReport } from '@/components/admin/AudienciaCopilotAdminReport';
 import { CopilotoAnnouncementEmailCard } from '@/components/admin/CopilotoAnnouncementEmailCard';
+import { ControlPruebaPanel } from '@/components/admin/ControlPruebaPanel';
 import {
   AUDIENCIA_COPILOT_TRIAL_SESSIONS,
   type AudienciaCopilotTrial,
@@ -675,7 +676,7 @@ function UserManagement() {
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
+      <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <CardTitle>Gestión de Usuarios</CardTitle>
           <CardDescription>Asigná tier y gestioná descargas. La cuota premium (expedientes/mes) se configura en la pestaña Configuración.</CardDescription>
@@ -1495,8 +1496,8 @@ function ColegiosSection() {
   };
 
   return (
-    <Tabs value={activeSub} onValueChange={setSub} className="w-full">
-      <TabsList className="mb-4">
+    <Tabs value={activeSub} onValueChange={setSub} className="w-full min-w-0">
+      <TabsList className="mb-4 flex h-auto w-full flex-wrap gap-1">
         <TabsTrigger value="convenios"><Building2 className="mr-2 h-4 w-4" /> Convenios</TabsTrigger>
         <TabsTrigger value="responsables"><UserPlus className="mr-2 h-4 w-4" /> Responsables</TabsTrigger>
       </TabsList>
@@ -1589,7 +1590,7 @@ function ResendTestCard() {
             </div>
           )}
           <form onSubmit={handleSend} className="flex flex-wrap gap-3 items-end">
-            <div className="flex-1 min-w-64">
+            <div className="min-w-0 flex-1 sm:min-w-[12rem]">
               <Label htmlFor="resend-test-email">Enviar prueba a</Label>
               <Input
                 id="resend-test-email"
@@ -2124,7 +2125,7 @@ function AdminDashboard() {
         </Card>
 
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
+          <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <CardTitle className="flex items-center gap-2">
                 <Receipt className="h-5 w-5 text-primary" />
@@ -2198,10 +2199,54 @@ function AdminDashboard() {
   );
 }
 
-const BASE_TABS = ['dashboard', 'users', 'colegios', 'stats', 'audiencias', 'payments', 'config'] as const;
+const BASE_TABS = ['dashboard', 'users', 'colegios', 'stats', 'audiencias', 'control-prueba', 'payments', 'config'] as const;
 const COPILOT_TAB = 'audiencia-copilot' as const;
 const VALID_COLEGIO_SUB = ['convenios', 'responsables'] as const;
 const VALID_CONFIG_TABS = ['payments', 'email', 'system', 'logs', 'ai-test'] as const;
+
+function AdminTabsScroll({ children }: { children: ReactNode }) {
+  return (
+    <div className="-mx-4 overflow-x-auto px-4 pb-1 sm:mx-0 sm:overflow-visible sm:px-0">
+      {children}
+    </div>
+  );
+}
+
+function AdminTabsList({
+  className,
+  children,
+}: {
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <TabsList
+      className={cn(
+        'inline-flex h-auto w-max min-w-full flex-nowrap justify-start gap-1 p-1 sm:flex sm:w-full sm:flex-wrap',
+        className
+      )}
+    >
+      {children}
+    </TabsList>
+  );
+}
+
+function AdminTabTrigger({
+  value,
+  children,
+}: {
+  value: string;
+  children: ReactNode;
+}) {
+  return (
+    <TabsTrigger
+      value={value}
+      className="shrink-0 gap-1.5 px-2.5 py-2 text-xs sm:px-3 sm:text-sm"
+    >
+      {children}
+    </TabsTrigger>
+  );
+}
 
 function ConfigTabs() {
   const searchParams = useSearchParams();
@@ -2217,14 +2262,16 @@ function ConfigTabs() {
   };
 
   return (
-    <Tabs value={activeConfigTab} onValueChange={setConfigTab} className="w-full">
-      <TabsList className="mb-4">
-        <TabsTrigger value="payments"><CreditCard className="mr-2 h-4 w-4"/> Pagos</TabsTrigger>
-        <TabsTrigger value="email"><Mail className="mr-2 h-4 w-4"/> Email (Resend)</TabsTrigger>
-        <TabsTrigger value="system"><Cpu className="mr-2 h-4 w-4"/> Sistema</TabsTrigger>
-        <TabsTrigger value="logs"><FileText className="mr-2 h-4 w-4"/> Registros</TabsTrigger>
-        <TabsTrigger value="ai-test"><Bot className="mr-2 h-4 w-4"/> Test IA</TabsTrigger>
-      </TabsList>
+    <Tabs value={activeConfigTab} onValueChange={setConfigTab} className="w-full min-w-0">
+      <AdminTabsScroll>
+        <AdminTabsList className="mb-4">
+          <AdminTabTrigger value="payments"><CreditCard className="h-4 w-4 shrink-0"/> Pagos</AdminTabTrigger>
+          <AdminTabTrigger value="email"><Mail className="h-4 w-4 shrink-0"/> Email</AdminTabTrigger>
+          <AdminTabTrigger value="system"><Cpu className="h-4 w-4 shrink-0"/> Sistema</AdminTabTrigger>
+          <AdminTabTrigger value="logs"><FileText className="h-4 w-4 shrink-0"/> Registros</AdminTabTrigger>
+          <AdminTabTrigger value="ai-test"><Bot className="h-4 w-4 shrink-0"/> Test IA</AdminTabTrigger>
+        </AdminTabsList>
+      </AdminTabsScroll>
 
       <TabsContent value="payments">
         <PaymentsConfig />
@@ -2280,12 +2327,14 @@ function AdminTabs() {
   const router = useRouter();
   const tabParam = searchParams.get('tab');
   const [canAccessCopilot, setCanAccessCopilot] = useState(false);
+  const [canAccessControlPrueba, setCanAccessControlPrueba] = useState(false);
 
   useEffect(() => {
     import('@/lib/firebase').then(({ auth }) => {
       const unsub = auth.onAuthStateChanged(async (user) => {
         if (!user) {
           setCanAccessCopilot(false);
+          setCanAccessControlPrueba(false);
           return;
         }
         try {
@@ -2293,15 +2342,20 @@ function AdminTabs() {
           const res = await fetch('/api/user/me', { headers: { Authorization: `Bearer ${token}` } });
           const json = await res.json();
           setCanAccessCopilot(!!json?.user?.audienciaCopilot?.hasAccess);
+          setCanAccessControlPrueba(!!json?.user?.canAccessControlPrueba);
         } catch {
           setCanAccessCopilot(false);
+          setCanAccessControlPrueba(false);
         }
       });
       return () => unsub();
     });
   }, []);
 
-  const validTabs = canAccessCopilot ? [...BASE_TABS, COPILOT_TAB] : [...BASE_TABS];
+  const validTabs = [
+    ...BASE_TABS.filter((t) => t !== 'control-prueba' || canAccessControlPrueba),
+    ...(canAccessCopilot ? [COPILOT_TAB] : []),
+  ];
   const activeTab = (validTabs.includes(tabParam as (typeof validTabs)[number]) ? tabParam : 'dashboard') as (typeof validTabs)[number];
 
   const setTab = (value: string) => {
@@ -2311,19 +2365,24 @@ function AdminTabs() {
   };
 
   return (
-    <Tabs value={activeTab} onValueChange={setTab} className="w-full">
-      <TabsList className="flex w-full flex-wrap gap-1">
-        <TabsTrigger value="dashboard"><LayoutDashboard className="mr-2"/> Dashboard</TabsTrigger>
-        <TabsTrigger value="users"><Users className="mr-2"/> Usuarios</TabsTrigger>
-        <TabsTrigger value="colegios"><Building2 className="mr-2"/> Colegios</TabsTrigger>
-        <TabsTrigger value="stats"><BarChart3 className="mr-2"/> Estadísticas</TabsTrigger>
-        <TabsTrigger value="audiencias"><Gavel className="mr-2"/> Audiencias</TabsTrigger>
-        <TabsTrigger value="payments"><CreditCard className="mr-2"/> Pagos</TabsTrigger>
-        <TabsTrigger value="config"><Settings className="mr-2"/> Configuración</TabsTrigger>
-        {canAccessCopilot && (
-          <TabsTrigger value="audiencia-copilot"><Gavel className="mr-2"/> Copiloto Audiencias</TabsTrigger>
-        )}
-      </TabsList>
+    <Tabs value={activeTab} onValueChange={setTab} className="w-full min-w-0">
+      <AdminTabsScroll>
+        <AdminTabsList>
+          <AdminTabTrigger value="dashboard"><LayoutDashboard className="h-4 w-4 shrink-0"/> Dashboard</AdminTabTrigger>
+          <AdminTabTrigger value="users"><Users className="h-4 w-4 shrink-0"/> Usuarios</AdminTabTrigger>
+          <AdminTabTrigger value="colegios"><Building2 className="h-4 w-4 shrink-0"/> Colegios</AdminTabTrigger>
+          <AdminTabTrigger value="stats"><BarChart3 className="h-4 w-4 shrink-0"/> Estadísticas</AdminTabTrigger>
+          <AdminTabTrigger value="audiencias"><Gavel className="h-4 w-4 shrink-0"/> Audiencias</AdminTabTrigger>
+          {canAccessControlPrueba && (
+            <AdminTabTrigger value="control-prueba"><FileSearch className="h-4 w-4 shrink-0"/> Prueba</AdminTabTrigger>
+          )}
+          <AdminTabTrigger value="payments"><CreditCard className="h-4 w-4 shrink-0"/> Pagos</AdminTabTrigger>
+          <AdminTabTrigger value="config"><Settings className="h-4 w-4 shrink-0"/> Config</AdminTabTrigger>
+          {canAccessCopilot && (
+            <AdminTabTrigger value="audiencia-copilot"><Gavel className="h-4 w-4 shrink-0"/> Copiloto</AdminTabTrigger>
+          )}
+        </AdminTabsList>
+      </AdminTabsScroll>
 
       <TabsContent value="dashboard">
         <AdminDashboard />
@@ -2349,6 +2408,12 @@ function AdminTabs() {
         </div>
       </TabsContent>
 
+      {canAccessControlPrueba && (
+        <TabsContent value="control-prueba">
+          <ControlPruebaPanel />
+        </TabsContent>
+      )}
+
       <TabsContent value="payments">
         <PagosControl />
       </TabsContent>
@@ -2368,10 +2433,10 @@ function AdminTabs() {
 
 export default function AdminPage() {
   return (
-    <div className="flex flex-col gap-8">
-      <div>
-        <h1 className="text-3xl font-bold font-headline">Panel de Administración</h1>
-        <p className="text-muted-foreground">Gestiona usuarios, configuraciones y monitorea la salud del sistema.</p>
+    <div className="flex min-w-0 max-w-full flex-col gap-6 overflow-x-hidden sm:gap-8">
+      <div className="min-w-0">
+        <h1 className="text-2xl font-bold font-headline sm:text-3xl">Panel de Administración</h1>
+        <p className="text-muted-foreground text-sm sm:text-base">Gestiona usuarios, configuraciones y monitorea la salud del sistema.</p>
       </div>
 
       <AdminTabs />

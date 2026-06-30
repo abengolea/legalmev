@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuth, getAdminDb } from '@/lib/firebase-admin';
-import { isPlatformAdminUser } from '@/lib/platform-admin';
+import { isPlatformAdminUser, isControlPruebaSuperAdminUser } from '@/lib/platform-admin';
 
 export async function verifyUidFromRequest(
   request: NextRequest
@@ -28,6 +28,20 @@ export async function requirePlatformAdmin(
   const adminDb = getAdminDb();
   if (!(await isPlatformAdminUser(adminDb, auth.uid))) {
     return NextResponse.json({ ok: false, error: 'Solo administradores' }, { status: 403 });
+  }
+  return { uid: auth.uid };
+}
+
+/** Control de prueba: solo superadmin explícito (abengolea1@gmail.com por defecto). */
+export async function requireControlPruebaSuperAdmin(
+  request: NextRequest,
+): Promise<{ uid: string } | NextResponse> {
+  const auth = await verifyUidFromRequest(request);
+  if (auth instanceof NextResponse) return auth;
+
+  const adminDb = getAdminDb();
+  if (!(await isControlPruebaSuperAdminUser(adminDb, auth.uid))) {
+    return NextResponse.json({ ok: false, error: 'Sin acceso a Control de prueba' }, { status: 403 });
   }
   return { uid: auth.uid };
 }
