@@ -18,6 +18,8 @@ import {
   normalizeOficiosAutenticidad,
   normalizeResumenEjecutivo,
 } from '@/lib/control-prueba-import-meta';
+import { resumenParaParteRepresentada } from '@/lib/control-prueba-resumen';
+import type { ParteRepresentadaPrueba } from '@/types/control-prueba';
 
 export type ImportPreviewPayload = {
   caratula: string;
@@ -28,6 +30,7 @@ export type ImportPreviewPayload = {
   notas: string;
   actor: string;
   demandado: string;
+  parteRepresentada?: ParteRepresentadaPrueba | '';
   resumenCaso?: string;
   autoAperturaPrueba?: string;
   items: ControlPruebaItem[];
@@ -46,6 +49,7 @@ export type RunImportAnalysisInput = {
   fuero?: string;
   expedienteUrl?: string;
   pdfFileName?: string;
+  parteRepresentada?: ParteRepresentadaPrueba | '';
 };
 
 export async function runImportAnalysis(input: RunImportAnalysisInput) {
@@ -104,6 +108,17 @@ export async function runImportAnalysis(input: RunImportAnalysisInput) {
   }
 
   const preview = buildPreviewPayload(analysis, importResult, input);
+  if (input.parteRepresentada) {
+    preview.parteRepresentada = input.parteRepresentada;
+    preview.resumenEjecutivo = resumenParaParteRepresentada(
+      preview.items,
+      preview.oficiosAutenticidadPendientes,
+      input.parteRepresentada,
+      preview.resumenEjecutivo,
+      preview.actor,
+      preview.demandado,
+    );
+  }
   console.info('[control-prueba/import] Preview listo', {
     pdfFileName: input.pdfFileName ?? '',
     items: preview.items.length,
@@ -140,6 +155,7 @@ function buildPreviewPayload(
     notas: resumenNotas,
     actor: analysis.actor?.trim() ?? '',
     demandado: analysis.demandado?.trim() ?? '',
+    parteRepresentada: input.parteRepresentada ?? '',
     resumenCaso: analysis.resumenCaso?.trim(),
     autoAperturaPrueba: analysis.autoAperturaPrueba?.trim(),
     items: importResult.items,
@@ -210,8 +226,18 @@ export async function applyImportToFirestore(input: ApplyImportInput) {
     pdfImportedAt: nowIso,
     actor: preview.actor,
     demandado: preview.demandado,
+    parteRepresentada: preview.parteRepresentada ?? '',
     oficiosAutenticidadPendientes: normalizeOficiosAutenticidad(preview.oficiosAutenticidadPendientes),
-    resumenEjecutivo: normalizeResumenEjecutivo(preview.resumenEjecutivo),
+    resumenEjecutivo: normalizeResumenEjecutivo(
+      resumenParaParteRepresentada(
+        importedItems,
+        preview.oficiosAutenticidadPendientes,
+        preview.parteRepresentada,
+        preview.resumenEjecutivo,
+        preview.actor,
+        preview.demandado,
+      ) ?? preview.resumenEjecutivo,
+    ),
   };
 
   if (expedienteId && expedienteRef) {
@@ -228,6 +254,7 @@ export async function applyImportToFirestore(input: ApplyImportInput) {
     if (preview.fuero && !prev.fuero) update.fuero = preview.fuero;
     if (preview.notas && !prev.notas) update.notas = preview.notas;
     if (preview.expedienteUrl && !prev.expedienteUrl) update.expedienteUrl = preview.expedienteUrl;
+    if (preview.parteRepresentada) update.parteRepresentada = preview.parteRepresentada;
 
     await expedienteRef.update(update);
     const updated = await expedienteRef.get();

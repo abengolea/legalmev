@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import type { ImportPreviewPayload } from '@/lib/control-prueba-import-apply';
-import type { ControlPruebaItem, ItemCategoria } from '@/types/control-prueba';
 import { PARTE_LABELS, TIPO_LABELS, getEstadoConfig } from '@/lib/control-prueba';
+import { resumenParaParteRepresentada } from '@/lib/control-prueba-resumen';
+import type { ControlPruebaItem, ItemCategoria, ParteRepresentadaPrueba, PruebaParte } from '@/types/control-prueba';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -17,7 +18,16 @@ import {
 } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Loader2, CheckCircle2, AlertTriangle, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 type Props = {
@@ -26,6 +36,9 @@ type Props = {
   confirming: boolean;
   onOpenChange: (open: boolean) => void;
   onConfirm: (selectedIds: string[]) => void;
+  onPreviewChange: (preview: ImportPreviewPayload) => void;
+  parteRepresentada: ParteRepresentadaPrueba | '';
+  onParteRepresentadaChange: (parte: ParteRepresentadaPrueba | '') => void;
 };
 
 export function ControlPruebaImportPreviewDialog({
@@ -34,6 +47,9 @@ export function ControlPruebaImportPreviewDialog({
   confirming,
   onOpenChange,
   onConfirm,
+  onPreviewChange,
+  parteRepresentada,
+  onParteRepresentadaChange,
 }: Props) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
@@ -43,7 +59,68 @@ export function ControlPruebaImportPreviewDialog({
     if (preview?.items.length) {
       setSelected(new Set(preview.items.map((i) => i.id)));
     }
-  }, [preview]);
+  }, [preview?.items]);
+
+  const resumenVisible = useMemo(() => {
+    if (!preview) return undefined;
+    return resumenParaParteRepresentada(
+      preview.items,
+      preview.oficiosAutenticidadPendientes,
+      parteRepresentada,
+      preview.resumenEjecutivo,
+      preview.actor,
+      preview.demandado,
+    );
+  }, [preview, parteRepresentada]);
+
+  const updatePreviewItems = (items: ControlPruebaItem[]) => {
+    if (!preview) return;
+    const next: ImportPreviewPayload = {
+      ...preview,
+      items,
+      parteRepresentada,
+      resumenEjecutivo: resumenParaParteRepresentada(
+        items,
+        preview.oficiosAutenticidadPendientes,
+        parteRepresentada,
+        preview.resumenEjecutivo,
+        preview.actor,
+        preview.demandado,
+      ),
+    };
+    onPreviewChange(next);
+    setSelected((prev) => {
+      const ids = new Set(items.map((i) => i.id));
+      return new Set([...prev].filter((id) => ids.has(id)));
+    });
+  };
+
+  const patchItem = (id: string, patch: Partial<ControlPruebaItem>) => {
+    if (!preview) return;
+    updatePreviewItems(preview.items.map((i) => (i.id === id ? { ...i, ...patch } : i)));
+  };
+
+  const removeItem = (id: string) => {
+    if (!preview) return;
+    updatePreviewItems(preview.items.filter((i) => i.id !== id));
+  };
+
+  const handleParteChange = (parte: ParteRepresentadaPrueba | '') => {
+    onParteRepresentadaChange(parte);
+    if (!preview) return;
+    onPreviewChange({
+      ...preview,
+      parteRepresentada: parte,
+      resumenEjecutivo: resumenParaParteRepresentada(
+        preview.items,
+        preview.oficiosAutenticidadPendientes,
+        parte,
+        preview.resumenEjecutivo,
+        preview.actor,
+        preview.demandado,
+      ),
+    });
+  };
 
   const toggle = (id: string) => {
     setSelected((prev) => {
@@ -61,6 +138,8 @@ export function ControlPruebaImportPreviewDialog({
   if (!preview) return null;
 
   const allSelected = selected.size === preview.items.length && preview.items.length > 0;
+  const actorLabel = preview.actor?.trim() || 'Actor';
+  const demandadoLabel = preview.demandado?.trim() || 'Demandada';
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -68,16 +147,41 @@ export function ControlPruebaImportPreviewDialog({
         <DialogHeader>
           <DialogTitle>Revisá el import antes de guardar</DialogTitle>
           <DialogDescription>
-            Confirmá qué ítems entrar al control de prueba. Podés desmarcar actos que la IA haya pasado de filtro.
+            Indicá a quién representás, editá o eliminá ítems incorrectos y confirmá qué entra al control.
           </DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 pr-4 -mr-4 max-h-[min(60vh,520px)]">
+        <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 space-y-2">
+          <Label className="text-xs font-medium text-primary">Representamos a</Label>
+          <Select
+            value={parteRepresentada || '_'}
+            onValueChange={(v) =>
+              handleParteChange(v === '_' ? '' : (v as ParteRepresentadaPrueba))
+            }
+          >
+            <SelectTrigger className="h-9 bg-background">
+              <SelectValue placeholder="Seleccioná la parte…" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="_">Sin definir (resumen de ambas partes)</SelectItem>
+              <SelectItem value="actor">{actorLabel}</SelectItem>
+              <SelectItem value="demandado">{demandadoLabel}</SelectItem>
+            </SelectContent>
+          </Select>
+          {parteRepresentada && (
+            <p className="text-[11px] text-muted-foreground">
+              El resumen ejecutivo mostrará solo la prueba de{' '}
+              {parteRepresentada === 'actor' ? actorLabel : demandadoLabel}.
+            </p>
+          )}
+        </div>
+
+        <ScrollArea className="flex-1 pr-4 -mr-4 max-h-[min(52vh,480px)]">
           <div className="space-y-4 pb-2">
-            {(preview.resumenEjecutivo?.aLibrar?.length ||
-              preview.resumenEjecutivo?.pendiente?.length ||
-              preview.resumenEjecutivo?.producida?.length) && (
-              <ResumenBlock resumen={preview.resumenEjecutivo} />
+            {(resumenVisible?.aLibrar?.length ||
+              resumenVisible?.pendiente?.length ||
+              resumenVisible?.producida?.length) && (
+              <ResumenBlock resumen={resumenVisible} nuestraParte={!!parteRepresentada} />
             )}
 
             {preview.oficiosAutenticidadPendientes.length > 0 && (
@@ -122,9 +226,17 @@ export function ControlPruebaImportPreviewDialog({
                   item={item}
                   checked={selected.has(item.id)}
                   onToggle={() => toggle(item.id)}
+                  onPatch={(patch) => patchItem(item.id, patch)}
+                  onRemove={() => removeItem(item.id)}
                 />
               ))}
             </div>
+
+            {preview.items.length === 0 && (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                No quedan ítems. Volvé atrás o importá de nuevo.
+              </p>
+            )}
           </div>
         </ScrollArea>
 
@@ -153,83 +265,119 @@ function PreviewItemRow({
   item,
   checked,
   onToggle,
+  onPatch,
+  onRemove,
 }: {
   item: ControlPruebaItem;
   checked: boolean;
   onToggle: () => void;
+  onPatch: (patch: Partial<ControlPruebaItem>) => void;
+  onRemove: () => void;
 }) {
   const cat = item.categoria ?? 'prueba';
   const estado = getEstadoConfig(cat as ItemCategoria, item.estado, item);
   return (
     <div
       className={cn(
-        'flex gap-3 rounded-lg border p-3 text-sm transition-colors',
+        'flex gap-2 rounded-lg border p-3 text-sm transition-colors',
         checked ? 'bg-background' : 'bg-muted/30 opacity-70',
       )}
     >
-      <Checkbox checked={checked} onCheckedChange={onToggle} className="mt-0.5" />
-      <div className="min-w-0 flex-1 space-y-1">
+      <Checkbox checked={checked} onCheckedChange={onToggle} className="mt-1 shrink-0" />
+      <div className="min-w-0 flex-1 space-y-2">
         <div className="flex flex-wrap items-center gap-1.5">
           <Badge variant="outline" className="text-[10px]">
             {cat}/{TIPO_LABELS[item.tipo] ?? item.tipo}
           </Badge>
           <Badge className={cn('text-[10px] border', estado.badgeClass)}>{estado.label}</Badge>
-          <span className="text-[10px] text-muted-foreground">
-            {PARTE_LABELS[item.ofrecidaPor ?? 'actor'] ?? item.ofrecidaPor}
-          </span>
+          <Select
+            value={item.ofrecidaPor ?? 'actor'}
+            onValueChange={(v) => onPatch({ ofrecidaPor: v as PruebaParte })}
+          >
+            <SelectTrigger className="h-6 w-[110px] text-[10px] px-2">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="actor">{PARTE_LABELS.actor}</SelectItem>
+              <SelectItem value="demandado">{PARTE_LABELS.demandado}</SelectItem>
+              <SelectItem value="tercero">{PARTE_LABELS.tercero}</SelectItem>
+              <SelectItem value="tribunal">{PARTE_LABELS.tribunal}</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
-        <p className="leading-snug">{item.descripcion}</p>
+        <Input
+          value={item.descripcion}
+          onChange={(e) => onPatch({ descripcion: e.target.value })}
+          className="h-8 text-xs"
+        />
         {item.observaciones && (
           <p className="text-xs text-muted-foreground line-clamp-2">{item.observaciones}</p>
         )}
       </div>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+        onClick={onRemove}
+        title="Eliminar del import"
+      >
+        <Trash2 className="h-4 w-4" />
+      </Button>
     </div>
   );
 }
 
 function ResumenBlock({
   resumen,
+  nuestraParte,
 }: {
   resumen: NonNullable<ImportPreviewPayload['resumenEjecutivo']>;
+  nuestraParte: boolean;
 }) {
   return (
-    <div className="grid gap-2 sm:grid-cols-3 text-xs">
-      {resumen.producida?.length ? (
-        <div className="rounded-lg border border-emerald-300/60 bg-emerald-50/80 p-2">
-          <p className="font-medium text-emerald-900 mb-1">Producida</p>
-          <ul className="text-emerald-900/90 space-y-0.5">
-            {resumen.producida.slice(0, 4).map((t, i) => (
-              <li key={i} className="line-clamp-2">
-                {t}
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-      {resumen.pendiente?.length ? (
-        <div className="rounded-lg border border-amber-300/60 bg-amber-50/80 p-2">
-          <p className="font-medium text-amber-900 mb-1">Pendiente</p>
-          <ul className="text-amber-900/90 space-y-0.5">
-            {resumen.pendiente.slice(0, 4).map((t, i) => (
-              <li key={i} className="line-clamp-2">
-                {t}
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-      {resumen.aLibrar?.length ? (
-        <div className="rounded-lg border border-rose-300/60 bg-rose-50/80 p-2">
-          <p className="font-medium text-rose-900 mb-1">A librar</p>
-          <ul className="text-rose-900/90 space-y-0.5">
-            {resumen.aLibrar.slice(0, 4).map((t, i) => (
-              <li key={i} className="line-clamp-2">
-                {t}
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
+    <div className="space-y-1">
+      {nuestraParte && (
+        <p className="text-[11px] font-medium text-primary">Resumen — nuestra prueba</p>
+      )}
+      <div className="grid gap-2 sm:grid-cols-3 text-xs">
+        {resumen.producida?.length ? (
+          <div className="rounded-lg border border-emerald-300/60 bg-emerald-50/80 p-2">
+            <p className="font-medium text-emerald-900 mb-1">Producida</p>
+            <ul className="text-emerald-900/90 space-y-0.5">
+              {resumen.producida.slice(0, 6).map((t, i) => (
+                <li key={i} className="line-clamp-2">
+                  {t}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+        {resumen.pendiente?.length ? (
+          <div className="rounded-lg border border-amber-300/60 bg-amber-50/80 p-2">
+            <p className="font-medium text-amber-900 mb-1">Pendiente</p>
+            <ul className="text-amber-900/90 space-y-0.5">
+              {resumen.pendiente.slice(0, 6).map((t, i) => (
+                <li key={i} className="line-clamp-2">
+                  {t}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+        {resumen.aLibrar?.length ? (
+          <div className="rounded-lg border border-rose-300/60 bg-rose-50/80 p-2">
+            <p className="font-medium text-rose-900 mb-1">A librar</p>
+            <ul className="text-rose-900/90 space-y-0.5">
+              {resumen.aLibrar.slice(0, 6).map((t, i) => (
+                <li key={i} className="line-clamp-2">
+                  {t}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }

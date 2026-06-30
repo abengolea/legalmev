@@ -26,6 +26,8 @@ type AnalyzeBody = {
   confirmImport?: boolean;
   preview?: ImportPreviewPayload;
   selectedItemIds?: string[];
+  /** Parte que representamos — filtra resumen a nuestra prueba. */
+  parteRepresentada?: 'actor' | 'demandado' | '';
 };
 
 function countByCategoria(items: ControlPruebaItem[]): Record<string, number> {
@@ -125,6 +127,7 @@ export async function POST(request: NextRequest) {
       fuero: body.fuero,
       expedienteUrl: body.expedienteUrl,
       pdfFileName: body.pdfFileName,
+      parteRepresentada: body.parteRepresentada,
     });
 
     if (!result.ok) {

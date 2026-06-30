@@ -1003,6 +1003,7 @@ export function serializeControlPruebaDoc(
     pdfImportedAt: data.pdfImportedAt ?? undefined,
     actor: data.actor ?? undefined,
     demandado: data.demandado ?? undefined,
+    parteRepresentada: data.parteRepresentada === 'demandado' ? 'demandado' : data.parteRepresentada === 'actor' ? 'actor' : '',
     items: normalizeItems(data.items),
     hitos: Array.isArray(data.hitos)
       ? (data.hitos as ExpedienteHito[]).map((h) => ({

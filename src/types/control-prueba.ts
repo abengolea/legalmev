@@ -350,6 +350,9 @@ export type ResumenEjecutivoImport = {
   recomendaciones?: string[];
 };
 
+/** Parte procesal que representamos (actor o demandado). */
+export type ParteRepresentadaPrueba = 'actor' | 'demandado';
+
 export type ControlPruebaItem = {
   id: string;
   orden: number;
@@ -393,6 +396,8 @@ export type ControlPruebaExpediente = {
   pdfImportedAt?: string;
   actor?: string;
   demandado?: string;
+  /** Parte que representamos — filtra el resumen ejecutivo a nuestra prueba. */
+  parteRepresentada?: ParteRepresentadaPrueba | '';
   items: ControlPruebaItem[];
   hitos?: ExpedienteHito[];
   oficiosAutenticidadPendientes?: OficioAutenticidadPendiente[];
@@ -410,6 +415,7 @@ export type ControlPruebaExpedienteInput = {
   expedienteUrl: string;
   sistema?: PruebaSistema;
   notas?: string;
+  parteRepresentada?: ParteRepresentadaPrueba | '';
   items?: ControlPruebaItem[];
   hitos?: ExpedienteHito[];
   oficiosAutenticidadPendientes?: OficioAutenticidadPendiente[];
