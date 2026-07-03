@@ -7,13 +7,26 @@ import type {
   CedulaNotificacionPruebaLegacy,
 } from '@/types/control-prueba';
 import { esConfesional, resolveCategoria, TIPO_LABELS } from '@/lib/control-prueba';
-import { requiereAudienciaPrueba } from '@/lib/control-prueba-audiencia-prueba';
+import {
+  requiereAudienciaPrueba,
+  audienciaEstaFijadaParaCedula,
+  fechaHoraAudienciaParaCedula,
+  coerceEstadoAudienciaItem,
+} from '@/lib/control-prueba-audiencia-prueba';
+import {
+  buildEventoAudienciaPrueba,
+  esEventoAudienciaPrueba,
+  eventoAudienciaActivoDePrueba,
+  eventosAudienciaDePrueba,
+  pruebaIdDeEventoAudiencia,
+  sincronizarEstadoPruebaConEventos,
+} from '@/lib/control-prueba-audiencia-evento';
 import {
   labelParteConDocumentos,
   parteContrariaDefault,
   requiereFlujoDocumentalEnPoder,
 } from '@/lib/control-prueba-documental-poder';
-import { requiereFlujoAutenticidadDocumental, ensureOficiosAutenticidadDocumental, contarOficiosAutenticidadDocumental } from '@/lib/control-prueba-documental-autenticidad';
+import { requiereFlujoAutenticidadDocumental } from '@/lib/control-prueba-documental-autenticidad';
 import type { CedulaNotifMedio } from '@/types/control-prueba';
 import { restarDiasHabiles } from '@/lib/control-prueba-plazos';
 
@@ -55,7 +68,6 @@ export function parentTipoDeItem(item: ControlPruebaItem): ParentTipoSubproceso 
   if (esConfesional(item) || item.tipo === 'confesional') return 'confesional';
   if (item.tipo === 'testimonial' || item.tipo === 'audiencia_testimonial') return 'testimonial';
   if (item.tipo === 'pericial') return 'pericial';
-  if (item.tipo === 'informativa') return 'informativa';
   if (item.tipo === 'documental_en_poder') return 'documental_en_poder';
   if (item.tipo === 'documental') return 'documental';
   return null;
@@ -66,7 +78,6 @@ export function esPadreSubprocesos(item: ControlPruebaItem): boolean {
     parentTipoDeItem(item) !== null &&
     (requiereAudienciaPrueba(item.tipo) ||
       item.tipo === 'pericial' ||
-      item.tipo === 'informativa' ||
       requiereFlujoDocumentalEnPoder(item.tipo))
   );
 }
@@ -109,19 +120,32 @@ export function buildCedulaAudienciaDiligencia(
     fechaDiligenciamiento?: string | null;
     observaciones?: string | null;
   },
+  pruebaRef?: ControlPruebaItem | null,
 ): ControlPruebaItem {
-  const ap = padre.audienciaPrueba ?? {};
-  const fecha = ap.fechaAudiencia ?? padre.fechaLimite ?? '';
-  const hora = ap.horaAudiencia ?? '';
+  const esEvento = esEventoAudienciaPrueba(padre);
+  const prueba = pruebaRef ?? (esEvento ? undefined : padre);
+  const ap = prueba?.audienciaPrueba ?? padre.audienciaPrueba ?? {};
+  const aud = padre.audiencia ?? {};
+  const fechaDesdeEvento = esEvento ? padre.fechaLimite : null;
+  const horaDesdeEvento = esEvento ? aud.hora : null;
+  const { fecha, hora } = esEvento
+    ? { fecha: fechaDesdeEvento, hora: horaDesdeEvento }
+    : fechaHoraAudienciaParaCedula(padre);
+  const fechaVal = fecha ?? ap.fechaAudiencia ?? padre.fechaLimite ?? '';
+  const horaVal = hora ?? ap.horaAudiencia ?? aud.hora ?? '';
   const destinatario = opts.destinatario?.trim() ?? '';
-  const parentTipo = parentTipoDeItem(padre)!;
-  const tk = opts.triggerKey ?? triggerKeyCedula(padre.id, destinatario, fecha, hora);
-  const tipoLabel = labelTipoAudiencia(padre.tipo);
-  const fechaLimite = fecha ? restarDiasHabiles(fecha, DIAS_ANTES_AUDIENCIA_CEDULA) : null;
+  const tipoLabel = labelTipoAudiencia(esEvento ? padre.tipo : padre.tipo);
+  const parentTipo = esEvento
+    ? (padre.vinculo?.parentTipo ?? parentTipoDeItem(padre))
+    : parentTipoDeItem(padre);
+  const tk = opts.triggerKey ?? triggerKeyCedula(padre.id, destinatario, fechaVal, horaVal);
+  const fechaLimite = fechaVal ? restarDiasHabiles(fechaVal, DIAS_ANTES_AUDIENCIA_CEDULA) : null;
+  const pruebaVinculadaId = esEvento ? (pruebaIdDeEventoAudiencia(padre) ?? padre.id) : padre.id;
+  const objetoDesc = prueba?.descripcion ?? padre.descripcion;
 
   const vinculo: SubprocesoVinculo = {
     parentItemId: padre.id,
-    parentTipo,
+    parentTipo: parentTipo ?? 'confesional',
     parentCategoria: resolveCategoria(padre),
     rol: 'cedula_audiencia',
     autoCreated: opts.autoCreated ?? false,
@@ -134,8 +158,8 @@ export function buildCedulaAudienciaDiligencia(
     orden: opts.orden,
     categoria: 'diligencia',
     tipo: 'cedula',
-    descripcion: `Cédula de notificación de audiencia ${tipoLabel}${fecha ? ` — ${fecha}` : ''}${hora ? ` ${hora}` : ''}`.trim(),
-    ofrecidaPor: padre.ofrecidaPor ?? 'actor',
+    descripcion: `Cédula de notificación de audiencia ${tipoLabel}${fechaVal ? ` — ${fechaVal}` : ''}${horaVal ? ` ${horaVal}` : ''}`.trim(),
+    ofrecidaPor: prueba?.ofrecidaPor ?? padre.ofrecidaPor ?? 'actor',
     estado: opts.estadoDiligencia ?? 'pendiente_realizacion',
     fechaLimite,
     fechaProduccion: null,
@@ -144,12 +168,12 @@ export function buildCedulaAudienciaDiligencia(
     vinculo,
     diligencia: {
       destinatario: destinatario || undefined,
-      objeto: padre.descripcion,
+      objeto: objetoDesc,
       medioNotificacion: 'papel',
       fechaPresentacion: null,
       fechaLibramiento: opts.fechaLibramiento ?? null,
       fechaDiligenciamiento: opts.fechaDiligenciamiento ?? null,
-      pruebaVinculadaId: padre.id,
+      pruebaVinculadaId,
     },
   };
 }
@@ -159,9 +183,37 @@ function existeHijoConTrigger(items: ControlPruebaItem[], triggerKey: string): b
 }
 
 function cedulasActivasDePadre(items: ControlPruebaItem[], parentId: string): ControlPruebaItem[] {
-  return items.filter(
-    (i) => i.vinculo?.parentItemId === parentId && i.vinculo?.rol === 'cedula_audiencia',
+  return cedulasAudienciaDeEvento(items, parentId);
+}
+
+export function cedulasAudienciaDeEvento(items: ControlPruebaItem[], eventoId: string): ControlPruebaItem[] {
+  return hijosDePadre(eventoId, items).filter(
+    (i) => i.vinculo?.rol === 'cedula_audiencia' && resolveCategoria(i) === 'diligencia',
   );
+}
+
+export function cedulasAudienciaDePrueba(items: ControlPruebaItem[], pruebaId: string): ControlPruebaItem[] {
+  const porEvento = eventosAudienciaDePrueba(items, pruebaId).flatMap((e) =>
+    cedulasAudienciaDeEvento(items, e.id),
+  );
+  const legacy = hijosDePadre(pruebaId, items).filter(
+    (i) => i.vinculo?.rol === 'cedula_audiencia' && resolveCategoria(i) === 'diligencia',
+  );
+  const ids = new Set(porEvento.map((c) => c.id));
+  return [...porEvento, ...legacy.filter((c) => !ids.has(c.id))];
+}
+
+function eliminarEventosAudienciaAutoDePrueba(items: ControlPruebaItem[], pruebaId: string): ControlPruebaItem[] {
+  const eventoIds = new Set(
+    eventosAudienciaDePrueba(items, pruebaId)
+      .filter((e) => e.vinculo?.autoCreated)
+      .map((e) => e.id),
+  );
+  return items.filter((i) => {
+    if (eventoIds.has(i.id)) return false;
+    if (i.vinculo?.autoCreated && eventoIds.has(i.vinculo.parentItemId)) return false;
+    return true;
+  });
 }
 
 /** Quita cédulas auto-creadas al desfijar/postergar audiencia o eliminar el ítem padre. */
@@ -178,11 +230,14 @@ export function marcarHijosSinEfectoPorPadreEliminado(
 }
 
 function actualizarPlazosCedulasActivas(items: ControlPruebaItem[], padre: ControlPruebaItem): ControlPruebaItem[] {
-  const ap = padre.audienciaPrueba ?? {};
-  const fecha = ap.fechaAudiencia;
+  const fecha = esEventoAudienciaPrueba(padre)
+    ? padre.fechaLimite
+    : (padre.audienciaPrueba?.fechaAudiencia ?? padre.fechaLimite);
   if (!fecha) return items;
+  const hora = esEventoAudienciaPrueba(padre)
+    ? (padre.audiencia?.hora ?? '')
+    : (padre.audienciaPrueba?.horaAudiencia ?? '');
   const fechaLimite = restarDiasHabiles(fecha, DIAS_ANTES_AUDIENCIA_CEDULA);
-  const hora = ap.horaAudiencia ?? '';
   const tipoLabel = labelTipoAudiencia(padre.tipo);
 
   return items.map((i) => {
@@ -312,79 +367,106 @@ export function buildCedulaIntimacionDocumental(
   };
 }
 
-function triggerKeyInformativaAutenticidad(parentId: string): string {
-  return `informativa_autenticidad|${parentId}`;
+function triggerKeyOficioAutenticidadDocumental(parentId: string, destinatario: string): string {
+  const norm = destinatario.toLowerCase().trim().replace(/\s+/g, ' ');
+  return `oficio_autenticidad|${parentId}|${norm}`;
 }
 
-function triggerKeyOficioInformativaAutenticidad(parentId: string, informativaId: string): string {
-  return `oficio_informativa_autenticidad|${parentId}|${informativaId}`;
-}
-
-function hijosInformativaAutenticidad(items: ControlPruebaItem[], parentId: string): ControlPruebaItem[] {
+/** @deprecated Puente informativa eliminado — solo lectura legacy. */
+export function hijosInformativaAutenticidad(items: ControlPruebaItem[], parentId: string): ControlPruebaItem[] {
   return items.filter(
     (i) => i.vinculo?.parentItemId === parentId && i.vinculo?.rol === 'informativa_autenticidad',
   );
 }
 
-function oficiosInformativaAutenticidad(items: ControlPruebaItem[], informativaId: string): ControlPruebaItem[] {
-  return items.filter(
-    (i) =>
-      i.vinculo?.parentItemId === informativaId &&
-      i.vinculo?.rol === 'oficio_informativa' &&
-      resolveCategoria(i) === 'diligencia',
+function esOficioAutenticidadItem(item: ControlPruebaItem): boolean {
+  return (
+    resolveCategoria(item) === 'diligencia' &&
+    (item.tipo === 'oficio' || item.tipo === 'oficio_electronico') &&
+    (item.vinculo?.rol === 'oficio_autenticidad' || item.vinculo?.rol === 'oficio_informativa')
   );
 }
 
-export function buildInformativaAutenticidadDocumental(
+export function oficiosAutenticidadDeDocumental(items: ControlPruebaItem[], parentId: string): ControlPruebaItem[] {
+  const directos = items.filter(
+    (i) => esOficioAutenticidadItem(i) && i.vinculo?.parentItemId === parentId,
+  );
+  const porPruebaVinculada = items.filter(
+    (i) => esOficioAutenticidadItem(i) && i.diligencia?.pruebaVinculadaId === parentId,
+  );
+  const ids = new Set(directos.map((i) => i.id));
+  return [...directos, ...porPruebaVinculada.filter((i) => !ids.has(i.id))];
+}
+
+function destinatariosAutenticidadDocumental(padre: ControlPruebaItem): string[] {
+  const doc = padre.documental ?? {};
+  const destinos = new Set<string>();
+  const principal = doc.destinatarioOficio?.trim();
+  if (principal) destinos.add(principal);
+  for (const o of doc.oficiosAutenticidad ?? []) {
+    const d = o.destinatarioOficio?.trim();
+    if (d) destinos.add(d);
+  }
+  const fromObs = padre.observaciones?.match(/oficio\s+a\s+([^·.\n,]+)/i)?.[1]?.trim();
+  if (fromObs) destinos.add(fromObs);
+  return [...destinos];
+}
+
+function ensureVinculosAutenticidadDocumental(
+  items: ControlPruebaItem[],
+  parentId: string,
+): SubprocesoEvalResult {
+  const alertas: string[] = [];
+  const creados: ControlPruebaItem[] = [];
+  let working = [...items];
+
+  const padreIdx = working.findIndex((i) => i.id === parentId);
+  const padre = padreIdx >= 0 ? working[padreIdx] : undefined;
+  if (!padre || !requiereFlujoAutenticidadDocumental(padre.tipo) || !padreConAutenticidadImpugnada(padre)) {
+    return { items: working, creados, alertas };
+  }
+
+  const destinatarios = destinatariosAutenticidadDocumental(padre);
+  for (const dest of destinatarios) {
+    const tkOficio = triggerKeyOficioAutenticidadDocumental(padre.id, dest);
+    const yaExiste = oficiosAutenticidadDeDocumental(working, padre.id).some(
+      (o) => (o.diligencia?.destinatario?.trim() ?? '') === dest,
+    );
+    if (yaExiste || existeHijoConTrigger(working, tkOficio)) continue;
+
+    const oficio = buildOficioAutenticidadDocumental(padre, {
+      autoCreated: true,
+      triggerKey: tkOficio,
+      orden: working.length + creados.length + 1,
+      destinatario: dest,
+    });
+    working = [...working, oficio];
+    creados.push(oficio);
+  }
+
+  if (creados.length > 0) {
+    alertas.push('Se creó oficio de autenticidad en Comunicaciones.');
+  }
+
+  return { items: working, creados, alertas };
+}
+
+export function buildOficioAutenticidadDocumental(
   padre: ControlPruebaItem,
-  opts: { autoCreated?: boolean; triggerKey?: string; orden: number },
+  opts: { autoCreated?: boolean; triggerKey?: string; orden: number; destinatario?: string },
 ): ControlPruebaItem {
   const dep = padre.documental ?? {};
+  const destinatario = opts.destinatario?.trim() || dep.destinatarioOficio?.trim() || 'Oficiado';
   const parentTipo = parentTipoDeItem(padre) ?? 'documental';
-  const tk = opts.triggerKey ?? triggerKeyInformativaAutenticidad(padre.id);
+  const tk = opts.triggerKey ?? triggerKeyOficioAutenticidadDocumental(padre.id, destinatario);
+
   const vinculo: SubprocesoVinculo = {
     parentItemId: padre.id,
     parentTipo,
     parentCategoria: resolveCategoria(padre),
-    rol: 'informativa_autenticidad',
+    rol: 'oficio_autenticidad',
     autoCreated: opts.autoCreated ?? false,
-    vinculoLabel: 'Informativa — autenticidad documental',
-    triggerKey: tk,
-  };
-
-  return {
-    id: crypto.randomUUID(),
-    orden: opts.orden,
-    categoria: 'prueba',
-    tipo: 'informativa',
-    descripcion: `Informativa sobre autenticidad — ${padre.descripcion.slice(0, 120)}`,
-    ofrecidaPor: padre.ofrecidaPor ?? 'actor',
-    estado: 'pendiente_produccion',
-    fechaLimite: null,
-    fechaProduccion: null,
-    actuacionUrl: null,
-    observaciones: 'Impugnación de autenticidad de documental acompañada.',
-    vinculo,
-  };
-}
-
-export function buildOficioInformativaAutenticidad(
-  padre: ControlPruebaItem,
-  informativa: ControlPruebaItem,
-  opts: { autoCreated?: boolean; triggerKey?: string; orden: number },
-): ControlPruebaItem {
-  const dep = padre.documental ?? {};
-  const destinatario = dep.destinatarioOficio?.trim() || 'Oficiado';
-  const parentTipo = parentTipoDeItem(padre) ?? 'documental';
-  const tk = opts.triggerKey ?? triggerKeyOficioInformativaAutenticidad(padre.id, informativa.id);
-
-  const vinculo: SubprocesoVinculo = {
-    parentItemId: informativa.id,
-    parentTipo,
-    parentCategoria: resolveCategoria(padre),
-    rol: 'oficio_informativa',
-    autoCreated: opts.autoCreated ?? false,
-    vinculoLabel: `Oficio informativa autenticidad — ${destinatario}`,
+    vinculoLabel: `Oficio autenticidad — ${destinatario}`,
     triggerKey: tk,
   };
 
@@ -393,7 +475,7 @@ export function buildOficioInformativaAutenticidad(
     orden: opts.orden,
     categoria: 'diligencia',
     tipo: 'oficio',
-    descripcion: `Oficio informativa sobre autenticidad — ${padre.descripcion.slice(0, 100)}`,
+    descripcion: `Oficio autenticidad — ${padre.descripcion.slice(0, 100)}`,
     ofrecidaPor: 'tribunal',
     estado: 'pendiente',
     fechaLimite: null,
@@ -412,6 +494,26 @@ export function buildOficioInformativaAutenticidad(
   };
 }
 
+/** @deprecated Usar buildOficioAutenticidadDocumental */
+export function buildOficioInformativaAutenticidad(
+  padre: ControlPruebaItem,
+  _informativa: ControlPruebaItem,
+  opts: { autoCreated?: boolean; triggerKey?: string; orden: number; destinatario?: string },
+): ControlPruebaItem {
+  return buildOficioAutenticidadDocumental(padre, opts);
+}
+
+/** @deprecated Puente informativa eliminado */
+export function buildInformativaAutenticidadDocumental(
+  padre: ControlPruebaItem,
+  opts: { autoCreated?: boolean; triggerKey?: string; orden: number },
+): ControlPruebaItem {
+  return buildOficioAutenticidadDocumental(padre, {
+    ...opts,
+    destinatario: padre.documental?.destinatarioOficio?.trim() || 'Oficiado',
+  });
+}
+
 function padreConIntimacionOrdenada(item: ControlPruebaItem): boolean {
   return item.estado === 'intimacion_ordenada';
 }
@@ -421,9 +523,7 @@ function padreConAutenticidadImpugnada(item: ControlPruebaItem): boolean {
 }
 
 function padreConAudienciaFijada(item: ControlPruebaItem): boolean {
-  if (item.estado !== 'audiencia_fijada') return false;
-  const ap = item.audienciaPrueba ?? {};
-  return Boolean(ap.fechaAudiencia && ap.horaAudiencia);
+  return audienciaEstaFijadaParaCedula(item);
 }
 
 function evaluarSubProcesosAudiencia(ctx: SubprocesoEvalContext): SubprocesoEvalResult {
@@ -432,7 +532,43 @@ function evaluarSubProcesosAudiencia(ctx: SubprocesoEvalContext): SubprocesoEval
   let items = [...ctx.items];
 
   const padre = items.find((i) => i.id === ctx.itemId);
-  if (!padre || !requiereAudienciaPrueba(padre.tipo)) {
+  if (!padre) return { items, creados, alertas };
+
+  if (esEventoAudienciaPrueba(padre)) {
+    const anterior = ctx.itemAnterior;
+    let evento = padre;
+    const estadoNormalizado = coerceEstadoAudienciaItem(padre);
+    if (String(padre.estado) !== estadoNormalizado) {
+      items = items.map((i) => (i.id === padre.id ? { ...i, estado: estadoNormalizado } : i));
+      evento = { ...padre, estado: estadoNormalizado };
+    }
+    const fechaCambio =
+      evento.fechaLimite !== anterior.fechaLimite || evento.audiencia?.hora !== anterior.audiencia?.hora;
+    if (fechaCambio && cedulasActivasDePadre(items, evento.id).length > 0) {
+      items = actualizarPlazosCedulasActivas(items, evento);
+      alertas.push('Plazos de cédulas vinculadas actualizados.');
+    }
+    const pruebaId = pruebaIdDeEventoAudiencia(evento);
+    if (pruebaId) {
+      const pruebaIdx = items.findIndex((i) => i.id === pruebaId);
+      if (pruebaIdx >= 0) {
+        const sync = sincronizarEstadoPruebaConEventos(items[pruebaIdx]!, items);
+        if (sync) {
+          items[pruebaIdx] = { ...items[pruebaIdx]!, ...sync };
+          if (sync.estado === 'producida') {
+            alertas.push('Prueba vinculada actualizada a Producida.');
+          } else if (sync.estado === 'postpuesta_juez') {
+            alertas.push('Prueba vinculada actualizada a Postergada.');
+          } else if (sync.estado === 'audiencia_fijada') {
+            alertas.push('Prueba vinculada actualizada a Audiencia fijada.');
+          }
+        }
+      }
+    }
+    return { items, creados, alertas };
+  }
+
+  if (!requiereAudienciaPrueba(padre.tipo) || resolveCategoria(padre) !== 'prueba') {
     return { items, creados, alertas };
   }
 
@@ -440,66 +576,56 @@ function evaluarSubProcesosAudiencia(ctx: SubprocesoEvalContext): SubprocesoEval
   const nuevoEstado = padre.estado;
   const estadoAnterior = anterior.estado;
 
-  // Suspensión / desfijación → sin efecto
-  if (
-    (nuevoEstado === 'postpuesta_juez' || nuevoEstado === 'pendiente_produccion') &&
-    estadoAnterior === 'audiencia_fijada'
-  ) {
-    items = eliminarHijosAutoCreados(items, padre.id);
-    alertas.push('Cédulas auto-creadas eliminadas (audiencia desfijada o postergada).');
+  const ESTADOS_TERMINALES_PRUEBA = new Set(['producida', 'valoracion_judicial', 'desistida', 'no_admitida']);
+  if (ctx.patch.estado !== undefined && ESTADOS_TERMINALES_PRUEBA.has(String(ctx.patch.estado))) {
+    const activo = eventoAudienciaActivoDePrueba(items, padre.id);
+    if (activo && !['realizada', 'cancelada'].includes(String(activo.estado))) {
+      const estadoEvento =
+        nuevoEstado === 'producida' || nuevoEstado === 'valoracion_judicial' ? 'realizada' : 'cancelada';
+      items = items.map((i) => (i.id === activo.id ? { ...i, estado: estadoEvento } : i));
+      alertas.push(
+        estadoEvento === 'realizada'
+          ? 'Audiencia vinculada marcada como Realizada.'
+          : 'Audiencia vinculada marcada como Cancelada.',
+      );
+    }
     return { items, creados, alertas };
   }
 
-  // Reprogramación fecha/hora
-  const fechaCambio =
-    padre.audienciaPrueba?.fechaAudiencia !== anterior.audienciaPrueba?.fechaAudiencia ||
-    padre.audienciaPrueba?.horaAudiencia !== anterior.audienciaPrueba?.horaAudiencia;
-
-  if (padreConAudienciaFijada(padre) && fechaCambio && cedulasActivasDePadre(items, padre.id).length > 0) {
-    items = actualizarPlazosCedulasActivas(items, padre);
-    alertas.push('Plazos de cédulas vinculadas actualizados.');
+  if (
+    (nuevoEstado === 'postpuesta_juez' || nuevoEstado === 'pendiente_produccion') &&
+    (estadoAnterior === 'audiencia_fijada' || eventosAudienciaDePrueba(items, padre.id).length > 0)
+  ) {
+    items = eliminarEventosAudienciaAutoDePrueba(items, padre.id);
+    alertas.push('Audiencia(s) auto-creadas eliminadas (desfijada o postergada).');
+    return { items, creados, alertas };
   }
 
-  // Audiencia fijada → crear cédula(s) idempotente(s)
   if (padreConAudienciaFijada(padre)) {
-    const ap = padre.audienciaPrueba!;
-    const testigos = padre.tipo === 'testimonial' ? (padre.testigos ?? []) : [];
-
-    if (testigos.length > 0) {
-      // Una cédula por testigo — cada uno se notifica individualmente.
-      const activas = cedulasActivasDePadre(items, padre.id);
-      for (const testigo of testigos) {
-        const tk = triggerKeyCedula(padre.id, testigo.nombre, ap.fechaAudiencia!, ap.horaAudiencia!);
-        const yaTiene = activas.some((c) => c.diligencia?.destinatario === testigo.nombre);
-        if (yaTiene || existeHijoConTrigger(items, tk)) continue;
-        const nuevo = buildCedulaAudienciaDiligencia(padre, {
-          destinatario: testigo.nombre,
-          autoCreated: true,
-          triggerKey: tk,
-          orden: items.length + 1,
-        });
-        items = [...items, nuevo];
-        creados.push(nuevo);
-      }
-      if (creados.length > 0) {
-        alertas.push(
-          `Se ${creados.length === 1 ? 'creó' : 'crearon'} ${creados.length} cédula(s) de notificación, una por testigo.`,
-        );
-      }
+    const activo = eventoAudienciaActivoDePrueba(items, padre.id);
+    if (!activo) {
+      const evento = buildEventoAudienciaPrueba(padre, items, {
+        autoCreated: true,
+        orden: items.length + creados.length + 1,
+      });
+      items = [...items, evento];
+      creados.push(evento);
+      alertas.push('Se creó audiencia fijada vinculada a la prueba.');
     } else {
-      const tk = triggerKeyCedula(padre.id, '', ap.fechaAudiencia!, ap.horaAudiencia!);
-      const activas = cedulasActivasDePadre(items, padre.id);
-
-      if (activas.length === 0 && !existeHijoConTrigger(items, tk)) {
-        const nuevo = buildCedulaAudienciaDiligencia(padre, {
-          destinatario: '',
-          autoCreated: true,
-          triggerKey: tk,
-          orden: items.length + 1,
-        });
-        items = [...items, nuevo];
-        creados.push(nuevo);
-        alertas.push('Se creó cédula de notificación en Comunicaciones.');
+      const { fecha, hora } = fechaHoraAudienciaParaCedula(padre);
+      const fechaCambio =
+        fecha !== anterior.audienciaPrueba?.fechaAudiencia ||
+        hora !== anterior.audienciaPrueba?.horaAudiencia;
+      if (fechaCambio && (fecha || hora)) {
+        items = items.map((i) =>
+          i.id === activo.id
+            ? {
+                ...i,
+                fechaLimite: fecha ?? i.fechaLimite,
+                audiencia: { ...i.audiencia, hora: hora ?? i.audiencia?.hora ?? null },
+              }
+            : i,
+        );
       }
     }
   }
@@ -554,17 +680,11 @@ function evaluarSubProcesosDocumentalEnPoder(ctx: SubprocesoEvalContext): Subpro
 }
 
 function eliminarHijosAutenticidadAutoCreados(items: ControlPruebaItem[], parentId: string): ControlPruebaItem[] {
-  const informativaIds = new Set(
-    items
-      .filter((i) => i.vinculo?.parentItemId === parentId && i.vinculo.autoCreated)
-      .map((i) => i.id),
-  );
   return items.filter((i) => {
     if (i.vinculo?.parentItemId === parentId && i.vinculo.autoCreated) return false;
-    if (i.vinculo?.autoCreated && informativaIds.has(i.vinculo.parentItemId)) return false;
     if (
       i.vinculo?.autoCreated &&
-      i.vinculo.rol === 'oficio_informativa' &&
+      (i.vinculo.rol === 'oficio_autenticidad' || i.vinculo.rol === 'oficio_informativa') &&
       i.diligencia?.pruebaVinculadaId === parentId
     ) {
       return false;
@@ -605,11 +725,56 @@ function evaluarSubProcesosDocumentalAutenticidad(ctx: SubprocesoEvalContext): S
   }
 
   if (padreConAutenticidadImpugnada(padre)) {
-    items = eliminarHijosAutenticidadAutoCreados(items, padre.id);
-    items[padreIdx] = ensureOficiosAutenticidadDocumental(items[padreIdx]!);
+    const vinculos = ensureVinculosAutenticidadDocumental(items, padre.id);
+    return {
+      items: vinculos.items,
+      creados: [...creados, ...vinculos.creados],
+      alertas: [...alertas, ...vinculos.alertas],
+    };
   }
 
   return { items, creados, alertas };
+}
+
+/** Al cargar expediente: asegura oficios vinculados para documentales impugnadas. */
+export function hydrateAutenticidadDocumentalVinculos(items: ControlPruebaItem[]): ControlPruebaItem[] {
+  let result = items;
+  for (const item of items) {
+    if (item.tipo !== 'documental' || item.estado !== 'autenticidad_impugnada') continue;
+    result = ensureVinculosAutenticidadDocumental(result, item.id).items;
+  }
+  return result;
+}
+
+export function crearOficioAutenticidadManual(
+  items: ControlPruebaItem[],
+  parentId: string,
+  destinatario = '',
+): { items: ControlPruebaItem[]; creado: ControlPruebaItem | null } {
+  const padre = items.find((i) => i.id === parentId);
+  if (!padre || !requiereFlujoAutenticidadDocumental(padre.tipo) || padre.estado !== 'autenticidad_impugnada') {
+    return { items, creado: null };
+  }
+
+  let working = items;
+  const dest = destinatario.trim() || padre.documental?.destinatarioOficio?.trim() || 'Oficiado';
+  const tkOficio = triggerKeyOficioAutenticidadDocumental(parentId, dest);
+  if (
+    existeHijoConTrigger(working, tkOficio) ||
+    oficiosAutenticidadDeDocumental(working, parentId).some(
+      (o) => (o.diligencia?.destinatario?.trim() ?? '') === dest,
+    )
+  ) {
+    return { items: working, creado: null };
+  }
+
+  const creado = buildOficioAutenticidadDocumental(padre, {
+    autoCreated: false,
+    triggerKey: tkOficio,
+    orden: working.length + 1,
+    destinatario: dest,
+  });
+  return { items: [...working, creado], creado };
 }
 
 export function evaluarSubProcesosAutomaticos(ctx: SubprocesoEvalContext): SubprocesoEvalResult {
@@ -650,22 +815,34 @@ export function crearCedulaManualVinculada(
     return { items: [...items, creado], creado };
   }
 
-  if (!requiereAudienciaPrueba(padre.tipo) || padre.estado !== 'audiencia_fijada') {
+  if (esEventoAudienciaPrueba(padre)) {
+    const prueba = items.find((i) => i.id === pruebaIdDeEventoAudiencia(padre));
+    const tk = triggerKeyCedula(
+      padre.id,
+      destinatario,
+      padre.fechaLimite ?? '',
+      padre.audiencia?.hora ?? '',
+    );
+    if (existeHijoConTrigger(items, tk)) return { items, creado: null };
+    const creado = buildCedulaAudienciaDiligencia(
+      padre,
+      { destinatario, autoCreated: false, triggerKey: tk, orden: items.length + 1 },
+      prueba,
+    );
+    return { items: [...items, creado], creado };
+  }
+
+  if (requiereAudienciaPrueba(padre.tipo) && audienciaEstaFijadaParaCedula(padre)) {
+    const evento = eventoAudienciaActivoDePrueba(items, padre.id);
+    if (evento) {
+      return crearCedulaManualVinculada(items, evento.id, destinatario);
+    }
+  }
+
+  if (!requiereAudienciaPrueba(padre.tipo) || !audienciaEstaFijadaParaCedula(padre)) {
     return { items, creado: null };
   }
-  const ap = padre.audienciaPrueba ?? {};
-  if (!ap.fechaAudiencia || !ap.horaAudiencia) return { items, creado: null };
-
-  const tk = triggerKeyCedula(padre.id, destinatario, ap.fechaAudiencia, ap.horaAudiencia);
-  if (existeHijoConTrigger(items, tk)) return { items, creado: null };
-
-  const creado = buildCedulaAudienciaDiligencia(padre, {
-    destinatario,
-    autoCreated: false,
-    triggerKey: tk,
-    orden: items.length + 1,
-  });
-  return { items: [...items, creado], creado };
+  return { items, creado: null };
 }
 
 /** Reintento de notificación cuando la cédula de un testigo volvió rebotada/negativa. */
@@ -675,27 +852,40 @@ export function crearCedulaReintentoVinculada(
   destinatario: string,
 ): { items: ControlPruebaItem[]; creado: ControlPruebaItem | null } {
   const padre = items.find((i) => i.id === parentId);
-  if (!padre || !requiereAudienciaPrueba(padre.tipo) || padre.estado !== 'audiencia_fijada') {
-    return { items, creado: null };
+  if (!padre) return { items, creado: null };
+
+  let evento: ControlPruebaItem | undefined;
+  let prueba: ControlPruebaItem | undefined;
+
+  if (esEventoAudienciaPrueba(padre)) {
+    evento = padre;
+    const pruebaId = pruebaIdDeEventoAudiencia(padre);
+    prueba = pruebaId ? items.find((i) => i.id === pruebaId) : undefined;
+  } else if (requiereAudienciaPrueba(padre.tipo)) {
+    prueba = padre;
+    evento = eventoAudienciaActivoDePrueba(items, padre.id);
   }
-  const ap = padre.audienciaPrueba ?? {};
-  if (!ap.fechaAudiencia || !ap.horaAudiencia) return { items, creado: null };
 
-  const intentosPrevios = items.filter(
-    (i) =>
-      i.vinculo?.parentItemId === parentId &&
-      i.vinculo?.rol === 'cedula_audiencia' &&
-      i.diligencia?.destinatario === destinatario,
+  if (!evento || !prueba) return { items, creado: null };
+
+  const fecha = evento.fechaLimite ?? '';
+  const hora = evento.audiencia?.hora ?? '';
+  const intentosPrevios = cedulasAudienciaDeEvento(items, evento.id).filter(
+    (i) => i.diligencia?.destinatario === destinatario,
   ).length;
-  const tk = `${triggerKeyCedula(padre.id, destinatario, ap.fechaAudiencia, ap.horaAudiencia)}#reintento${intentosPrevios}`;
+  const tk = `${triggerKeyCedula(evento.id, destinatario, fecha, hora)}#reintento${intentosPrevios}`;
 
-  const creado = buildCedulaAudienciaDiligencia(padre, {
-    destinatario,
-    autoCreated: false,
-    triggerKey: tk,
-    orden: items.length + 1,
-    observaciones: 'Reintento de notificación tras cédula rebotada / resultado negativo.',
-  });
+  const creado = buildCedulaAudienciaDiligencia(
+    evento,
+    {
+      destinatario,
+      autoCreated: false,
+      triggerKey: tk,
+      orden: items.length + 1,
+      observaciones: 'Reintento de notificación tras cédula rebotada / resultado negativo.',
+    },
+    prueba,
+  );
   return { items: [...items, creado], creado };
 }
 
@@ -759,11 +949,32 @@ export function crearMandamientoConduccionTestigo(
 
 export function contarSubprocesosActivos(parentId: string, items: ControlPruebaItem[]): number {
   const padre = items.find((i) => i.id === parentId);
+  if (padre?.tipo === 'documental' && padre.estado === 'autenticidad_impugnada') {
+    return oficiosAutenticidadDeDocumental(items, parentId).length;
+  }
+  if (padre && requiereAudienciaPrueba(padre.tipo)) {
+    const eventos = eventosAudienciaDePrueba(items, parentId);
+    return eventos.length + eventos.reduce((n, e) => n + cedulasAudienciaDeEvento(items, e.id).length, 0);
+  }
   const directos = hijosDePadre(parentId, items).filter(
     (i) => i.vinculo?.rol !== 'informativa_autenticidad',
   );
-  if (padre?.tipo === 'documental') {
-    return directos.length + contarOficiosAutenticidadDocumental(padre);
-  }
   return directos.length;
+}
+
+export function crearEventoAudienciaManual(
+  items: ControlPruebaItem[],
+  pruebaId: string,
+): { items: ControlPruebaItem[]; creado: ControlPruebaItem | null } {
+  const prueba = items.find((i) => i.id === pruebaId);
+  if (!prueba || !requiereAudienciaPrueba(prueba.tipo)) return { items, creado: null };
+  const activo = eventoAudienciaActivoDePrueba(items, pruebaId);
+  if (activo && !['cancelada', 'realizada', 'suspendida'].includes(String(activo.estado))) {
+    return { items, creado: null };
+  }
+  const creado = buildEventoAudienciaPrueba(prueba, items, {
+    autoCreated: false,
+    orden: items.length + 1,
+  });
+  return { items: [...items, creado], creado };
 }

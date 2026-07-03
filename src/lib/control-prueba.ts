@@ -50,21 +50,26 @@ import {
   estadoAgregadoPruebaChip,
   itemVisibleConFiltroEstado,
 } from '@/lib/control-prueba-pericial-movimientos';
-import { ensureAudienciaPruebaMeta, syncFechaLimiteAudiencia } from '@/lib/control-prueba-audiencia-prueba';
+import { coerceEstadoAudienciaItem, ensureAudienciaPruebaMeta, syncFechaLimiteAudiencia } from '@/lib/control-prueba-audiencia-prueba';
 import {
   ensureDocumentalEnPoderMeta,
   syncFechaLimiteDocumentalEnPoder,
 } from '@/lib/control-prueba-documental-poder';
 import { ensureDocumentalMeta } from '@/lib/control-prueba-documental-autenticidad';
+import { migrateExpedienteInformativaAOficio } from '@/lib/control-prueba-informativa-migrate';
+import { migrateModeloAudienciaPrueba } from '@/lib/control-prueba-audiencia-migrate';
 import {
   consolidarAutenticidadDocumentalExpediente,
   attachOficiosToDocumentalItems,
   consolidarInformativasAutenticidadImport,
 } from '@/lib/control-prueba-documental-autenticidad-consolidate';
 import { migrarCedulasEmbebidas } from '@/lib/control-prueba-subprocesos';
+import { normalizarNombreTercero } from '@/lib/control-prueba-terceros';
 import {
   CEDULA_NOTIF_ESTADO_STYLE,
+  OFICIO_ELECTRONICO_ESTADO_STYLE,
   estadosComunicacion,
+  estadosTerminalesComunicacion,
   normalizarEstadosComunicacion,
   usaEstadosComunicacionEspeciales,
 } from '@/lib/control-prueba-cedula-notif';
@@ -118,6 +123,12 @@ export const ESTADO_CONFIG: Record<PruebaEstado, EstadoStyle> = {
     rowClass: 'border-l-fuchsia-500 bg-fuchsia-50/40 dark:bg-fuchsia-950/20',
     dotClass: 'bg-fuchsia-500',
   },
+  valoracion_judicial: {
+    label: 'A valoración judicial',
+    badgeClass: 'bg-indigo-100 text-indigo-900 border-indigo-400 dark:bg-indigo-900/50 dark:text-indigo-200',
+    rowClass: 'border-l-indigo-500 bg-indigo-50/40 dark:bg-indigo-950/20',
+    dotClass: 'bg-indigo-500',
+  },
   producida: {
     label: 'Producida',
     badgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-900/50 dark:text-emerald-300',
@@ -143,10 +154,13 @@ export const TIPO_LABELS: Record<string, string> = {
   documental_en_poder: 'Documental en poder de contraparte',
   testimonial: 'Testimonial',
   pericial: 'Pericial',
-  informativa: 'Informativa',
+  informativa: 'Informativa (oficio)',
   confesional: 'Confesional',
   inspeccion: 'Inspección',
   otra: 'Otra',
+  indagatoria: 'Indagatoria',
+  conciliacion: 'Conciliación',
+  mediacion: 'Mediación',
   oficio: 'Oficio',
   cedula: 'Cédula',
   mandamiento: 'Mandamiento',
@@ -155,12 +169,10 @@ export const TIPO_LABELS: Record<string, string> = {
   cedula_electronica: 'Cédula electrónica',
   audiencia: 'Audiencia',
   vista_causa: 'Vista de causa',
-  mediacion: 'Mediación',
   audiencia_testimonial: 'Audiencia testimonial',
   audiencia_inicial: 'Audiencia inicial',
   audiencia_preliminar: 'Audiencia preliminar',
   audiencia_vista: 'Audiencia de vista',
-  conciliacion: 'Audiencia de conciliación',
   otra_audiencia: 'Otra audiencia',
   impugnacion_informe: 'Impugnación al informe',
   aclaracion_perito: 'Aclaraciones del perito',
@@ -179,7 +191,7 @@ export const CATEGORIA_CONFIG: Record<
 > = {
   prueba: {
     titulo: 'Prueba ofrecida',
-    descripcion: 'Documental, pericial, informativa… por parte',
+    descripcion: 'Documental, pericial, oficios… por parte',
     accent: 'border-l-[#2A6A78]',
   },
   diligencia: {
@@ -188,8 +200,8 @@ export const CATEGORIA_CONFIG: Record<
     accent: 'border-l-violet-500',
   },
   audiencia: {
-    titulo: 'Audiencias',
-    descripcion: 'Confesional, testimonial, vistas de causa y mediaciones',
+    titulo: 'Audiencias fijadas',
+    descripcion: 'Eventos programados vinculados a prueba ofrecida, y actos del expediente (vista, mediación)',
     accent: 'border-l-amber-500',
   },
   tramite: {
@@ -247,11 +259,11 @@ const DILIGENCIA_ESTADO_STYLE: Record<string, EstadoStyle> = {
 };
 
 const AUDIENCIA_ESTADO_STYLE: Record<string, EstadoStyle> = {
-  programada: { label: 'Programada', badgeClass: 'bg-sky-100 text-sky-800 border-sky-300', rowClass: 'border-l-sky-500 bg-sky-50/30', dotClass: 'bg-sky-500' },
+  programada: { label: 'Audiencia fijada', badgeClass: 'bg-sky-100 text-sky-800 border-sky-300', rowClass: 'border-l-sky-500 bg-sky-50/30', dotClass: 'bg-sky-500' },
   realizada: { label: 'Realizada', badgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-300', rowClass: 'border-l-emerald-500', dotClass: 'bg-emerald-500' },
-  suspendida: { label: 'Suspendida', badgeClass: 'bg-amber-100 text-amber-900 border-amber-300', rowClass: 'border-l-amber-500', dotClass: 'bg-amber-500' },
+  suspendida: { label: 'Postergada', badgeClass: 'bg-amber-100 text-amber-900 border-amber-300', rowClass: 'border-l-amber-500', dotClass: 'bg-amber-500' },
   reprogramada: { label: 'Reprogramada', badgeClass: 'bg-violet-100 text-violet-800 border-violet-300', rowClass: 'border-l-violet-500', dotClass: 'bg-violet-500' },
-  cancelada: { label: 'Cancelada', badgeClass: 'bg-gray-100 text-gray-600 border-gray-300 line-through', rowClass: 'border-l-gray-400 opacity-70', dotClass: 'bg-gray-400' },
+  cancelada: { label: 'Desistida / cancelada', badgeClass: 'bg-gray-100 text-gray-600 border-gray-300 line-through', rowClass: 'border-l-gray-400 opacity-70', dotClass: 'bg-gray-400' },
 };
 
 const MEJOR_PROVEER_ESTADO_STYLE: Record<string, EstadoStyle> = {
@@ -288,6 +300,9 @@ const MEJOR_PROVEER_ESTADO_STYLE: Record<string, EstadoStyle> = {
 };
 
 export function getEstadoConfig(categoria: ItemCategoria, estado: string, item?: ControlPruebaItem) {
+  if (item?.tipo === 'oficio_electronico' && estado in OFICIO_ELECTRONICO_ESTADO_STYLE) {
+    return OFICIO_ELECTRONICO_ESTADO_STYLE[estado];
+  }
   if (estado in CEDULA_NOTIF_ESTADO_STYLE) {
     return CEDULA_NOTIF_ESTADO_STYLE[estado];
   }
@@ -355,14 +370,44 @@ export function itemsOfrecidasProduccion(items: ControlPruebaItem[]): ControlPru
   return items.filter(usaEstadosProduccionPrueba);
 }
 
-/** Filtro de estado del header: aplica a prueba ofrecida; el resto de categorías sigue visible. */
+/** Comunicaciones / audiencias / mejor proveer aún abiertas (no cumplidas ni cerradas). */
+export function itemPendienteDeControl(item: ControlPruebaItem): boolean {
+  const cat = resolveCategoria(item);
+  if (cat === 'diligencia') {
+    if (usaEstadosComunicacionEspeciales(item)) {
+      return !estadosTerminalesComunicacion(item).includes(String(item.estado));
+    }
+    const terminales = ['cumplido', 'diligenciado', 'notificada', 'librada_notificada', 'resultado_negativo'];
+    return !terminales.includes(String(item.estado));
+  }
+  if (cat === 'audiencia' && !esAudienciaOfrecida(item)) {
+    return !['realizada', 'cancelada'].includes(String(item.estado));
+  }
+  if (cat === 'mejor_proveer') {
+    return !['cumplida', 'dispensada', 'incumplida'].includes(String(item.estado));
+  }
+  return false;
+}
+
+/** Filtro de estado del header: prueba ofrecida + comunicaciones/audiencias pendientes. */
 export function pasaFiltroEstadoProduccion(item: ControlPruebaItem, filtro: string): boolean {
   if (filtro === 'all') return true;
-  if (!usaEstadosProduccionPrueba(item)) return true;
-  return itemVisibleConFiltroEstado(item, filtro);
+  if (filtro === 'audiencia_fijada') {
+    return itemVisibleConFiltroEstado(item, filtro);
+  }
+  if (usaEstadosProduccionPrueba(item)) {
+    return itemVisibleConFiltroEstado(item, filtro);
+  }
+  if (filtro === 'pendiente_produccion') {
+    return itemPendienteDeControl(item);
+  }
+  return false;
 }
 
 export function estadosParaItem(item: ControlPruebaItem): readonly string[] {
+  if (resolveCategoria(item) === 'audiencia' && item.vinculo?.rol === 'audiencia_prueba') {
+    return AUDIENCIA_ESTADOS;
+  }
   if (esAudienciaOfrecida(item)) return PRUEBA_ESTADOS;
   if (item.tipo === 'pericial' && resolveCategoria(item) === 'prueba') return estadosPericialPadre();
   if (esMovimientoPericial(item)) return estadosParaMovimientoPericial(item);
@@ -518,18 +563,15 @@ function migrateTipoDiligencia(tipo: string): string {
 }
 
 function migrateConfesionalACategoria(item: ControlPruebaItem): Partial<Pick<ControlPruebaItem, 'categoria' | 'tipo'>> {
-  if (item.tipo !== 'confesional') return {};
-  if (resolveCategoria(item) === 'audiencia') return {};
-  return { categoria: 'audiencia', tipo: 'confesional' };
+  // Modelo B: confesional vive en prueba ofrecida (no mover a audiencias).
+  return {};
 }
 
 function migrateTestimonialACategoria(item: ControlPruebaItem): Partial<Pick<ControlPruebaItem, 'categoria' | 'tipo'>> {
   if (item.tipo === 'audiencia_testimonial') {
-    return { categoria: 'audiencia', tipo: 'testimonial' };
+    return { categoria: 'prueba', tipo: 'testimonial' };
   }
-  if (item.tipo !== 'testimonial') return {};
-  if (resolveCategoria(item) === 'audiencia') return {};
-  return { categoria: 'audiencia', tipo: 'testimonial' };
+  return {};
 }
 
 /** Estados genéricos de diligencia (oficio, mandamiento, exhorto) — legacy → vigentes */
@@ -765,11 +807,12 @@ export function normalizeItems(items: ControlPruebaItem[] | undefined): ControlP
         fechaProduccion: item.fechaProduccion || null,
         actuacionUrl: item.actuacionUrl?.trim() || null,
         observaciones: item.observaciones?.trim() || null,
+        terceroNombre: normalizarNombreTercero(item.terceroNombre),
         subtareas: normalizeSubtareas(item.subtareas),
         testigos: normalizeTestigos(item.testigos),
         historial: normalizeHistorial(item.historial),
         adjuntos: normalizeAdjuntos(item.adjuntos),
-        diligencia: normalizeDiligencia(item.diligencia),
+        diligencia: categoria === 'diligencia' ? normalizeDiligencia(item.diligencia) : undefined,
         pericial: normalizePericial(item.pericial),
         audiencia: normalizeAudiencia(item.audiencia),
         audienciaPrueba: normalizeAudienciaPrueba(item.audienciaPrueba),
@@ -794,25 +837,33 @@ export function normalizeItems(items: ControlPruebaItem[] | undefined): ControlP
           : withAudiencia.tipo === 'documental'
             ? ensureDocumentalMeta(withAudiencia)
             : withAudiencia;
+      if (withDocumental.categoria === 'audiencia') {
+        return { ...withDocumental, estado: coerceEstadoAudienciaItem(withDocumental) };
+      }
       return withDocumental;
     })
     .filter((item) => item.descripcion.length > 0)
     .sort((a, b) => a.orden - b.orden);
 
-  return consolidarAutenticidadDocumentalExpediente(
-    migrarCedulasEmbebidas(mapped)
-      .map(normalizarEstadosComunicacion)
-      .map((item, index) => sanitizeForFirestore({ ...item, orden: index + 1 })),
-    [],
-  ).items;
+  const migrated = migrateModeloAudienciaPrueba(
+    migrateExpedienteInformativaAOficio(
+      migrarCedulasEmbebidas(mapped)
+        .map(normalizarEstadosComunicacion)
+        .map((item, index) => ({ ...item, orden: index + 1 })),
+    ).map((item) => sanitizeForFirestore(item)),
+  );
+
+  return sanitizeForFirestore(consolidarAutenticidadDocumentalExpediente(migrated, []).items);
 }
 
 export function countByEstado(items: ControlPruebaItem[]): Record<PruebaEstado, number> {
   const counts = Object.fromEntries(PRUEBA_ESTADOS.map((e) => [e, 0])) as Record<PruebaEstado, number>;
   for (const item of items) {
+    if (resolveCategoria(item) === 'audiencia' && item.vinculo?.rol === 'audiencia_prueba') continue;
     if (!usaEstadosProduccionPrueba(item)) continue;
-    const agregado = estadoAgregadoPruebaChip(item);
-    if (isValidEstado(agregado)) counts[agregado] += 1;
+    for (const estado of PRUEBA_ESTADOS) {
+      if (itemVisibleConFiltroEstado(item, estado)) counts[estado] += 1;
+    }
   }
   return counts;
 }
@@ -1015,6 +1066,9 @@ export function serializeControlPruebaDoc(
     pdfImportedAt: data.pdfImportedAt ?? undefined,
     actor: data.actor ?? undefined,
     demandado: data.demandado ?? undefined,
+    terceros: Array.isArray(data.terceros)
+      ? (data.terceros as string[]).map((t) => String(t).trim()).filter(Boolean)
+      : undefined,
     parteRepresentada: data.parteRepresentada === 'demandado' ? 'demandado' : data.parteRepresentada === 'actor' ? 'actor' : '',
     items: consolidarAutenticidadDocumentalExpediente(
       normalizeItems(data.items),
