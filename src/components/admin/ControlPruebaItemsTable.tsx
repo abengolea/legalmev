@@ -3,7 +3,6 @@
 import { Fragment, useState } from 'react';
 import { cn } from '@/lib/utils';
 import type { ControlPruebaExpediente, ControlPruebaItem, ItemCategoria, PruebaParte, TipoTramitePericial } from '@/types/control-prueba';
-import { PRUEBA_PARTES } from '@/types/control-prueba';
 import {
   esAudienciaOfrecida,
   estadosParaItem,
@@ -19,6 +18,12 @@ import { progresoSubtareas } from '@/lib/control-prueba-subtareas';
 import { contarSubprocesosActivos } from '@/lib/control-prueba-subprocesos';
 import { patchTipoComunicacion } from '@/lib/control-prueba-cedula-notif';
 import {
+  esTipoPruebaSelectValue,
+  opcionesTipoDiligencia,
+  patchReclasificarAPrueba,
+  type ParteGrupoTabla,
+} from '@/lib/control-prueba-reclasificar';
+import {
   resolucionBadgeClass,
   resolucionEtiqueta,
   resolucionFilaClass,
@@ -33,7 +38,8 @@ import {
 } from '@/lib/control-prueba-pericial';
 import {
   estadosPruebaParaItem,
-  patchAudienciaPrueba,
+  patchTipoAudiencia,
+  coerceEstadoAudienciaItem,
 } from '@/lib/control-prueba-audiencia-prueba';
 import { patchEstadoPruebaOfrecida } from '@/lib/control-prueba-cierre';
 import {
@@ -43,6 +49,17 @@ import {
 import {
   usaFlujoAutenticidadDocumental,
 } from '@/lib/control-prueba-documental-autenticidad';
+import { ControlPruebaOficiosAutenticidadEnlaces } from '@/components/admin/ControlPruebaDocumentalAutenticidadBlock';
+import { ControlPruebaCedulasAudienciaEnlaces } from '@/components/admin/ControlPruebaCedulasAudienciaEnlaces';
+import { ControlPruebaAudienciaEventoEnlaces } from '@/components/admin/ControlPruebaAudienciaEventoEnlaces';
+import {
+  esEventoAudienciaPrueba,
+  patchEventoAudienciaMeta,
+  patchFechaEventoAudiencia,
+  pruebaIdDeEventoAudiencia,
+} from '@/lib/control-prueba-audiencia-evento';
+import { ControlPruebaAutoTextarea } from '@/components/admin/ControlPruebaAutoTextarea';
+import { ControlPruebaDateField } from '@/components/admin/ControlPruebaDateField';
 import { ControlPruebaDeferredInput } from '@/components/admin/ControlPruebaDeferredInput';
 import { ControlPruebaItemDetail } from '@/components/admin/ControlPruebaItemDetail';
 import { Button } from '@/components/ui/button';
@@ -51,7 +68,10 @@ import { Input } from '@/components/ui/input';
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
@@ -79,6 +99,7 @@ export type ControlItemsTableProps = {
   onUpdate: (id: string, patch: Partial<ControlPruebaItem>) => void;
   onRemove: (id: string) => void;
   onAddCedulaVinculada?: (parentId: string, destinatario?: string) => void;
+  onAddOficioAutenticidad?: (parentId: string, destinatario?: string) => void;
   onReintentarCedulaTestigo?: (parentId: string, destinatario: string) => void;
   onCrearMandamientoTestigo?: (parentId: string, testigoNombre: string) => void;
   onCrearOficioAclaracion?: (parentId: string) => void;
@@ -87,6 +108,12 @@ export type ControlItemsTableProps = {
   onUpdateMovimientoPericial?: (movimientoId: string, patch: Partial<ControlPruebaItem>) => void;
   onRemoveMovimientoPericial?: (movimientoId: string) => void;
   onFocusItem?: (itemId: string) => void;
+  onNuevaAudienciaVinculada?: (pruebaId: string) => void;
+  /** Lista de terceros del expediente — para asignar ítems sin identificar. */
+  tercerosNombres?: string[];
+  showSelectorTercero?: boolean;
+  /** Pestaña/grupo donde se muestra la tabla (para reclasificar comunicación → prueba). */
+  parteGrupo?: ParteGrupoTabla;
 };
 
 const FECHA_PRIMARIA: Record<ItemCategoria, string> = {
@@ -97,14 +124,6 @@ const FECHA_PRIMARIA: Record<ItemCategoria, string> = {
   mejor_proveer: 'Plazo',
 };
 
-const FECHA_SECUNDARIA: Record<ItemCategoria, string> = {
-  prueba: 'Producida',
-  diligencia: 'Cumplido',
-  audiencia: 'Realizada',
-  tramite: 'Presentada',
-  mejor_proveer: 'Cumplida',
-};
-
 function labelFechaPrimaria(categoria: ItemCategoria, items: ControlPruebaItem[]): string {
   if (categoria === 'audiencia' && items.some(esAudienciaOfrecida)) return 'Audiencia';
   if (categoria === 'prueba' && items.some((i) => i.tipo === 'documental_en_poder')) {
@@ -113,29 +132,66 @@ function labelFechaPrimaria(categoria: ItemCategoria, items: ControlPruebaItem[]
   return FECHA_PRIMARIA[categoria];
 }
 
-function labelFechaSecundaria(categoria: ItemCategoria, items: ControlPruebaItem[]): string {
-  if (categoria === 'audiencia' && items.some(esAudienciaOfrecida)) return 'Producida';
-  return FECHA_SECUNDARIA[categoria];
+const PARTES_MEJOR_PROVEER = ['actor', 'demandado', 'tercero'] as const;
+
+function usaColumnaObservaciones(categoria: ItemCategoria): boolean {
+  return categoria === 'prueba' || categoria === 'diligencia' || categoria === 'audiencia';
 }
 
-function labelColumnaParte(categoria: ItemCategoria): string {
-  return categoria === 'mejor_proveer' ? 'Obligada' : 'Ofrecida por';
-}
-
-function partesParaSelect(categoria: ItemCategoria): readonly PruebaParte[] {
-  if (categoria === 'mejor_proveer') {
-    return ['actor', 'demandado', 'tercero'] as const;
+function placeholderObservaciones(categoria: ItemCategoria, compact: boolean): string {
+  if (categoria === 'diligencia') {
+    return compact
+      ? 'Notas, seguimiento, observaciones...'
+      : 'Texto libre: notas del estudio, seguimiento, observaciones sobre esta diligencia...';
   }
-  return PRUEBA_PARTES;
+  if (categoria === 'audiencia') {
+    return compact
+      ? 'Notas, seguimiento, observaciones...'
+      : 'Texto libre: notas del estudio, seguimiento, observaciones sobre esta audiencia...';
+  }
+  return compact
+    ? 'Notas, seguimiento, observaciones...'
+    : 'Texto libre: notas del estudio, seguimiento, observaciones sobre esta prueba...';
 }
 
-function parteDefaultItem(item: ControlPruebaItem, categoria: ItemCategoria): string {
-  if (categoria === 'mejor_proveer') return item.ofrecidaPor ?? 'actor';
-  return item.ofrecidaPor ?? 'tribunal';
+function tableColSpan(categoria: ItemCategoria): number {
+  // expand + # + tipo + desc + (observaciones|obligada) + estado + fecha + link + acciones
+  return usaColumnaObservaciones(categoria) || categoria === 'mejor_proveer' ? 9 : 8;
 }
 
 function usaFlujoAudienciaParte(item: ControlPruebaItem): boolean {
-  return esAudienciaOfrecida(item);
+  return esAudienciaOfrecida(item) || item.tipo === 'audiencia_testimonial';
+}
+
+/** Misma grilla en prueba, diligencia y audiencia para alinear columnas entre secciones. */
+const COL = {
+  expand: 'w-8 p-2',
+  orden: 'w-9 p-2',
+  tipo: 'w-[10rem] p-2 align-top',
+  descripcion: 'p-2 align-top',
+  observaciones: 'p-2 align-top',
+  obligada: 'w-[6.5rem] p-2',
+  estado: 'w-[9rem] p-2 align-top',
+  fecha: 'w-[10rem] p-2 align-top',
+  link: 'w-[11rem] p-2 align-top',
+  acciones: 'w-[4.5rem] p-1 align-top',
+} as const;
+
+function ItemsTableColGroup({ categoria }: { categoria: ItemCategoria }) {
+  const col5Width = categoria === 'mejor_proveer' ? '6.5rem' : '26%';
+  return (
+    <colgroup>
+      <col style={{ width: '2rem' }} />
+      <col style={{ width: '2.25rem' }} />
+      <col style={{ width: '10rem' }} />
+      <col style={{ width: '20%' }} />
+      <col style={{ width: col5Width }} />
+      <col style={{ width: '9rem' }} />
+      <col style={{ width: '10rem' }} />
+      <col style={{ width: '11rem' }} />
+      <col style={{ width: '4.5rem' }} />
+    </colgroup>
+  );
 }
 
 export function ControlPruebaItemsTable({
@@ -149,6 +205,7 @@ export function ControlPruebaItemsTable({
   onUpdate,
   onRemove,
   onAddCedulaVinculada,
+  onAddOficioAutenticidad,
   onReintentarCedulaTestigo,
   onCrearMandamientoTestigo,
   onCrearOficioAclaracion,
@@ -157,12 +214,19 @@ export function ControlPruebaItemsTable({
   onUpdateMovimientoPericial,
   onRemoveMovimientoPericial,
   onFocusItem,
+  onNuevaAudienciaVinculada,
+  tercerosNombres = [],
+  showSelectorTercero = false,
+  parteGrupo,
 }: ControlItemsTableProps) {
   const allItems = expediente.items ?? items;
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [resultadosItem, setResultadosItem] = useState<ControlPruebaItem | null>(null);
   const tipos = TIPOS_POR_CATEGORIA[categoria];
   const opcionesTipo = categoria === 'prueba' ? opcionesTipoPrueba(tipos) : tipos.map((t) => ({ value: t, label: TIPO_LABELS[t] ?? t }));
+  const opcionesDiligencia = categoria === 'diligencia' ? opcionesTipoDiligencia(tipos) : [];
+  const opcionesPruebaDiligencia = opcionesDiligencia.filter((o) => o.grupo === 'prueba');
+  const opcionesComunicacion = opcionesDiligencia.filter((o) => o.grupo === 'actual');
 
   const toggleExpand = (id: string) => {
     setExpandedIds((prev) => {
@@ -183,19 +247,22 @@ export function ControlPruebaItemsTable({
 
   return (
     <>
-    <Table>
+    <Table className="table-fixed w-full min-w-[1024px]">
+      <ItemsTableColGroup categoria={categoria} />
       <TableHeader>
         <TableRow className={compact ? 'h-8' : undefined}>
-          <TableHead className="w-8" />
-          <TableHead className="w-10">#</TableHead>
-          <TableHead className="min-w-[100px]">Tipo</TableHead>
-          <TableHead className="min-w-[200px]">Descripción</TableHead>
-          {categoria !== 'prueba' && <TableHead className="min-w-[110px]">{labelColumnaParte(categoria)}</TableHead>}
-          <TableHead className="min-w-[130px]">Estado</TableHead>
-          <TableHead className="min-w-[100px]">{labelFechaPrimaria(categoria, items)}</TableHead>
-          <TableHead className="min-w-[100px]">{labelFechaSecundaria(categoria, items)}</TableHead>
-          <TableHead className="min-w-[140px]">Link</TableHead>
-          <TableHead className="w-10" />
+          <TableHead className={COL.expand} />
+          <TableHead className={COL.orden}>#</TableHead>
+          <TableHead className={COL.tipo}>Tipo</TableHead>
+          <TableHead className={COL.descripcion}>Descripción</TableHead>
+          {usaColumnaObservaciones(categoria) && (
+            <TableHead className={COL.observaciones}>Observaciones</TableHead>
+          )}
+          {categoria === 'mejor_proveer' && <TableHead className={COL.obligada}>Obligada</TableHead>}
+          <TableHead className={COL.estado}>Estado</TableHead>
+          <TableHead className={COL.fecha}>{labelFechaPrimaria(categoria, items)}</TableHead>
+          <TableHead className={COL.link}>Link</TableHead>
+          <TableHead className={COL.acciones} />
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -221,7 +288,7 @@ export function ControlPruebaItemsTable({
                   compact && 'text-xs',
                 )}
               >
-                <TableCell className="p-1">
+                <TableCell className={COL.expand}>
                   <Button
                     variant="ghost"
                     size="icon"
@@ -231,8 +298,8 @@ export function ControlPruebaItemsTable({
                     {expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
                   </Button>
                 </TableCell>
-                <TableCell className="text-muted-foreground text-xs p-2">{item.orden}</TableCell>
-                <TableCell className="p-2">
+                <TableCell className={cn(COL.orden, 'text-muted-foreground text-xs')}>{item.orden}</TableCell>
+                <TableCell className={COL.tipo}>
                   {categoria === 'prueba' ? (
                     <Select
                       value={tipoPruebaSelectValue(item)}
@@ -241,7 +308,12 @@ export function ControlPruebaItemsTable({
                         onUpdate(item.id, { ...parsed, categoria });
                       }}
                     >
-                      <SelectTrigger className={cn('text-xs', compact ? 'h-7' : 'h-8')}>
+                      <SelectTrigger
+                        className={cn(
+                          'text-xs h-auto py-1 [&>span]:line-clamp-2 [&>span]:whitespace-normal [&>span]:text-left',
+                          compact ? 'min-h-7' : 'min-h-8',
+                        )}
+                      >
                         <SelectValue>{labelTipoPrueba(item)}</SelectValue>
                       </SelectTrigger>
                       <SelectContent>
@@ -252,27 +324,96 @@ export function ControlPruebaItemsTable({
                         ))}
                       </SelectContent>
                     </Select>
+                  ) : categoria === 'audiencia' ? (
+                    <Select
+                      value={item.tipo}
+                      onValueChange={(v) => onUpdate(item.id, patchTipoAudiencia(item, v))}
+                    >
+                      <SelectTrigger
+                        className={cn(
+                          'text-xs h-auto py-1 [&>span]:line-clamp-2 [&>span]:whitespace-normal [&>span]:text-left',
+                          compact ? 'min-h-7' : 'min-h-8',
+                        )}
+                      >
+                        <SelectValue>{TIPO_LABELS[item.tipo] ?? item.tipo}</SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {tipos.map((t) => (
+                          <SelectItem key={t} value={t}>
+                            {TIPO_LABELS[t] ?? t}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   ) : (
                     <Select
                       value={item.tipo}
                       onValueChange={(v) =>
-                        onUpdate(item.id, {
-                          ...patchTipoComunicacion(item, v),
-                        })
+                        onUpdate(
+                          item.id,
+                          esTipoPruebaSelectValue(v)
+                            ? patchReclasificarAPrueba(item, v, { parteDestino: parteGrupo })
+                            : patchTipoComunicacion(item, v),
+                        )
                       }
                     >
-                      <SelectTrigger className={cn('text-xs', compact ? 'h-7' : 'h-8')}>
+                      <SelectTrigger
+                        className={cn(
+                          'text-xs h-auto py-1 [&>span]:line-clamp-2 [&>span]:whitespace-normal [&>span]:text-left',
+                          compact ? 'min-h-7' : 'min-h-8',
+                        )}
+                      >
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {tipos.map((t) => (
-                          <SelectItem key={t} value={t}>{TIPO_LABELS[t] ?? t}</SelectItem>
-                        ))}
+                        <SelectGroup>
+                          <SelectLabel>Comunicación</SelectLabel>
+                          {opcionesComunicacion.map((opt) => (
+                            <SelectItem key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                        {opcionesPruebaDiligencia.length > 0 && (
+                          <>
+                            <SelectSeparator />
+                            <SelectGroup>
+                              <SelectLabel>Prueba ofrecida</SelectLabel>
+                              {opcionesPruebaDiligencia.map((opt) => (
+                                <SelectItem key={opt.value} value={opt.value}>
+                                  {opt.label}
+                                </SelectItem>
+                              ))}
+                            </SelectGroup>
+                          </>
+                        )}
                       </SelectContent>
                     </Select>
                   )}
                 </TableCell>
-                <TableCell className="p-2">
+                <TableCell className={COL.descripcion}>
+                  {showSelectorTercero && item.ofrecidaPor === 'tercero' && (
+                    <Select
+                      value={item.terceroNombre?.trim() || '_sin_asignar'}
+                      onValueChange={(v) =>
+                        onUpdate(item.id, {
+                          terceroNombre: v === '_sin_asignar' ? null : v,
+                        })
+                      }
+                    >
+                      <SelectTrigger className={cn('h-7 text-[10px] mb-1', compact ? 'h-6' : 'h-7')}>
+                        <SelectValue placeholder="Asignar tercero…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="_sin_asignar">Sin identificar</SelectItem>
+                        {tercerosNombres.map((nombre) => (
+                          <SelectItem key={nombre} value={nombre}>
+                            {nombre}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
                   {item.tipo === 'pericial' && !compact && (
                     <p className="text-[10px] font-medium text-muted-foreground mb-1">
                       {DESCRIPCION_PERICIAL_LABEL}
@@ -286,11 +427,11 @@ export function ControlPruebaItemsTable({
                       placeholder={item.tipo === 'pericial' ? DESCRIPCION_PERICIAL_PLACEHOLDER : undefined}
                     />
                   ) : (
-                    <Textarea
+                    <ControlPruebaAutoTextarea
                       value={item.descripcion}
                       onChange={(e) => onUpdate(item.id, { descripcion: e.target.value })}
-                      rows={compact ? 1 : 2}
-                      className={cn('text-xs', compact ? 'min-h-[28px]' : 'min-h-[56px]')}
+                      minRows={2}
+                      className="text-xs min-h-[56px]"
                       placeholder={
                         item.tipo === 'pericial'
                           ? DESCRIPCION_PERICIAL_PLACEHOLDER
@@ -330,7 +471,7 @@ export function ControlPruebaItemsTable({
                     </div>
                   )}
                   {usaFlujoDocumentalEnPoder(item) && (
-                    <p className="text-[10px] mt-0.5 text-violet-800">
+                    <p className="text-[10px] mt-0.5 text-violet-800 leading-snug whitespace-normal">
                       {item.estado === 'postpuesta_juez'
                         ? 'Postergada — pedir intimación'
                         : item.estado === 'intimacion_ordenada'
@@ -339,46 +480,107 @@ export function ControlPruebaItemsTable({
                     </p>
                   )}
                   {usaFlujoAutenticidadDocumental(item) && item.estado === 'autenticidad_impugnada' && (
-                    <p className="text-[10px] mt-0.5 text-fuchsia-800">
-                      Documental negada · expandir para oficios a librar
-                    </p>
+                    <ControlPruebaOficiosAutenticidadEnlaces
+                      item={item}
+                      allItems={allItems}
+                      onAddOficio={
+                        onAddOficioAutenticidad
+                          ? (destinatario) => onAddOficioAutenticidad(item.id, destinatario)
+                          : undefined
+                      }
+                      onFocusSubproceso={onFocusItem}
+                    />
                   )}
-                  {usaFlujoAudienciaParte(item) && (
-                    <p className="text-[10px] mt-0.5 text-primary/80">
-                      {item.estado === 'postpuesta_juez'
-                        ? 'Postergada — pedir fijación'
-                        : item.estado === 'audiencia_fijada'
-                          ? 'Audiencia fijada · expandir para cédulas'
-                          : 'Sin audiencia fijada — use estado Audiencia fijada'}
-                    </p>
+                  {categoria === 'prueba' && usaFlujoAudienciaParte(item) && (
+                    <ControlPruebaAudienciaEventoEnlaces
+                      item={item}
+                      allItems={allItems}
+                      onFocusSubproceso={onFocusItem}
+                      onNuevaAudiencia={
+                        onNuevaAudienciaVinculada
+                          ? () => onNuevaAudienciaVinculada(item.id)
+                          : undefined
+                      }
+                    />
+                  )}
+                  {categoria === 'audiencia' && esEventoAudienciaPrueba(item) && (
+                    <>
+                      {pruebaIdDeEventoAudiencia(item) && onFocusItem && (
+                        <Button
+                          type="button"
+                          variant="link"
+                          className="h-auto p-0 text-[10px] text-muted-foreground font-normal mt-0.5"
+                          onClick={() => onFocusItem(pruebaIdDeEventoAudiencia(item)!)}
+                        >
+                          Prueba vinculada →
+                        </Button>
+                      )}
+                      <ControlPruebaCedulasAudienciaEnlaces
+                        item={item}
+                        allItems={allItems}
+                        onAddCedula={
+                          onAddCedulaVinculada ? () => onAddCedulaVinculada(item.id) : undefined
+                        }
+                        onFocusSubproceso={onFocusItem}
+                      />
+                    </>
                   )}
                 </TableCell>
-                {categoria !== 'prueba' && (
-                  <TableCell className="p-2">
+                {usaColumnaObservaciones(categoria) && (
+                  <TableCell className={COL.observaciones}>
+                    <Textarea
+                      value={item.observaciones ?? ''}
+                      onChange={(e) =>
+                        onUpdate(item.id, { observaciones: e.target.value || null })
+                      }
+                      rows={compact ? 2 : 3}
+                      className={cn(
+                        'w-full text-xs resize-y',
+                        compact ? 'min-h-[56px]' : 'min-h-[72px]',
+                      )}
+                      placeholder={placeholderObservaciones(categoria, compact)}
+                    />
+                  </TableCell>
+                )}
+                {categoria === 'mejor_proveer' && (
+                  <TableCell className={COL.obligada}>
                     <Select
-                      value={parteDefaultItem(item, categoria)}
+                      value={item.ofrecidaPor ?? 'actor'}
                       onValueChange={(v) => onUpdate(item.id, { ofrecidaPor: v as PruebaParte })}
                     >
                       <SelectTrigger className={cn('text-xs', compact ? 'h-7' : 'h-8')}>
                         <SelectValue>
-                          {PARTE_LABELS[parteDefaultItem(item, categoria)] ?? parteDefaultItem(item, categoria)}
+                          {PARTE_LABELS[item.ofrecidaPor ?? 'actor'] ?? item.ofrecidaPor ?? 'actor'}
                         </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
-                        {partesParaSelect(categoria).map((p) => (
+                        {PARTES_MEJOR_PROVEER.map((p) => (
                           <SelectItem key={p} value={p}>{PARTE_LABELS[p] ?? p}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </TableCell>
                 )}
-                <TableCell className="p-2">
+                <TableCell className={COL.estado}>
                   <Select
-                    value={String(item.estado)}
+                    value={
+                      esEventoAudienciaPrueba(item)
+                        ? coerceEstadoAudienciaItem(item)
+                        : String(item.estado)
+                    }
                     onValueChange={(v) =>
                       onUpdate(
                         item.id,
-                        patchEstadoPruebaOfrecida(item, v),
+                        esEventoAudienciaPrueba(item)
+                          ? {
+                              estado:
+                                v === 'producida' || v === 'valoracion_judicial' ? 'realizada' : v,
+                            }
+                          : esAudienciaOfrecida(item) && resolveCategoria(item) === 'prueba'
+                            ? patchEstadoPruebaOfrecida(item, v)
+                            : categoria === 'audiencia'
+                              ? { estado: v }
+                              : patchEstadoPruebaOfrecida(item, v),
                       )
                     }
                   >
@@ -400,7 +602,7 @@ export function ControlPruebaItemsTable({
                     </SelectContent>
                   </Select>
                 </TableCell>
-                <TableCell className="p-2">
+                <TableCell className={COL.fecha}>
                   <div className="space-y-1">
                     {usaFlujoDocumentalEnPoder(item) ? (
                       <>
@@ -415,6 +617,7 @@ export function ControlPruebaItemsTable({
                             ) : (
                               <ControlPruebaDeferredInput
                                 type="date"
+                                compact={compact}
                                 value={item.documentalEnPoder?.plazoPresentacion ?? item.fechaLimite ?? ''}
                                 onCommit={(plazoPresentacion) =>
                                   onUpdate(item.id, patchDocumentalEnPoder(item, { plazoPresentacion }))
@@ -437,89 +640,36 @@ export function ControlPruebaItemsTable({
                           <p className="text-[10px] text-muted-foreground leading-tight">Sin plazo — intimación pendiente</p>
                         )}
                       </>
-                    ) : usaFlujoAutenticidadDocumental(item) && item.estado === 'autenticidad_impugnada' ? (
+                    ) : esEventoAudienciaPrueba(item) ? (
                       <>
-                        {expanded ? (
-                          <p className="text-[10px] text-muted-foreground leading-tight">
-                            Impugnación: {item.documental?.fechaImpugnacion ?? '—'}
-                          </p>
-                        ) : (
-                          <p className="text-[10px] text-fuchsia-800 leading-tight">
-                            {item.documental?.fechaImpugnacion ?? 'Impugnación sin fecha'}
-                          </p>
-                        )}
-                        {contarSubprocesosActivos(item.id, allItems) > 0 && (
-                          <p className="text-[10px] text-muted-foreground">
-                            {contarSubprocesosActivos(item.id, allItems)} oficio(s) a librar
-                          </p>
-                        )}
+                        <ControlPruebaDeferredInput
+                          type="date"
+                          compact={compact}
+                          value={item.fechaLimite ?? ''}
+                          onCommit={(fecha) => onUpdate(item.id, patchFechaEventoAudiencia(item, fecha))}
+                          className={cn('text-xs', compact ? 'h-7' : 'h-8')}
+                        />
+                        <ControlPruebaDeferredInput
+                          type="time"
+                          value={item.audiencia?.hora ?? ''}
+                          onCommit={(hora) =>
+                            onUpdate(item.id, patchEventoAudienciaMeta(item, { hora: hora || undefined }))
+                          }
+                          className={cn('text-xs mt-1', compact ? 'h-7' : 'h-8')}
+                        />
                       </>
-                    ) : usaFlujoAudienciaParte(item) ? (
-                      <>
-                        {item.estado === 'postpuesta_juez' ? (
-                          <p className="text-[10px] text-orange-700 leading-tight">Postergada — pedir fijación</p>
-                        ) : item.estado === 'audiencia_fijada' ? (
-                          <>
-                            {expanded ? (
-                              <p className="text-[10px] text-muted-foreground leading-tight">
-                                {item.audienciaPrueba?.fechaAudiencia ?? '—'}
-                                {item.audienciaPrueba?.horaAudiencia
-                                  ? ` · ${item.audienciaPrueba.horaAudiencia}`
-                                  : ''}
-                              </p>
-                            ) : (
-                              <>
-                                <ControlPruebaDeferredInput
-                                  type="date"
-                                  value={item.audienciaPrueba?.fechaAudiencia ?? ''}
-                                  onCommit={(fechaAudiencia) =>
-                                    onUpdate(item.id, patchAudienciaPrueba(item, { fechaAudiencia }))
-                                  }
-                                  className={cn(
-                                    'text-xs',
-                                    compact ? 'h-7' : 'h-8',
-                                    alerta?.nivel === 'rojo' && 'border-red-400 bg-red-50/50',
-                                    alerta?.nivel === 'amarillo' && 'border-amber-400 bg-amber-50/50',
-                                  )}
-                                />
-                                <ControlPruebaDeferredInput
-                                  type="time"
-                                  value={item.audienciaPrueba?.horaAudiencia ?? ''}
-                                  onCommit={(horaAudiencia) =>
-                                    onUpdate(item.id, patchAudienciaPrueba(item, { horaAudiencia }))
-                                  }
-                                  className={cn('text-xs mt-1', compact ? 'h-7' : 'h-8')}
-                                />
-                              </>
-                            )}
-                            {contarSubprocesosActivos(item.id, allItems) > 0 && (
-                              <p className="text-[10px] text-muted-foreground">
-                                {contarSubprocesosActivos(item.id, allItems)} cédula(s)
-                              </p>
-                            )}
-                          </>
-                        ) : (
-                          <p className="text-[10px] text-muted-foreground italic leading-tight">
-                            Audiencia sin fijar
-                          </p>
-                        )}
-                        {alerta && item.estado === 'audiencia_fijada' && (
-                          <p className={cn('text-[10px] leading-tight', ALERTA_NIVEL_CONFIG[alerta.nivel].textClass)}>
-                            {alerta.fechaLimite
-                              ? etiquetaDiasHabiles(diasHabilesHasta(item.fechaLimite!))
-                              : alerta.mensaje}
-                          </p>
-                        )}
-                      </>
+                    ) : categoria === 'prueba' && usaFlujoAudienciaParte(item) ? (
+                      <p className="text-[10px] text-muted-foreground italic leading-tight">
+                        Fecha en audiencia vinculada
+                      </p>
                     ) : (
                       <>
-                        <Input
-                          type="date"
+                        <ControlPruebaDateField
                           value={item.fechaLimite ?? ''}
                           onChange={(e) => onUpdate(item.id, { fechaLimite: e.target.value || null })}
-                          className={cn(
+                          compact={compact}
+                          inputClassName={cn(
                             'text-xs',
-                            compact ? 'h-7' : 'h-8',
                             alerta?.nivel === 'rojo' && 'border-red-400 bg-red-50/50',
                             alerta?.nivel === 'amarillo' && 'border-amber-400 bg-amber-50/50',
                           )}
@@ -540,15 +690,7 @@ export function ControlPruebaItemsTable({
                     )}
                   </div>
                 </TableCell>
-                <TableCell className="p-2">
-                  <Input
-                    type="date"
-                    value={item.fechaProduccion ?? ''}
-                    onChange={(e) => onUpdate(item.id, { fechaProduccion: e.target.value || null })}
-                    className={cn('text-xs', compact ? 'h-7' : 'h-8')}
-                  />
-                </TableCell>
-                <TableCell className="p-2">
+                <TableCell className={COL.link}>
                   <div className="flex gap-1">
                     <Input
                       value={item.actuacionUrl ?? ''}
@@ -565,7 +707,7 @@ export function ControlPruebaItemsTable({
                     )}
                   </div>
                 </TableCell>
-                <TableCell className="p-1">
+                <TableCell className={COL.acciones}>
                   <div className="flex items-center">
                     <Button
                       variant="ghost"
@@ -594,7 +736,7 @@ export function ControlPruebaItemsTable({
               </TableRow>
               {expanded && (
                 <TableRow className="hover:bg-transparent">
-                  <TableCell colSpan={categoria !== 'prueba' ? 10 : 9} className="p-0">
+                  <TableCell colSpan={tableColSpan(categoria)} className="p-0">
                     <ControlPruebaItemDetail
                       item={item}
                       expediente={expediente}
@@ -605,6 +747,7 @@ export function ControlPruebaItemsTable({
                       )}
                       onUpdate={(patch) => onUpdate(item.id, patch)}
                       onAddCedulaVinculada={onAddCedulaVinculada}
+                      onAddOficioAutenticidad={onAddOficioAutenticidad}
                       onReintentarCedulaTestigo={onReintentarCedulaTestigo}
                       onCrearMandamientoTestigo={onCrearMandamientoTestigo}
                       onCrearOficioAclaracion={onCrearOficioAclaracion}

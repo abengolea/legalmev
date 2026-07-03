@@ -72,6 +72,26 @@ export const CEDULA_NOTIF_ESTADO_STYLE: Record<string, EstadoStyle> = {
   },
 };
 
+/** Etiquetas en masculino (oficio electrónico) — mismos estilos que cédula */
+export const OFICIO_ELECTRONICO_ESTADO_STYLE: Record<string, EstadoStyle> = {
+  pendiente_realizacion: CEDULA_NOTIF_ESTADO_STYLE.pendiente_realizacion,
+  observada: {
+    ...CEDULA_NOTIF_ESTADO_STYLE.observada,
+    label: 'Observado',
+  },
+  contestacion_parcial: CEDULA_NOTIF_ESTADO_STYLE.contestacion_parcial,
+  librada_notificada: {
+    ...CEDULA_NOTIF_ESTADO_STYLE.librada_notificada,
+    label: 'Librado y notificado',
+  },
+  cumplido: {
+    label: 'Cumplido',
+    badgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-300',
+    rowClass: 'border-l-emerald-500 bg-emerald-50/50',
+    dotClass: 'bg-emerald-500',
+  },
+};
+
 export const CEDULA_NOTIF_MEDIO_LABELS: Record<CedulaNotifMedio, string> = {
   papel: 'Cédula papel',
   electronica: 'Cédula electrónica',
@@ -144,6 +164,9 @@ export const estadosCedulaNotificacionAudiencia = estadosComunicacion;
 export function estadosTerminalesComunicacion(
   item: Pick<ControlPruebaItem, 'diligencia' | 'tipo' | 'estado'>,
 ): readonly string[] {
+  if (item.tipo === 'oficio_electronico') {
+    return ['librada_notificada', 'cumplido'];
+  }
   if (esComunicacionElectronica(item)) {
     return ['librada_notificada'];
   }
@@ -181,9 +204,11 @@ const COMUNICACION_A_GENERICO: Record<string, string> = {
   notificada: 'diligenciado',
   resultado_negativo: 'vencido',
   librada_notificada: 'diligenciado',
+  cumplido: 'cumplido',
 };
 
-export function migrateEstadoComunicacion(estado: string): string {
+export function migrateEstadoComunicacion(estado: string, tipo?: string): string {
+  if (tipo === 'oficio_electronico' && estado === 'cumplido') return 'cumplido';
   return LEGACY_A_COMUNICACION[estado] ?? estado;
 }
 
@@ -199,7 +224,7 @@ export function coerceEstadoComunicacion(
 ): string {
   if (!usaEstadosComunicacionEspeciales(item)) return String(item.estado);
   const electronica = esComunicacionElectronica(item);
-  let estado = migrateEstadoComunicacion(String(item.estado));
+  let estado = migrateEstadoComunicacion(String(item.estado), item.tipo);
   const validos =
     item.tipo === 'oficio_electronico'
       ? OFICIO_ELECTRONICO_ESTADOS

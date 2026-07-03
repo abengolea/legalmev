@@ -4,6 +4,7 @@ import { PERICIAL_FASES_EN_TRAMITE } from '@/lib/control-prueba-pericial-movimie
 export type KanbanColumnaId =
   | 'en_produccion'
   | 'producida'
+  | 'valoracion_judicial'
   | 'desistida'
   | 'no_admitida';
 
@@ -26,6 +27,12 @@ export const KANBAN_COLUMNAS: KanbanColumna[] = [
     titulo: 'Producida',
     estados: ['producida'],
     colorClass: 'border-t-emerald-500',
+  },
+  {
+    id: 'valoracion_judicial',
+    titulo: 'A valoración judicial',
+    estados: ['valoracion_judicial'],
+    colorClass: 'border-t-indigo-500',
   },
   {
     id: 'desistida',

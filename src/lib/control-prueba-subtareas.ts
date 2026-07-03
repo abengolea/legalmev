@@ -1,14 +1,6 @@
 import type { ControlPruebaItem, ItemSubtarea } from '@/types/control-prueba';
 
 const SUBTAREAS_POR_TIPO: Record<string, readonly string[]> = {
-  documental: [
-    'Recepción del documento',
-    'Impugnación de autenticidad',
-    'Prueba informativa vinculada',
-    'Oficio sobre autenticidad',
-    'Respuesta informativa',
-    'Certificación',
-  ],
   pericial: [
     'Propuesta de perito',
     'Designación judicial',
@@ -78,6 +70,10 @@ export function ensureSubtareas(item: ControlPruebaItem): ControlPruebaItem {
   }
   if (cat === 'audiencia' && item.tipo !== 'confesional' && item.tipo !== 'testimonial') return item;
   if (cat !== 'prueba' && cat !== 'audiencia') return item;
+
+  if (item.tipo === 'documental') {
+    return item.subtareas?.length ? { ...item, subtareas: undefined } : item;
+  }
 
   const definidas = subtareasDefinicionPorTipo(item.tipo);
   if (definidas.length === 0) return item;

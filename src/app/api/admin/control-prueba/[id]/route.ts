@@ -7,6 +7,7 @@ import {
   CONTROL_PRUEBA_COLLECTION,
   detectSistemaFromUrl,
   normalizeItems,
+  sanitizeForFirestore,
   serializeControlPruebaDoc,
 } from '@/lib/control-prueba';
 import type { ControlPruebaExpedienteInput } from '@/types/control-prueba';
@@ -76,7 +77,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       update.sistema = body.sistema;
     }
     if (body.items !== undefined) {
-      update.items = normalizeItems(body.items);
+      update.items = sanitizeForFirestore(normalizeItems(body.items));
     }
     if (body.hitos !== undefined && Array.isArray(body.hitos)) {
       update.hitos = body.hitos;
@@ -90,6 +91,9 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     if (body.parteRepresentada !== undefined) {
       update.parteRepresentada =
         body.parteRepresentada === 'demandado' ? 'demandado' : body.parteRepresentada === 'actor' ? 'actor' : '';
+    }
+    if (body.terceros !== undefined && Array.isArray(body.terceros)) {
+      update.terceros = body.terceros.map((t) => String(t).trim()).filter(Boolean);
     }
 
     await ref.update(update);

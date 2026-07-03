@@ -4,8 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { auth } from '@/lib/firebase';
 import { cn, safeResJson } from '@/lib/utils';
 import { ControlPruebaItemsTable } from '@/components/admin/ControlPruebaItemsTable';
-import { ControlPruebaKanban } from '@/components/admin/ControlPruebaKanban';
-import { ControlPruebaMetricasPanel } from '@/components/admin/ControlPruebaMetricasPanel';
 import { ControlPruebaImportPreviewDialog } from '@/components/admin/ControlPruebaImportPreviewDialog';
 import { downloadBlob, exportControlPruebaExcel, exportControlPruebaJson, exportControlPruebaPdf, exportControlPruebaRevisionText, exportFilename } from '@/lib/control-prueba-export';
 import { patchItemConHistorial } from '@/lib/control-prueba-item-utils';
@@ -25,10 +23,15 @@ import {
 import {
   crearCedulaManualVinculada,
   crearCedulaReintentoVinculada,
+  crearEventoAudienciaManual,
   crearMandamientoConduccionTestigo,
+  crearOficioAutenticidadManual,
   evaluarSubProcesosAutomaticos,
+  hydrateAutenticidadDocumentalVinculos,
   marcarHijosSinEfectoPorPadreEliminado,
 } from '@/lib/control-prueba-subprocesos';
+import { migrateExpedienteInformativaAOficio } from '@/lib/control-prueba-informativa-migrate';
+import { migrateModeloAudienciaPrueba } from '@/lib/control-prueba-audiencia-migrate';
 import {
   crearOficioAclaracion,
   crearOficioReiteracion,
@@ -36,7 +39,7 @@ import {
   evaluarOficioReiteracionAutomatico,
 } from '@/lib/control-prueba-oficio';
 import { crearMovimientoPericial, estadoAgregadoPruebaChip, itemVisibleConFiltroEstado } from '@/lib/control-prueba-pericial-movimientos';
-import { patchEstadoPruebaOfrecida } from '@/lib/control-prueba-cierre';
+import { patchEstadoPruebaOfrecida, esCierrePrueba } from '@/lib/control-prueba-cierre';
 import type { TipoTramitePericial } from '@/types/control-prueba';
 import {
   CATEGORIA_CONFIG,
@@ -52,14 +55,24 @@ import {
   sistemaLabel,
   usaEstadosProduccionPrueba,
   TIPO_LABELS,
-  TIPOS_POR_CATEGORIA,
   extractMetadataFromExpedienteText,
   extractMetadataFromFilename,
   mergeMetadataLocal,
   truncateTextoForAnalysis,
+  sanitizeForFirestore,
 } from '@/lib/control-prueba';
-import type { ImportPreviewPayload } from '@/lib/control-prueba-import-apply';
+import {
+  FILTRO_TIPO_GRUPO_LABELS,
+  itemPasaFiltroTipo,
+  opcionesFiltroTipoExpediente,
+} from '@/lib/control-prueba-filtros';
 import { resumenParaParteRepresentada } from '@/lib/control-prueba-resumen';
+import {
+  TERCERO_SIN_IDENTIFICAR,
+  agruparItemsPorTercero,
+  listaTercerosExpediente,
+  ordenGruposTercero,
+} from '@/lib/control-prueba-terceros';
 import { extractTextFromPdfFile, PdfExtractError } from '@/lib/pdf-text-extract-client';
 import type {
   ControlPruebaExpediente,
@@ -90,7 +103,10 @@ import { Label } from '@/components/ui/label';
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
@@ -98,16 +114,23 @@ import { Textarea } from '@/components/ui/textarea';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
   Check,
+  ChevronDown,
   CloudOff,
+  Download,
   ExternalLink,
   FileDown,
   FileJson,
   FileSearch,
   FileSpreadsheet,
   FileUp,
-  LayoutGrid,
-  LayoutList,
   Loader2,
   Plus,
   RefreshCw,
@@ -149,6 +172,7 @@ function persistSnapshotFrom(
     parteRepresentada: header.parteRepresentada ?? '',
     actor: header.actor ?? '',
     demandado: header.demandado ?? '',
+    terceros: header.terceros ?? [],
     items,
     hitos,
     oficiosAutenticidadPendientes: oficios,
@@ -167,9 +191,14 @@ function syncDraftFromExpediente(exp: ControlPruebaExpediente) {
     parteRepresentada: exp.parteRepresentada ?? '',
     actor: exp.actor ?? '',
     demandado: exp.demandado ?? '',
+    terceros: exp.terceros ?? [],
   };
   const { items } = consolidarAutenticidadDocumentalExpediente(
-    exp.items.map((item) => ({ ...item })),
+    migrateModeloAudienciaPrueba(
+      migrateExpedienteInformativaAOficio(
+        hydrateAutenticidadDocumentalVinculos(exp.items.map((item) => ({ ...item }))),
+      ).map((item) => sanitizeForFirestore(item)),
+    ).map((item) => sanitizeForFirestore(item)),
     exp.oficiosAutenticidadPendientes ?? [],
   );
   const oficios = collectOficiosAutenticidadFromItems(items);
@@ -198,7 +227,7 @@ function tabDeItem(item: ControlPruebaItem): ParteTabId {
 
 function newItem(
   orden: number,
-  opts: { categoria?: ItemCategoria; parte?: PruebaParte } = {},
+  opts: { categoria?: ItemCategoria; parte?: PruebaParte; terceroNombre?: string | null } = {},
 ): ControlPruebaItem {
   const categoria = opts.categoria ?? 'prueba';
   const parte =
@@ -216,6 +245,7 @@ function newItem(
     tipo,
     descripcion: '',
     ofrecidaPor: parte,
+    terceroNombre: parte === 'tercero' ? opts.terceroNombre?.trim() || null : null,
     estado: defaultEstadoForItem(categoria, tipo),
     fechaLimite: null,
     fechaProduccion: null,
@@ -286,10 +316,10 @@ export function ControlPruebaPanel() {
   const [filtroTipo, setFiltroTipo] = useState<string>('all');
   const [filtroParte, setFiltroParte] = useState<string>('all');
   const [busquedaItem, setBusquedaItem] = useState('');
-  const [vistaExpediente, setVistaExpediente] = useState<'tabla' | 'kanban' | 'metricas'>('tabla');
   const [parteTab, setParteTab] = useState<ParteTabId>('actor');
   const [modoCompacto, setModoCompacto] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [nuevoTerceroNombre, setNuevoTerceroNombre] = useState('');
   const pickerRef = useRef<HTMLDivElement>(null);
   const [hitosDraft, setHitosDraft] = useState<ExpedienteHito[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
@@ -438,12 +468,17 @@ export function ControlPruebaPanel() {
   const handleFocusItem = useCallback(
     (itemId: string) => {
       setEstadoFilter('all');
-      setVistaExpediente('tabla');
       setHighlightItemId(itemId);
       const item = draftItems.find((i) => i.id === itemId);
       if (item) setParteTab(tabDeItem(item));
     },
     [draftItems],
+  );
+
+  const opcionesFiltroTipo = useMemo(() => opcionesFiltroTipoExpediente(), []);
+  const gruposFiltroTipo = useMemo(
+    () => (['prueba', 'diligencia', 'audiencia'] as const).filter((g) => opcionesFiltroTipo.some((o) => o.grupo === g)),
+    [opcionesFiltroTipo],
   );
 
   const baseFilteredItems = useMemo(() => {
@@ -457,7 +492,7 @@ export function ControlPruebaPanel() {
           String(item.estado).includes(q),
       );
     }
-    if (filtroTipo !== 'all') list = list.filter((item) => item.tipo === filtroTipo);
+    if (filtroTipo !== 'all') list = list.filter((item) => itemPasaFiltroTipo(item, filtroTipo));
     if (filtroParte !== 'all') list = list.filter((item) => (item.ofrecidaPor ?? 'actor') === filtroParte);
     if (estadoFilter !== 'all') {
       list = list.filter((item) => pasaFiltroEstadoProduccion(item, estadoFilter));
@@ -470,15 +505,6 @@ export function ControlPruebaPanel() {
     [baseFilteredItems],
   );
 
-  const itemsByGrupo = useMemo(
-    () => ({
-      actor: pruebaItems.filter((i) => (i.ofrecidaPor ?? 'actor') === 'actor'),
-      demandado: pruebaItems.filter((i) => i.ofrecidaPor === 'demandado'),
-      otros: pruebaItems.filter((i) => i.ofrecidaPor === 'tercero' || i.ofrecidaPor === 'tribunal'),
-    }),
-    [pruebaItems],
-  );
-
   const itemsDiligencia = useMemo(
     () => baseFilteredItems.filter((i) => resolveCategoria(i) === 'diligencia'),
     [baseFilteredItems],
@@ -489,25 +515,54 @@ export function ControlPruebaPanel() {
     [baseFilteredItems],
   );
 
+  const itemsTerceroByCat = useMemo(
+    () => ({
+      prueba: pruebaItems.filter((i) => i.ofrecidaPor === 'tercero'),
+      diligencia: itemsDiligencia.filter((i) => i.ofrecidaPor === 'tercero'),
+      audiencia: itemsAudiencia.filter((i) => i.ofrecidaPor === 'tercero'),
+    }),
+    [pruebaItems, itemsDiligencia, itemsAudiencia],
+  );
+
+  const itemsTribunalByCat = useMemo(
+    () => ({
+      prueba: pruebaItems.filter((i) => i.ofrecidaPor === 'tribunal'),
+      diligencia: itemsDiligencia.filter((i) => i.ofrecidaPor === 'tribunal'),
+      audiencia: itemsAudiencia.filter((i) => i.ofrecidaPor === 'tribunal'),
+    }),
+    [pruebaItems, itemsDiligencia, itemsAudiencia],
+  );
+
+  const tercerosConocidos = useMemo(
+    () => listaTercerosExpediente(headerDraft.terceros ?? selected?.terceros, draftItems),
+    [headerDraft.terceros, selected?.terceros, draftItems],
+  );
+
+  const itemsByGrupo = useMemo(
+    () => ({
+      actor: pruebaItems.filter((i) => (i.ofrecidaPor ?? 'actor') === 'actor'),
+      demandado: pruebaItems.filter((i) => i.ofrecidaPor === 'demandado'),
+      otros: itemsTerceroByCat.prueba,
+    }),
+    [pruebaItems, itemsTerceroByCat.prueba],
+  );
+
   const diligenciaByGrupo = useMemo(
     () => ({
       actor: itemsDiligencia.filter((i) => (i.ofrecidaPor ?? 'tribunal') === 'actor'),
       demandado: itemsDiligencia.filter((i) => i.ofrecidaPor === 'demandado'),
-      otros: itemsDiligencia.filter((i) => {
-        const p = i.ofrecidaPor ?? 'tribunal';
-        return p === 'tercero' || p === 'tribunal';
-      }),
+      otros: itemsTerceroByCat.diligencia,
     }),
-    [itemsDiligencia],
+    [itemsDiligencia, itemsTerceroByCat.diligencia],
   );
 
   const audienciaByGrupo = useMemo(
     () => ({
       actor: itemsAudiencia.filter((i) => (i.ofrecidaPor ?? 'actor') === 'actor'),
       demandado: itemsAudiencia.filter((i) => i.ofrecidaPor === 'demandado'),
-      otros: itemsAudiencia.filter((i) => i.ofrecidaPor === 'tercero' || i.ofrecidaPor === 'tribunal'),
+      otros: itemsTerceroByCat.audiencia,
     }),
-    [itemsAudiencia],
+    [itemsAudiencia, itemsTerceroByCat.audiencia],
   );
 
   const itemsMejorProveer = useMemo(
@@ -524,10 +579,12 @@ export function ControlPruebaPanel() {
         diligenciaByGrupo.demandado.length +
         audienciaByGrupo.demandado.length,
       otros:
-        itemsByGrupo.otros.length + diligenciaByGrupo.otros.length + audienciaByGrupo.otros.length,
+        itemsTerceroByCat.prueba.length +
+        itemsTerceroByCat.diligencia.length +
+        itemsTerceroByCat.audiencia.length,
       mejor_proveer: itemsMejorProveer.length,
     }),
-    [itemsByGrupo, diligenciaByGrupo, audienciaByGrupo, itemsMejorProveer],
+    [itemsByGrupo, diligenciaByGrupo, audienciaByGrupo, itemsMejorProveer, itemsTerceroByCat],
   );
 
   const allPruebaItems = useMemo(
@@ -542,8 +599,6 @@ export function ControlPruebaPanel() {
 
   const counts = useMemo(() => countByEstado(allPruebaItems), [allPruebaItems]);
   const progresoPct = useMemo(() => progresoExpedienteHeader(draftItems), [draftItems]);
-  const faltaLinkExpediente = !(headerDraft.expedienteUrl ?? selected?.expedienteUrl ?? '').trim();
-  const tieneItemsProducidos = draftItems.some((i) => i.estado === 'producida');
 
   const parteRepresentada = (headerDraft.parteRepresentada ?? selected?.parteRepresentada ?? '') as
     | ParteRepresentadaPrueba
@@ -588,6 +643,29 @@ export function ControlPruebaPanel() {
       hitos: hitosDraft,
     }),
     [selected, headerDraft, draftItems, hitosDraft, oficiosDraft, resumenVisible],
+  );
+
+  const handleExport = useCallback(
+    (format: 'pdf' | 'xlsx' | 'json' | 'txt') => {
+      switch (format) {
+        case 'json':
+          downloadBlob(exportControlPruebaJson(expedienteDraft), exportFilename(expedienteDraft, 'json'));
+          toast({ title: 'JSON exportado', description: 'Pegalo en el chat para revisar ítems incorrectos de la IA.' });
+          break;
+        case 'txt':
+          downloadBlob(exportControlPruebaRevisionText(expedienteDraft), exportFilename(expedienteDraft, 'txt'));
+          toast({ title: 'TXT exportado', description: 'Listado legible para marcar qué no es prueba.' });
+          break;
+        case 'xlsx':
+          downloadBlob(exportControlPruebaExcel(expedienteDraft), exportFilename(expedienteDraft, 'xlsx'));
+          break;
+        case 'pdf':
+          downloadBlob(exportControlPruebaPdf(expedienteDraft), exportFilename(expedienteDraft, 'pdf'));
+          toast({ title: 'Informe PDF generado', description: 'Incluye resumen ejecutivo, oficios e ítems por categoría.' });
+          break;
+      }
+    },
+    [expedienteDraft, toast],
   );
 
   const handleCreate = async () => {
@@ -1056,9 +1134,7 @@ export function ControlPruebaPanel() {
         }
         let next = patchItemConHistorial(item, effectivePatch, usuario);
         if (
-          (patch.estado === 'producida' ||
-            patch.estado === 'desistida' ||
-            patch.estado === 'no_admitida' ||
+          ((patch.estado !== undefined && esCierrePrueba(String(patch.estado))) ||
             patch.estado === 'cumplido' ||
             patch.estado === 'realizada' ||
             patch.estado === 'cumplida') &&
@@ -1068,6 +1144,9 @@ export function ControlPruebaPanel() {
         }
         if (patch.tipo && !patch.categoria) {
           next = { ...next, categoria: inferCategoriaFromTipo(patch.tipo) };
+          next = ensureSubtareas(next);
+        }
+        if (patch.categoria && patch.categoria !== item.categoria) {
           next = ensureSubtareas(next);
         }
         if (next.tipo === 'pericial' || patch.pericial) {
@@ -1114,6 +1193,19 @@ export function ControlPruebaPanel() {
       return resultItems;
     });
 
+    const anterior = draftItems.find((i) => i.id === id);
+    if (patch.categoria === 'prueba' && anterior?.categoria === 'diligencia') {
+      queueMicrotask(() => {
+        setEstadoFilter('all');
+        setHighlightItemId(id);
+        setParteTab(tabDeItem({ ...anterior, ...patch } as ControlPruebaItem));
+        toast({
+          title: 'Movido a Prueba ofrecida',
+          description: 'El ítem aparece arriba en la sección de prueba de esta parte.',
+        });
+      });
+    }
+
     if (alertasSubproceso.length > 0) {
       toast({
         title: alertasSubproceso[0],
@@ -1129,15 +1221,61 @@ export function ControlPruebaPanel() {
   };
 
   const addCedulaVinculada = (parentId: string, destinatario?: string) => {
-    let creado = false;
+    let nuevoId: string | null = null;
     setDraftItems((prev) => {
       const result = crearCedulaManualVinculada(prev, parentId, destinatario);
-      creado = Boolean(result.creado);
       if (!result.creado) return prev;
+      nuevoId = result.creado.id;
       return result.items.map((item, index) => ({ ...item, orden: index + 1 }));
     });
-    if (creado) {
-      toast({ title: 'Cédula agregada en Comunicaciones' });
+    if (nuevoId) {
+      toast({ title: 'Cédula creada en Comunicaciones' });
+      handleFocusItem(nuevoId);
+    } else {
+      toast({
+        title: 'No se pudo crear la cédula',
+        description: 'Seleccione una audiencia fijada vinculada o créela desde la prueba ofrecida.',
+      });
+    }
+  };
+
+  const addNuevaAudienciaVinculada = (pruebaId: string) => {
+    let nuevoId: string | null = null;
+    setDraftItems((prev) => {
+      const result = crearEventoAudienciaManual(prev, pruebaId);
+      if (!result.creado) return prev;
+      nuevoId = result.creado.id;
+      let items = result.items;
+      const prueba = items.find((i) => i.id === pruebaId);
+      if (prueba && prueba.estado === 'postpuesta_juez') {
+        items = items.map((i) =>
+          i.id === pruebaId ? { ...i, estado: 'audiencia_fijada' as const } : i,
+        );
+      }
+      return items.map((item, index) => ({ ...item, orden: index + 1 }));
+    });
+    if (nuevoId) {
+      toast({ title: 'Audiencia fijada creada', description: 'Aparece en Audiencias fijadas.' });
+      handleFocusItem(nuevoId);
+    } else {
+      toast({
+        title: 'No se pudo crear la audiencia',
+        description: 'Ya hay una audiencia activa vinculada a esta prueba.',
+      });
+    }
+  };
+
+  const addOficioAutenticidad = (parentId: string, destinatario?: string) => {
+    let nuevoId: string | null = null;
+    setDraftItems((prev) => {
+      const result = crearOficioAutenticidadManual(prev, parentId, destinatario);
+      if (!result.creado) return prev;
+      nuevoId = result.creado.id;
+      return result.items.map((item, index) => ({ ...item, orden: index + 1 }));
+    });
+    if (nuevoId) {
+      toast({ title: 'Oficio de autenticidad creado en Comunicaciones' });
+      handleFocusItem(nuevoId);
     }
   };
 
@@ -1218,11 +1356,23 @@ export function ControlPruebaPanel() {
     });
   };
 
-  const addItem = (opts: { categoria?: ItemCategoria; parte?: PruebaParte } = {}) => {
+  const addItem = (opts: {
+    categoria?: ItemCategoria;
+    parte?: PruebaParte;
+    terceroNombre?: string | null;
+  } = {}) => {
     const categoria = opts.categoria ?? 'prueba';
     const parte = opts.parte ?? (categoria === 'prueba' ? 'actor' : 'tribunal');
-    setDraftItems((prev) => [...prev, newItem(prev.length + 1, { categoria, parte })]);
+    setDraftItems((prev) => [
+      ...prev,
+      newItem(prev.length + 1, {
+        categoria,
+        parte,
+        terceroNombre: parte === 'tercero' ? opts.terceroNombre ?? null : null,
+      }),
+    ]);
     if (categoria === 'mejor_proveer') setParteTab('mejor_proveer');
+    else if (parte === 'tercero') setParteTab('otros');
   };
 
   const filteredExpedientes = useMemo(() => {
@@ -1234,6 +1384,16 @@ export function ControlPruebaPanel() {
     });
   }, [expedientes, search]);
 
+  const agregarTerceroAlExpediente = () => {
+    const nombre = nuevoTerceroNombre.trim();
+    if (!nombre) return;
+    setHeaderDraft((h) => ({
+      ...h,
+      terceros: [...new Set([...(h.terceros ?? selected?.terceros ?? []), nombre])],
+    }));
+    setNuevoTerceroNombre('');
+  };
+
   const renderSubBloque = (opts: {
     categoria: ItemCategoria;
     items: ControlPruebaItem[];
@@ -1243,7 +1403,12 @@ export function ControlPruebaPanel() {
     accentClass: string;
     bgClass?: string;
     addLabel?: string;
-  }) => (
+    terceroNombreDefault?: string | null;
+    showSelectorTercero?: boolean;
+  }) => {
+    if (opts.items.length === 0) return null;
+
+    return (
     <Card className={cn('border-l-4 overflow-hidden', opts.accentClass, opts.bgClass)}>
       <CardHeader className="flex flex-row items-center justify-between py-3">
         <div className="flex items-center gap-2">
@@ -1256,14 +1421,24 @@ export function ControlPruebaPanel() {
         <Button
           variant="outline"
           size="sm"
-          onClick={() => addItem({ categoria: opts.categoria, parte: opts.parte })}
+          onClick={() =>
+            addItem({
+              categoria: opts.categoria,
+              parte: opts.parte,
+              terceroNombre:
+                opts.parte === 'tercero'
+                  ? opts.terceroNombreDefault && opts.terceroNombreDefault !== TERCERO_SIN_IDENTIFICAR
+                    ? opts.terceroNombreDefault
+                    : null
+                  : undefined,
+            })
+          }
         >
           <Plus className="mr-2 h-4 w-4" />
           {opts.addLabel ?? 'Agregar'}
         </Button>
       </CardHeader>
-      {opts.items.length > 0 && (
-        <CardContent className="p-0 overflow-x-auto">
+        <CardContent className="p-0">
           <ControlPruebaItemsTable
             categoria={opts.categoria}
             items={opts.items}
@@ -1272,9 +1447,16 @@ export function ControlPruebaPanel() {
             expedienteUrl={headerDraft.expedienteUrl}
             highlightItemId={highlightItemId}
             compact={modoCompacto}
+            parteGrupo={
+              opts.parte === 'actor' || opts.parte === 'demandado' || opts.parte === 'tercero' || opts.parte === 'tribunal'
+                ? opts.parte
+                : undefined
+            }
             onUpdate={updateItem}
             onRemove={removeItem}
             onAddCedulaVinculada={addCedulaVinculada}
+            onNuevaAudienciaVinculada={addNuevaAudienciaVinculada}
+            onAddOficioAutenticidad={addOficioAutenticidad}
             onReintentarCedulaTestigo={reintentarCedulaTestigo}
             onCrearMandamientoTestigo={crearMandamientoTestigo}
             onCrearOficioAclaracion={addOficioAclaracion}
@@ -1283,11 +1465,13 @@ export function ControlPruebaPanel() {
             onUpdateMovimientoPericial={updateItem}
             onRemoveMovimientoPericial={removeItem}
             onFocusItem={handleFocusItem}
+            tercerosNombres={tercerosConocidos}
+            showSelectorTercero={opts.showSelectorTercero}
           />
         </CardContent>
-      )}
     </Card>
-  );
+    );
+  };
 
   const renderGrupoParte = (grupoId: 'actor' | 'demandado' | 'otros') => {
     const prueba = itemsByGrupo[grupoId];
@@ -1296,37 +1480,169 @@ export function ControlPruebaPanel() {
     const total = prueba.length + diligencias.length + audiencias.length;
 
     if (grupoId === 'otros') {
+      const todosTercero = [
+        ...itemsTerceroByCat.prueba,
+        ...itemsTerceroByCat.diligencia,
+        ...itemsTerceroByCat.audiencia,
+      ];
+      const grupos = agruparItemsPorTercero(todosTercero);
+      const nombresGrupo = ordenGruposTercero(grupos);
+      const totalTribunal =
+        itemsTribunalByCat.prueba.length +
+        itemsTribunalByCat.diligencia.length +
+        itemsTribunalByCat.audiencia.length;
+
+      const itemsDeGrupoTercero = (nombre: string, categoria: ItemCategoria) => {
+        const lista = grupos.get(nombre) ?? [];
+        return lista.filter((i) => resolveCategoria(i) === categoria);
+      };
+
       return (
-        <div className="space-y-3">
+        <div className="space-y-4">
+          <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
+            <p className="text-xs font-medium">Terceros del expediente</p>
+            <p className="text-[10px] text-muted-foreground">
+              Registrá cada tercero por nombre y asigná sus ítems. Si hay varios, cada uno aparece en su propio bloque.
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {tercerosConocidos.map((nombre) => (
+                <Badge key={nombre} variant="secondary" className="text-xs">
+                  {nombre}
+                </Badge>
+              ))}
+              {tercerosConocidos.length === 0 && (
+                <span className="text-[10px] text-muted-foreground italic">Sin terceros registrados aún</span>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2 pt-1">
+              <Input
+                value={nuevoTerceroNombre}
+                onChange={(e) => setNuevoTerceroNombre(e.target.value)}
+                placeholder="Nombre del tercero (ej. Garante, Co-demandado…)"
+                className="h-8 text-xs max-w-xs"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    agregarTerceroAlExpediente();
+                  }
+                }}
+              />
+              <Button type="button" variant="outline" size="sm" className="h-8" onClick={agregarTerceroAlExpediente}>
+                <Plus className="mr-1.5 h-3.5 w-3.5" />
+                Agregar tercero
+              </Button>
+            </div>
+          </div>
+
           <p className="text-xs text-muted-foreground">
-            {total} ítem{total === 1 ? '' : 's'} · Terceros y actuaciones del tribunal
+            {total} ítem{total === 1 ? '' : 's'} de terceros
+            {totalTribunal > 0 ? ` · ${totalTribunal} del tribunal (abajo)` : ''}
           </p>
-          {renderSubBloque({
-            categoria: 'prueba',
-            items: prueba,
-            parte: 'tercero',
-            icon: <Gavel className="h-4 w-4 text-primary" />,
-            titulo: CATEGORIA_CONFIG.prueba.titulo,
-            accentClass: 'border-l-muted',
-          })}
-          {renderSubBloque({
-            categoria: 'diligencia',
-            items: diligencias,
-            parte: 'tribunal',
-            icon: <Mail className="h-4 w-4 text-violet-600" />,
-            titulo: CATEGORIA_CONFIG.diligencia.titulo,
-            accentClass: CATEGORIA_CONFIG.diligencia.accent,
-            bgClass: 'bg-violet-50/20',
-          })}
-          {renderSubBloque({
-            categoria: 'audiencia',
-            items: audiencias,
-            parte: 'tribunal',
-            icon: <Calendar className="h-4 w-4 text-amber-600" />,
-            titulo: CATEGORIA_CONFIG.audiencia.titulo,
-            accentClass: CATEGORIA_CONFIG.audiencia.accent,
-            bgClass: 'bg-amber-50/20',
-          })}
+
+          <div className="space-y-4">
+            {nombresGrupo.length === 0 ? (
+              <Card className="border-dashed">
+                <CardContent className="py-8 text-center text-sm text-muted-foreground">
+                  Sin ítems de terceros. Agregá un tercero arriba y cargá prueba u oficios vinculados.
+                </CardContent>
+              </Card>
+            ) : (
+              nombresGrupo.map((nombre) => {
+                const pruebaG = itemsDeGrupoTercero(nombre, 'prueba');
+                const diligG = itemsDeGrupoTercero(nombre, 'diligencia');
+                const audG = itemsDeGrupoTercero(nombre, 'audiencia');
+                const totalG = pruebaG.length + diligG.length + audG.length;
+                if (totalG === 0) return null;
+                const esSinIdentificar = nombre === TERCERO_SIN_IDENTIFICAR;
+                return (
+                  <div key={nombre} className="space-y-3 rounded-lg border border-[#54A6A8]/30 bg-[#54A6A8]/5 p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <h4 className="text-sm font-semibold text-[#2A6A78]">
+                        {esSinIdentificar ? 'Tercero sin identificar' : nombre}
+                      </h4>
+                      <Badge variant="outline" className="text-[10px]">
+                        {totalG} ítem{totalG === 1 ? '' : 's'}
+                      </Badge>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <div className="min-w-[1024px] space-y-3">
+                        {renderSubBloque({
+                          categoria: 'prueba',
+                          items: pruebaG,
+                          parte: 'tercero',
+                          icon: <Gavel className="h-4 w-4 text-primary" />,
+                          titulo: CATEGORIA_CONFIG.prueba.titulo,
+                          accentClass: 'border-l-muted',
+                          terceroNombreDefault: esSinIdentificar ? null : nombre,
+                          showSelectorTercero: esSinIdentificar,
+                        })}
+                        {renderSubBloque({
+                          categoria: 'diligencia',
+                          items: diligG,
+                          parte: 'tercero',
+                          icon: <Mail className="h-4 w-4 text-violet-600" />,
+                          titulo: CATEGORIA_CONFIG.diligencia.titulo,
+                          accentClass: CATEGORIA_CONFIG.diligencia.accent,
+                          bgClass: 'bg-violet-50/20',
+                          terceroNombreDefault: esSinIdentificar ? null : nombre,
+                          showSelectorTercero: esSinIdentificar,
+                        })}
+                        {renderSubBloque({
+                          categoria: 'audiencia',
+                          items: audG,
+                          parte: 'tercero',
+                          icon: <Calendar className="h-4 w-4 text-amber-600" />,
+                          titulo: CATEGORIA_CONFIG.audiencia.titulo,
+                          accentClass: CATEGORIA_CONFIG.audiencia.accent,
+                          bgClass: 'bg-amber-50/20',
+                          terceroNombreDefault: esSinIdentificar ? null : nombre,
+                          showSelectorTercero: esSinIdentificar,
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {totalTribunal > 0 && (
+            <div className="space-y-3 pt-2 border-t">
+              <p className="text-xs font-medium text-muted-foreground">
+                Tribunal — {totalTribunal} ítem{totalTribunal === 1 ? '' : 's'} (comunicaciones / actuaciones judiciales)
+              </p>
+              <div className="overflow-x-auto">
+                <div className="min-w-[1024px] space-y-3">
+                  {renderSubBloque({
+                    categoria: 'prueba',
+                    items: itemsTribunalByCat.prueba,
+                    parte: 'tribunal',
+                    icon: <Gavel className="h-4 w-4 text-primary" />,
+                    titulo: CATEGORIA_CONFIG.prueba.titulo,
+                    accentClass: 'border-l-muted',
+                  })}
+                  {renderSubBloque({
+                    categoria: 'diligencia',
+                    items: itemsTribunalByCat.diligencia,
+                    parte: 'tribunal',
+                    icon: <Mail className="h-4 w-4 text-violet-600" />,
+                    titulo: CATEGORIA_CONFIG.diligencia.titulo,
+                    accentClass: CATEGORIA_CONFIG.diligencia.accent,
+                    bgClass: 'bg-violet-50/20',
+                  })}
+                  {renderSubBloque({
+                    categoria: 'audiencia',
+                    items: itemsTribunalByCat.audiencia,
+                    parte: 'tribunal',
+                    icon: <Calendar className="h-4 w-4 text-amber-600" />,
+                    titulo: CATEGORIA_CONFIG.audiencia.titulo,
+                    accentClass: CATEGORIA_CONFIG.audiencia.accent,
+                    bgClass: 'bg-amber-50/20',
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       );
     }
@@ -1340,6 +1656,13 @@ export function ControlPruebaPanel() {
         <p className="text-xs text-muted-foreground">
           {[nombreParte, `${total} ítem${total === 1 ? '' : 's'}`].filter(Boolean).join(' · ')}
         </p>
+        {total === 0 ? (
+          <p className="rounded-lg border border-dashed py-8 text-center text-sm text-muted-foreground">
+            Ningún ítem de esta parte coincide con los filtros activos.
+          </p>
+        ) : (
+        <div className="overflow-x-auto">
+          <div className="min-w-[1024px] space-y-3">
         {renderSubBloque({
           categoria: 'prueba',
           items: prueba,
@@ -1366,6 +1689,24 @@ export function ControlPruebaPanel() {
           accentClass: CATEGORIA_CONFIG.audiencia.accent,
           bgClass: 'bg-amber-50/20',
         })}
+        {itemsTribunalByCat.prueba.length > 0 && (
+          <div className="space-y-2 rounded-lg border border-dashed border-muted-foreground/30 bg-muted/10 p-3">
+            <p className="text-[11px] text-muted-foreground">
+              Prueba del tribunal (p. ej. pericia de oficio) — también visible en pestaña Tercero
+            </p>
+            {renderSubBloque({
+              categoria: 'prueba',
+              items: itemsTribunalByCat.prueba,
+              parte: 'tribunal',
+              icon: <Gavel className="h-4 w-4 text-primary" />,
+              titulo: `${CATEGORIA_CONFIG.prueba.titulo} (tribunal)`,
+              accentClass: 'border-l-muted',
+            })}
+          </div>
+        )}
+          </div>
+        </div>
+        )}
       </div>
     );
   };
@@ -1399,10 +1740,11 @@ export function ControlPruebaPanel() {
   };
 
   const pendientesDeExpediente = (exp: ControlPruebaExpediente) =>
-    itemsOfrecidasProduccion(exp.items).filter((i) => {
-      const chip = estadoAgregadoPruebaChip(i);
-      return chip === 'pendiente_produccion' || chip === 'postpuesta_juez' || chip === 'audiencia_fijada';
-    }).length;
+    itemsOfrecidasProduccion(exp.items).filter((i) =>
+      (['pendiente_produccion', 'postpuesta_juez', 'audiencia_fijada'] as const).some((f) =>
+        itemVisibleConFiltroEstado(i, f),
+      ),
+    ).length;
 
   return (
     <div className="space-y-6">
@@ -1636,15 +1978,6 @@ export function ControlPruebaPanel() {
                             </Button>
                           )}
                         </div>
-                        {faltaLinkExpediente && (
-                          <Alert className="mt-2 border-amber-300/80 bg-amber-50/90 text-amber-950">
-                            <AlertDescription className="text-xs leading-relaxed">
-                              {tieneItemsProducidos
-                                ? 'Recomendado: agregá el link al expediente virtual (MEV/PJN) para abrir la causa y vincular actuaciones desde cada ítem producido.'
-                                : 'Recomendado: agregá el link al expediente virtual (MEV/PJN) para abrir la causa en un clic. No es obligatorio para guardar.'}
-                            </AlertDescription>
-                          </Alert>
-                        )}
                       </div>
                       <div>
                         <Label>Representamos a</Label>
@@ -1674,33 +2007,34 @@ export function ControlPruebaPanel() {
                       </div>
                     </div>
                     <div className="flex shrink-0 flex-wrap gap-2">
-                      <Button variant="outline" size="sm" onClick={() => {
-                        downloadBlob(exportControlPruebaJson(expedienteDraft), exportFilename(expedienteDraft, 'json'));
-                        toast({ title: 'JSON exportado', description: 'Pegalo en el chat para revisar ítems incorrectos de la IA.' });
-                      }}>
-                        <FileJson className="mr-1.5 h-3.5 w-3.5" />
-                        JSON revisión
-                      </Button>
-                      <Button variant="outline" size="sm" onClick={() => {
-                        downloadBlob(exportControlPruebaRevisionText(expedienteDraft), exportFilename(expedienteDraft, 'txt'));
-                        toast({ title: 'TXT exportado', description: 'Listado legible para marcar qué no es prueba.' });
-                      }}>
-                        <FileSearch className="mr-1.5 h-3.5 w-3.5" />
-                        TXT revisión
-                      </Button>
-                      <Button variant="outline" size="sm" onClick={() => {
-                        downloadBlob(exportControlPruebaExcel(expedienteDraft), exportFilename(expedienteDraft, 'xlsx'));
-                      }}>
-                        <FileSpreadsheet className="mr-1.5 h-3.5 w-3.5" />
-                        Excel
-                      </Button>
-                      <Button variant="outline" size="sm" onClick={() => {
-                        downloadBlob(exportControlPruebaPdf(expedienteDraft), exportFilename(expedienteDraft, 'pdf'));
-                        toast({ title: 'Informe PDF generado', description: 'Incluye resumen ejecutivo, oficios e ítems por categoría.' });
-                      }}>
-                        <FileDown className="mr-1.5 h-3.5 w-3.5" />
-                        Informe PDF
-                      </Button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="outline" size="sm">
+                            <Download className="mr-1.5 h-3.5 w-3.5" />
+                            Exportar
+                            <ChevronDown className="ml-1 h-3.5 w-3.5 text-muted-foreground" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-52">
+                          <DropdownMenuItem onClick={() => handleExport('pdf')}>
+                            <FileDown className="mr-2 h-4 w-4" />
+                            Informe PDF
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleExport('xlsx')}>
+                            <FileSpreadsheet className="mr-2 h-4 w-4" />
+                            Excel
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem onClick={() => handleExport('json')}>
+                            <FileJson className="mr-2 h-4 w-4" />
+                            JSON revisión
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleExport('txt')}>
+                            <FileSearch className="mr-2 h-4 w-4" />
+                            TXT revisión
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                       <Button variant="outline" onClick={() => setImportOpen(true)} disabled={saving}>
                         <FileUp className="mr-2 h-4 w-4" />
                         Importar PDF
@@ -1751,42 +2085,6 @@ export function ControlPruebaPanel() {
                     <Progress value={progresoPct} className="h-1.5" />
                   </div>
                 </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
-                    {ESTADOS.map((estado) => (
-                      <button
-                        key={estado}
-                        type="button"
-                        onClick={() => setEstadoFilter(estado)}
-                        className={cn(
-                          'rounded-lg border p-2 text-left transition-all hover:shadow-sm',
-                          estadoFilter === estado && 'ring-2 ring-primary ring-offset-1',
-                          counts[estado] > 0 && estado === 'pendiente_produccion' && 'border-amber-300 bg-amber-50/50',
-                        )}
-                      >
-                        <div className="flex items-center gap-1.5">
-                          <span className={cn('h-2 w-2 rounded-full', ESTADO_CONFIG[estado].dotClass)} />
-                          <span className="text-[10px] text-muted-foreground leading-tight">{ESTADO_CONFIG[estado].label}</span>
-                        </div>
-                        <p className="text-lg font-semibold mt-0.5">{counts[estado]}</p>
-                      </button>
-                    ))}
-                    <button
-                      type="button"
-                      onClick={() => setEstadoFilter('all')}
-                      className={cn(
-                        'rounded-lg border p-2 text-left transition-all hover:shadow-sm',
-                        estadoFilter === 'all' && 'ring-2 ring-primary ring-offset-1 bg-muted/30',
-                      )}
-                    >
-                      <div className="flex items-center gap-1.5">
-                        <span className="h-2 w-2 rounded-full bg-muted-foreground/40" />
-                        <span className="text-[10px] text-muted-foreground leading-tight">Ver todos</span>
-                      </div>
-                      <p className="text-lg font-semibold mt-0.5">{allPruebaItems.length}</p>
-                    </button>
-                  </div>
-                </CardContent>
               </Card>
 
               {(resumenVisible?.aLibrar?.length ||
@@ -1855,20 +2153,64 @@ export function ControlPruebaPanel() {
                 </Card>
               )}
 
-              <Tabs value={vistaExpediente} onValueChange={(v) => setVistaExpediente(v as typeof vistaExpediente)}>
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <TabsList>
-                    <TabsTrigger value="tabla" className="gap-1.5">
-                      <LayoutList className="h-3.5 w-3.5" /> Tabla
-                    </TabsTrigger>
-                    <TabsTrigger value="kanban" className="gap-1.5">
-                      <LayoutGrid className="h-3.5 w-3.5" /> Kanban
-                    </TabsTrigger>
-                    <TabsTrigger value="metricas" className="gap-1.5">
-                      <FileSearch className="h-3.5 w-3.5" /> Métricas
-                    </TabsTrigger>
-                  </TabsList>
-                  <div className="flex flex-wrap items-center gap-2">
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-xs font-medium text-muted-foreground">Filtrar por estado de prueba</p>
+                  {estadoFilter !== 'all' && (
+                    <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setEstadoFilter('all')}>
+                      Limpiar filtro
+                    </Button>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
+                  {ESTADOS.map((estado) => {
+                    const activo = estadoFilter === estado;
+                    return (
+                      <button
+                        key={estado}
+                        type="button"
+                        aria-pressed={activo}
+                        onClick={() => setEstadoFilter(activo ? 'all' : estado)}
+                        className={cn(
+                          'rounded-lg border p-2 text-left transition-all hover:shadow-sm hover:border-primary/40',
+                          activo && 'border-primary bg-primary/10 ring-2 ring-primary ring-offset-1 shadow-sm',
+                          !activo && counts[estado] > 0 && estado === 'pendiente_produccion' && 'border-amber-300 bg-amber-50/50',
+                        )}
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <span className={cn('h-2 w-2 shrink-0 rounded-full', ESTADO_CONFIG[estado].dotClass)} />
+                          <span className={cn('text-[10px] leading-tight', activo ? 'text-primary font-medium' : 'text-muted-foreground')}>
+                            {ESTADO_CONFIG[estado].label}
+                          </span>
+                        </div>
+                        <p className={cn('text-lg font-semibold mt-0.5', activo && 'text-primary')}>{counts[estado]}</p>
+                      </button>
+                    );
+                  })}
+                  <button
+                    type="button"
+                    aria-pressed={estadoFilter === 'all'}
+                    onClick={() => setEstadoFilter('all')}
+                    className={cn(
+                      'rounded-lg border p-2 text-left transition-all hover:shadow-sm hover:border-primary/40',
+                      estadoFilter === 'all' && 'border-primary bg-muted/40 ring-2 ring-primary ring-offset-1 shadow-sm',
+                    )}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span className="h-2 w-2 shrink-0 rounded-full bg-muted-foreground/40" />
+                      <span className={cn('text-[10px] leading-tight', estadoFilter === 'all' ? 'text-primary font-medium' : 'text-muted-foreground')}>
+                        Ver todos
+                      </span>
+                    </div>
+                    <p className={cn('text-lg font-semibold mt-0.5', estadoFilter === 'all' && 'text-primary')}>
+                      {allPruebaItems.length}
+                    </p>
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-center justify-end gap-2">
                     <div className="relative">
                       <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
                       <Input
@@ -1886,33 +2228,34 @@ export function ControlPruebaPanel() {
                         <SelectValue placeholder="Estado prueba" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="pendiente_produccion">
-                          Pend. producción ({counts.pendiente_produccion})
-                        </SelectItem>
-                        <SelectItem value="postpuesta_juez">
-                          Postergada (juez) ({counts.postpuesta_juez})
-                        </SelectItem>
-                        <SelectItem value="audiencia_fijada">
-                          Audiencia fijada ({counts.audiencia_fijada})
-                        </SelectItem>
-                        <SelectItem value="producida">
-                          Producida ({counts.producida})
-                        </SelectItem>
-                        <SelectItem value="desistida">
-                          Desistida ({counts.desistida})
-                        </SelectItem>
-                        <SelectItem value="no_admitida">
-                          No admitida ({counts.no_admitida})
-                        </SelectItem>
+                        {ESTADOS.map((estado) => (
+                          <SelectItem key={estado} value={estado}>
+                            {ESTADO_CONFIG[estado].label} ({counts[estado]})
+                          </SelectItem>
+                        ))}
                         <SelectItem value="all">Ver todos ({allPruebaItems.length})</SelectItem>
                       </SelectContent>
                     </Select>
                     <Select value={filtroTipo} onValueChange={setFiltroTipo}>
-                      <SelectTrigger className="h-8 w-32 text-xs"><SelectValue placeholder="Tipo" /></SelectTrigger>
-                      <SelectContent>
+                      <SelectTrigger className="h-8 w-48 text-xs">
+                        <SelectValue placeholder="Tipo" />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-72">
                         <SelectItem value="all">Todos los tipos</SelectItem>
-                        {TIPOS_POR_CATEGORIA.prueba.map((t) => (
-                          <SelectItem key={t} value={t}>{TIPO_LABELS[t] ?? t}</SelectItem>
+                        {gruposFiltroTipo.map((grupo, idx) => (
+                          <div key={grupo}>
+                            {idx > 0 && <SelectSeparator />}
+                            <SelectGroup>
+                              <SelectLabel>{FILTRO_TIPO_GRUPO_LABELS[grupo]}</SelectLabel>
+                              {opcionesFiltroTipo
+                                .filter((o) => o.grupo === grupo)
+                                .map((o) => (
+                                  <SelectItem key={o.value} value={o.value}>
+                                    {o.label}
+                                  </SelectItem>
+                                ))}
+                            </SelectGroup>
+                          </div>
                         ))}
                       </SelectContent>
                     </Select>
@@ -1932,32 +2275,9 @@ export function ControlPruebaPanel() {
                     >
                       Compacto
                     </Button>
-                  </div>
                 </div>
 
-                <TabsContent value="metricas" className="mt-4">
-                  <ControlPruebaMetricasPanel
-                    expediente={expedienteDraft}
-                    onUpdateHitos={setHitosDraft}
-                  />
-                </TabsContent>
-
-                <TabsContent value="kanban" className="mt-4">
-                  <ControlPruebaKanban
-                    items={itemsVisiblesControlExpediente(draftItems).filter(
-                      (i) =>
-                        usaEstadosProduccionPrueba(i) &&
-                        (estadoFilter === 'all' || itemVisibleConFiltroEstado(i, estadoFilter)),
-                    )}
-                    onUpdateEstado={(id, estado) => updateItem(id, { estado })}
-                    onFocusItem={(id) => {
-                      setVistaExpediente('tabla');
-                      handleFocusItem(id);
-                    }}
-                  />
-                </TabsContent>
-
-                <TabsContent value="tabla" className="mt-4 space-y-6">
+                <div className="space-y-6">
               <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <h3 className="text-base font-semibold">Control del expediente</h3>
@@ -1983,15 +2303,6 @@ export function ControlPruebaPanel() {
                         }}
                       >
                         Limpiar filtros
-                      </Button>
-                    )}
-                    {estadoFilter !== 'pendiente_produccion' && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setEstadoFilter('pendiente_produccion')}
-                      >
-                        Pend. producción ({counts.pendiente_produccion})
                       </Button>
                     )}
                   </div>
@@ -2028,7 +2339,7 @@ export function ControlPruebaPanel() {
                       );
                     })}
                     <TabsTrigger value="otros" className="gap-1.5 data-[state=active]:shadow-sm">
-                      Terceros / Tribunal
+                      Tercero
                       <Badge variant="secondary" className="h-5 min-w-5 px-1.5 text-[10px]">
                         {conteoPorParteTab.otros}
                       </Badge>
@@ -2061,8 +2372,8 @@ export function ControlPruebaPanel() {
                     </CardContent>
                   </Card>
                 )}
-                </TabsContent>
-              </Tabs>
+                </div>
+              </div>
 
               <Card>
                 <CardHeader className="pb-2">

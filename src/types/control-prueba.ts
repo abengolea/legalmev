@@ -4,6 +4,7 @@ export const PRUEBA_ESTADOS = [
   'audiencia_fijada',
   'intimacion_ordenada',
   'autenticidad_impugnada',
+  'valoracion_judicial',
   'producida',
   'desistida',
   'no_admitida',
@@ -16,6 +17,7 @@ export const PERICIAL_ESTADOS = [
   'puntos_trasladados',
   'dictamen_presentado',
   'en_discusion',
+  'valoracion_judicial',
   'producida',
   'desistida',
   'no_admitida',
@@ -63,6 +65,7 @@ export const OFICIO_ELECTRONICO_ESTADOS = [
   'observada',
   'contestacion_parcial',
   'librada_notificada',
+  'cumplido',
 ] as const;
 
 export type CedulaNotifEstadoPapel = (typeof CEDULA_NOTIF_ESTADOS_PAPEL)[number];
@@ -129,7 +132,6 @@ export const TIPOS_PRUEBA = [
   'documental',
   'documental_en_poder',
   'pericial',
-  'informativa',
   'inspeccion',
   'otra',
 ] as const;
@@ -146,13 +148,14 @@ export const TIPOS_DILIGENCIA = [
 export const TIPOS_AUDIENCIA = [
   'confesional',
   'testimonial',
+  'indagatoria',
+  'conciliacion',
+  'mediacion',
   'audiencia',
   'vista_causa',
   'audiencia_preliminar',
   'audiencia_vista',
   'audiencia_testimonial',
-  'mediacion',
-  'conciliacion',
   'audiencia_inicial',
   'otra_audiencia',
 ] as const;
@@ -171,13 +174,13 @@ export const PARENT_TIPOS_SUBPROCESO = [
   'testimonial',
   'confesional',
   'pericial',
-  'informativa',
   'documental',
   'documental_en_poder',
 ] as const;
 export type ParentTipoSubproceso = (typeof PARENT_TIPOS_SUBPROCESO)[number];
 
 export const SUBPROCESO_ROLES = [
+  'audiencia_prueba',
   'cedula_audiencia',
   'mandamiento_conduccion',
   'informativa_autenticidad',
@@ -185,6 +188,7 @@ export const SUBPROCESO_ROLES = [
   'notificacion_perito',
   'traslado_puntos',
   'exhorto_pericia',
+  'oficio_autenticidad',
   'oficio_informativa',
   'intimacion_informativa',
   'dictamen_pericial',
@@ -362,6 +366,8 @@ export type ControlPruebaItem = {
   tipo: string;
   descripcion: string;
   ofrecidaPor?: PruebaParte | string;
+  /** Solo si ofrecidaPor === 'tercero': identifica cuál tercero del expediente. */
+  terceroNombre?: string | null;
   estado: ControlItemEstado;
   fechaLimite?: string | null;
   /** Pericial: plazo designación perito / informativa: plazo secundario */
@@ -398,6 +404,8 @@ export type ControlPruebaExpediente = {
   pdfImportedAt?: string;
   actor?: string;
   demandado?: string;
+  /** Nombres de terceros intervinientes (p. ej. co-demandados, garantes). */
+  terceros?: string[];
   /** Parte que representamos — filtra el resumen ejecutivo a nuestra prueba. */
   parteRepresentada?: ParteRepresentadaPrueba | '';
   items: ControlPruebaItem[];
@@ -418,6 +426,7 @@ export type ControlPruebaExpedienteInput = {
   sistema?: PruebaSistema;
   notas?: string;
   parteRepresentada?: ParteRepresentadaPrueba | '';
+  terceros?: string[];
   items?: ControlPruebaItem[];
   hitos?: ExpedienteHito[];
   oficiosAutenticidadPendientes?: OficioAutenticidadPendiente[];

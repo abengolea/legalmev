@@ -1,4 +1,5 @@
 import { TIPO_LABELS } from '@/lib/control-prueba';
+import { esEventoAudienciaPrueba } from '@/lib/control-prueba-audiencia-evento';
 import type {
   ControlPruebaItem,
   OficioAutenticidadPendiente,
@@ -8,7 +9,7 @@ import type {
 
 export type ParteRepresentada = 'actor' | 'demandado';
 
-const ESTADOS_PRODUCIDA = new Set(['producida', 'desistida', 'no_admitida']);
+const ESTADOS_PRODUCIDA = new Set(['producida', 'valoracion_judicial', 'desistida', 'no_admitida']);
 const ESTADOS_PENDIENTE = new Set([
   'pendiente_produccion',
   'postpuesta_juez',
@@ -20,7 +21,11 @@ const ESTADOS_PENDIENTE = new Set([
 function lineaItem(item: ControlPruebaItem): string {
   const tipo = TIPO_LABELS[item.tipo] ?? item.tipo;
   const desc = item.descripcion.trim();
-  return desc.length > 90 ? `${tipo}: ${desc.slice(0, 87)}…` : `${tipo}: ${desc}`;
+  const base = desc.length > 90 ? `${tipo}: ${desc.slice(0, 87)}…` : `${tipo}: ${desc}`;
+  if (String(item.estado) === 'valoracion_judicial') {
+    return `${base} (a valoración judicial)`;
+  }
+  return base;
 }
 
 /** Ítem de prueba/audiencia/diligencia vinculada a la parte que representamos. */
@@ -32,7 +37,7 @@ export function itemEsNuestraParte(
   const ofrecida = (item.ofrecidaPor ?? 'actor') as PruebaParte;
   if (ofrecida === parte) return true;
 
-  const padreId = item.vinculo?.padreItemId;
+  const padreId = item.vinculo?.parentItemId;
   if (padreId) {
     const padre = items.find((i) => i.id === padreId);
     if (padre && (padre.ofrecidaPor ?? 'actor') === parte) return true;
@@ -59,7 +64,12 @@ export function buildResumenNuestraParte(
 ): ResumenEjecutivoImport | undefined {
   if (!parte) return undefined;
 
-  const nuestra = items.filter((i) => itemEsNuestraParte(i, parte, items));
+  const nuestra = items.filter(
+    (i) =>
+      !esEventoAudienciaPrueba(i) &&
+      i.vinculo?.rol !== 'audiencia_prueba' &&
+      itemEsNuestraParte(i, parte, items),
+  );
   if (nuestra.length === 0 && oficios.length === 0) return undefined;
 
   const out: ResumenEjecutivoImport = {

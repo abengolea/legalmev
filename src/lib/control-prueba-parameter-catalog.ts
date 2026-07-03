@@ -84,7 +84,7 @@ export const PARAMETER_CATALOG: ParameterCatalogEntry[] = [
     categoria: 'diligencia',
     tipos: ['oficio_electronico'],
     titulo: 'Resultado del oficio electrónico',
-    descripcion: 'Flujo MEV: pendiente → observada → contestación parcial → librada y notificada.',
+    descripcion: 'Flujo MEV: pendiente → observado → cumpl. parcial → librado y notificado / cumplido.',
     fields: [
       { path: 'diligencia.destinatario', label: 'Destinatario', type: 'text' },
       { path: 'diligencia.fechaLibramiento', label: 'Fecha libramiento', type: 'date' },
@@ -208,7 +208,7 @@ export const PARAMETER_CATALOG: ParameterCatalogEntry[] = [
   {
     id: 'prueba-documental',
     categoria: 'prueba',
-    tipos: ['documental', 'documental_en_poder', 'informativa', 'inspeccion', 'otra'],
+    tipos: ['documental', 'documental_en_poder', 'inspeccion', 'otra'],
     titulo: 'Resultado de prueba',
     fields: [
       {

@@ -1,5 +1,6 @@
 import type { ControlPruebaExpediente, ControlPruebaItem, ExpedienteHito } from '@/types/control-prueba';
 import { itemsOfrecidasProduccion } from '@/lib/control-prueba';
+import { cuentaComoProducidaEnProgreso } from '@/lib/control-prueba-cierre';
 import { estadoAgregadoPruebaChip } from '@/lib/control-prueba-pericial-movimientos';
 import { evaluarAlertaItem } from '@/lib/control-prueba-alertas';
 
@@ -18,6 +19,7 @@ const ESTADOS_PENDIENTE_CHIP = new Set([
   'pendiente_produccion',
   'postpuesta_juez',
   'audiencia_fijada',
+  'autenticidad_impugnada',
 ]);
 
 function chipEstado(item: ControlPruebaItem): string {
@@ -28,7 +30,7 @@ function statsParte(items: ControlPruebaItem[], parte: string) {
   const subset = itemsOfrecidasProduccion(items).filter((i) => (i.ofrecidaPor ?? 'actor') === parte);
   return {
     total: subset.length,
-    producida: subset.filter((i) => chipEstado(i) === 'producida').length,
+    producida: subset.filter((i) => cuentaComoProducidaEnProgreso(chipEstado(i))).length,
     pendiente: subset.filter((i) => ESTADOS_PENDIENTE_CHIP.has(chipEstado(i))).length,
   };
 }
@@ -36,7 +38,7 @@ function statsParte(items: ControlPruebaItem[], parte: string) {
 export function calcularMetricas(items: ControlPruebaItem[]): MetricasExpediente {
   const prueba = itemsOfrecidasProduccion(items);
   const totalOfrecida = prueba.length;
-  const totalProducida = prueba.filter((i) => chipEstado(i) === 'producida').length;
+  const totalProducida = prueba.filter((i) => cuentaComoProducidaEnProgreso(chipEstado(i))).length;
   const totalPendiente = prueba.filter((i) => ESTADOS_PENDIENTE_CHIP.has(chipEstado(i))).length;
   const pctProducida = totalOfrecida > 0 ? Math.round((totalProducida / totalOfrecida) * 100) : 0;
 

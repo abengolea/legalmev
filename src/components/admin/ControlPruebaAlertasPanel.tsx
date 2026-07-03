@@ -74,7 +74,7 @@ export function ControlPruebaAlertasPanel({ items, onFocusItem, compact = false 
                   {nivel === 'rojo' && '≤ 3 días hábiles o vencida'}
                   {nivel === 'amarillo' && '≤ 10 días hábiles'}
                   {nivel === 'verde' && '> 10 días hábiles'}
-                  {nivel === 'gris' && 'Sin fecha o pericial/informativa sin plazo'}
+                  {nivel === 'gris' && 'Sin fecha o pericial sin plazo'}
                 </p>
               </div>
             );

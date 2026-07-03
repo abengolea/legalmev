@@ -51,9 +51,8 @@ const EXCLUIR_DESCRIPCION: RegExp[] = [
   /\bagente fiscal\b/i,
 ];
 
-/** Comunicaciones procesales → categoría diligencia. */
+/** Comunicaciones procesales → categoría diligencia (sin oficio genérico; ver mencionaOficioComunicacion). */
 const ES_DILIGENCIA: RegExp[] = [
-  /\boficio\b/i,
   /\bc[eé]dula\b/i,
   /\bmandamiento\b/i,
   /\bexhorto\b/i,
@@ -61,6 +60,39 @@ const ES_DILIGENCIA: RegExp[] = [
   /\bnotificaci[oó]n electr[oó]nica\b/i,
   /\bneo\b/i,
 ];
+
+/** Pericia / experticia ofrecida o ordenada de oficio — prueba, no comunicación tipo oficio. */
+const ES_PRUEBA_PERICIAL: RegExp[] = [
+  /\bpericia\b/i,
+  /\bexperticia\b/i,
+  /\binforme pericial\b/i,
+  /\bdictamen pericial\b/i,
+];
+
+function esPruebaPericial(desc: string, tipoNorm: string): boolean {
+  if (tipoNorm === 'pericial' || tipoNorm.includes('pericial') || tipoNorm.includes('experticia')) {
+    return true;
+  }
+  return ES_PRUEBA_PERICIAL.some((re) => re.test(desc));
+}
+
+/**
+ * Oficio judicial como comunicación (MEV), no la locución procesal "de oficio".
+ * Ej.: "pericia médica de oficio" → false; "oficio al hospital" → true.
+ */
+function mencionaOficioComunicacion(desc: string): boolean {
+  if (!/\boficio\b/i.test(desc)) return false;
+  if (esPruebaPericial(desc, '')) return false;
+  if (/\bde oficio\b/i.test(desc) && !/\boficio (?:electr[oó]nico|a |al |judicial|dirigid|librad|mediante)\b/i.test(desc)) {
+    return false;
+  }
+  return true;
+}
+
+function esComunicacionProcesal(desc: string): boolean {
+  if (mencionaOficioComunicacion(desc)) return true;
+  return ES_DILIGENCIA.some((re) => re.test(desc));
+}
 
 /** Producción de prueba pericial ya ordenada (no es ítem nuevo de ofrecimiento). */
 const ES_PRODUCCION_PERICIAL: RegExp[] = [
@@ -109,7 +141,7 @@ function debeExcluir(descripcion: string, categoria: ItemCategoria, ofrecidaPor?
     return 'El tribunal no ofrece prueba';
   }
   if (categoria === 'prueba' && ofrecidaPor === 'tercero') {
-    if (ES_DILIGENCIA.some((re) => re.test(descripcion))) {
+    if (esComunicacionProcesal(descripcion)) {
       return null; // se reclasifica abajo
     }
     if (!/\b(documental|testimonial|pericial|informativa|confesional|inspecci)/i.test(descripcion)) {
@@ -118,7 +150,7 @@ function debeExcluir(descripcion: string, categoria: ItemCategoria, ofrecidaPor?
   }
   for (const re of EXCLUIR_DESCRIPCION) {
     if (re.test(descripcion)) {
-      if (ES_DILIGENCIA.some((d) => d.test(descripcion))) return null;
+      if (esComunicacionProcesal(descripcion)) return null;
       return 'Acto procesal / orden judicial (no es prueba ofrecida)';
     }
   }
@@ -157,7 +189,25 @@ function clasificarItem(
     return { categoria: 'prueba', tipo: 'documental_en_poder' };
   }
 
-  if (ES_DILIGENCIA.some((re) => re.test(desc))) {
+  if (esPruebaPericial(desc, tipoNorm)) {
+    return {
+      categoria: 'prueba',
+      tipo: 'pericial',
+      ...(tipoNorm !== 'pericial' && {
+        motivoReclasificacion: 'Pericia/experticia (no comunicación tipo oficio)',
+      }),
+    };
+  }
+
+  if (tipoNorm === 'informativa') {
+    return {
+      categoria: 'diligencia',
+      tipo: 'oficio',
+      motivoReclasificacion: 'Informativa unificada con oficio en Comunicaciones',
+    };
+  }
+
+  if (esComunicacionProcesal(desc)) {
     return {
       categoria: 'diligencia',
       tipo: normalizarTipoDiligencia(desc, raw.tipo),
@@ -166,18 +216,21 @@ function clasificarItem(
   }
 
   if (categoria === 'prueba') {
-    const tipoNorm = raw.tipo.toLowerCase();
-    if (!TIPOS_PRUEBA_SET.has(tipoNorm)) {
-      if (tipoNorm.includes('oficio') || tipoNorm === 'informe') {
+    const tipoNormPrueba = raw.tipo.toLowerCase();
+    if (!TIPOS_PRUEBA_SET.has(tipoNormPrueba)) {
+      if (
+        (tipoNormPrueba.includes('oficio') || tipoNormPrueba === 'informe') &&
+        !esPruebaPericial(desc, tipoNormPrueba)
+      ) {
         return { categoria: 'diligencia', tipo: 'oficio', motivoReclasificacion: 'Tipo inválido como prueba' };
       }
-      if (TIPOS_DILIGENCIA_SET.has(tipoNorm)) {
-        return { categoria: 'diligencia', tipo: tipoNorm, motivoReclasificacion: 'Tipo inválido como prueba' };
+      if (TIPOS_DILIGENCIA_SET.has(tipoNormPrueba)) {
+        return { categoria: 'diligencia', tipo: tipoNormPrueba, motivoReclasificacion: 'Tipo inválido como prueba' };
       }
       // recurso, providencia, solicitud, etc.
       if (
         ['recurso', 'resolucion', 'providencia', 'solicitud', 'manifestacion', 'traslado', 'vista', 'sentencia', 'sentencia_in', 'impugnacion', 'informe'].includes(
-          tipoNorm,
+          tipoNormPrueba,
         )
       ) {
         return { categoria: 'prueba', tipo: 'otra', motivoReclasificacion: 'tipo_procesal_invalido' };

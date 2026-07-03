@@ -1,4 +1,3 @@
-import { PDFParse } from 'pdf-parse';
 import {
   finalizePdfTextExtract,
   PDF_EXTRACT_CODES,
@@ -16,9 +15,29 @@ export {
   type PdfExtractCode,
 } from '@/lib/pdf-text-extract-shared';
 
+type PdfParseCtor = typeof import('pdf-parse').PDFParse;
+type CanvasFactoryType = NonNullable<ConstructorParameters<PdfParseCtor>[0]['CanvasFactory']>;
+
+let pdfParseCtor: PdfParseCtor | null = null;
+let canvasFactory: CanvasFactoryType | null = null;
+
+async function loadPdfParseServer(): Promise<{
+  PDFParse: PdfParseCtor;
+  CanvasFactory: CanvasFactoryType;
+}> {
+  if (!pdfParseCtor || !canvasFactory) {
+    const worker = await import('pdf-parse/worker');
+    const pdfParse = await import('pdf-parse');
+    pdfParseCtor = pdfParse.PDFParse;
+    canvasFactory = worker.CanvasFactory;
+  }
+  return { PDFParse: pdfParseCtor, CanvasFactory: canvasFactory };
+}
+
 /** Extrae texto del PDF en el servidor, sin usar IA. */
 export async function extractTextFromPdfBuffer(buffer: Buffer): Promise<LocalPdfExtractResult> {
-  const parser = new PDFParse({ data: buffer });
+  const { PDFParse, CanvasFactory } = await loadPdfParseServer();
+  const parser = new PDFParse({ data: buffer, CanvasFactory });
   try {
     const result = await parser.getText();
     const texto = result.text?.trim() ?? '';

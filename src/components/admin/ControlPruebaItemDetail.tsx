@@ -23,13 +23,10 @@ import {
   patchMedioCedulaNotificacion,
 } from '@/lib/control-prueba-cedula-notif';
 import { esOficio, oficioRelacionadoLabel } from '@/lib/control-prueba-oficio';
-import { requiereAudienciaPrueba } from '@/lib/control-prueba-audiencia-prueba';
 import { requiereFlujoDocumentalEnPoder, esOficioInformativaAutenticidad } from '@/lib/control-prueba-documental-poder';
-import { requiereFlujoAutenticidadDocumental } from '@/lib/control-prueba-documental-autenticidad';
 import type { CedulaNotifMedio } from '@/types/control-prueba';
-import { ControlPruebaAudienciaPruebaBlock } from '@/components/admin/ControlPruebaAudienciaPruebaBlock';
+import { ControlPruebaAudienciaPruebaBlock, muestraBloqueAudienciaPrueba } from '@/components/admin/ControlPruebaAudienciaPruebaBlock';
 import { ControlPruebaDocumentalEnPoderBlock } from '@/components/admin/ControlPruebaDocumentalEnPoderBlock';
-import { ControlPruebaDocumentalAutenticidadBlock } from '@/components/admin/ControlPruebaDocumentalAutenticidadBlock';
 import { ControlPruebaPericialMovimientosBlock } from '@/components/admin/ControlPruebaPericialMovimientosBlock';
 import { ControlPruebaResultadosForm } from '@/components/admin/ControlPruebaResultadosDialog';
 import type { TipoTramitePericial } from '@/types/control-prueba';
@@ -43,6 +40,7 @@ type Props = {
   diligenciaItems?: ControlPruebaItem[];
   onUpdate: (patch: Partial<ControlPruebaItem>) => void;
   onAddCedulaVinculada?: (parentId: string, destinatario?: string) => void;
+  onAddOficioAutenticidad?: (parentId: string, destinatario?: string) => void;
   onReintentarCedulaTestigo?: (parentId: string, destinatario: string) => void;
   onCrearMandamientoTestigo?: (parentId: string, testigoNombre: string) => void;
   onCrearOficioAclaracion?: (parentId: string) => void;
@@ -62,6 +60,7 @@ export function ControlPruebaItemDetail({
   diligenciaItems = [],
   onUpdate,
   onAddCedulaVinculada,
+  onAddOficioAutenticidad,
   onReintentarCedulaTestigo,
   onCrearMandamientoTestigo,
   onCrearOficioAclaracion,
@@ -122,16 +121,18 @@ export function ControlPruebaItemDetail({
 
   return (
     <div className={cn('border-t bg-muted/20 px-4 py-3 space-y-4', compact && 'px-2 py-2')}>
-      <div>
-        <Label className="text-xs text-muted-foreground">Observaciones internas</Label>
-        <Textarea
-          value={item.observaciones ?? ''}
-          onChange={(e) => onUpdate({ observaciones: e.target.value || null })}
-          rows={2}
-          className="mt-1 text-xs min-h-[48px]"
-          placeholder="Notas privadas del estudio..."
-        />
-      </div>
+      {cat !== 'prueba' && cat !== 'diligencia' && cat !== 'audiencia' && (
+        <div>
+          <Label className="text-xs text-muted-foreground">Observaciones</Label>
+          <Textarea
+            value={item.observaciones ?? ''}
+            onChange={(e) => onUpdate({ observaciones: e.target.value || null })}
+            rows={2}
+            className="mt-1 text-xs min-h-[48px]"
+            placeholder="Texto libre: notas, seguimiento, observaciones..."
+          />
+        </div>
+      )}
 
       <div>
         <div className="flex items-center justify-between mb-2">
@@ -167,7 +168,9 @@ export function ControlPruebaItemDetail({
         )}
       </div>
 
-      {(cat === 'prueba' || esAudienciaOfrecida(item)) && (item.subtareas?.length ?? 0) > 0 && (
+      {(cat === 'prueba' || esAudienciaOfrecida(item)) &&
+        (item.subtareas?.length ?? 0) > 0 &&
+        item.tipo !== 'documental' && (
         <div>
           <div className="flex items-center justify-between mb-2">
             <Label className="text-xs font-medium flex items-center gap-1.5">
@@ -304,21 +307,17 @@ export function ControlPruebaItemDetail({
         />
       )}
 
-      {esAudienciaOfrecida(item) && (
+      {esAudienciaOfrecida(item) && muestraBloqueAudienciaPrueba(item) && (
         <ControlPruebaAudienciaPruebaBlock
           item={item}
           allItems={allItems}
           onUpdate={onUpdate}
-          onAddCedula={
-            onAddCedulaVinculada ? (destinatario) => onAddCedulaVinculada(item.id, destinatario) : undefined
-          }
           onReintentarCedula={
             onReintentarCedulaTestigo ? (destinatario) => onReintentarCedulaTestigo(item.id, destinatario) : undefined
           }
           onCrearMandamiento={
             onCrearMandamientoTestigo ? (testigoNombre) => onCrearMandamientoTestigo(item.id, testigoNombre) : undefined
           }
-          onFocusSubproceso={onFocusItem}
           compact={compact}
         />
       )}
@@ -334,10 +333,6 @@ export function ControlPruebaItemDetail({
           onFocusSubproceso={onFocusItem}
           compact={compact}
         />
-      )}
-
-      {cat === 'prueba' && requiereFlujoAutenticidadDocumental(item.tipo) && (
-        <ControlPruebaDocumentalAutenticidadBlock item={item} onUpdate={onUpdate} compact={compact} />
       )}
 
       {cat === 'diligencia' && (
@@ -376,7 +371,7 @@ export function ControlPruebaItemDetail({
             <div className="sm:col-span-2 rounded-lg border border-fuchsia-300 bg-fuchsia-50/60 p-3 space-y-2">
               <Label className="text-xs font-medium flex items-center gap-1.5">
                 <Link2 className="h-3.5 w-3.5" />
-                Oficio informativa — autenticidad documental
+                Oficio — autenticidad documental
               </Label>
               <p className="text-[10px] text-muted-foreground">
                 Oficio para que el oficiado informe sobre la autenticidad de la documentación impugnada.
@@ -408,8 +403,8 @@ export function ControlPruebaItemDetail({
               <p className="text-[10px] text-sky-900">
                 {item.tipo === 'oficio_electronico' ? (
                   <>
-                    <strong>Oficio electrónico:</strong> Pendiente de realización → Observada → Contestación parcial →
-                    Librada y notificada
+                    <strong>Oficio electrónico:</strong> Pendiente de realización → Observado → Cumpl. parcial →
+                    Librado y notificado / Cumplido
                   </>
                 ) : (
                   <>

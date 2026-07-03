@@ -10,6 +10,7 @@ import {
   CONTROL_PRUEBA_COLLECTION,
   detectSistemaFromUrl,
   normalizeItems,
+  sanitizeForFirestore,
   serializeControlPruebaDoc,
 } from '@/lib/control-prueba';
 import type { ControlPruebaExpedienteInput } from '@/types/control-prueba';
@@ -132,7 +133,7 @@ export async function POST(request: NextRequest) {
       expedienteUrl,
       sistema: body.sistema ?? detectSistemaFromUrl(expedienteUrl),
       notas: body.notas?.trim() ?? '',
-      items: normalizeItems(body.items),
+      items: sanitizeForFirestore(normalizeItems(body.items)),
       createdAt: now,
       updatedAt: now,
       createdBy: auth.uid,

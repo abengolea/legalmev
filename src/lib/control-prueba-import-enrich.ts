@@ -9,6 +9,7 @@ const ESTADOS_PRUEBA_IMPORT = new Set<string>([
   'audiencia_fijada',
   'intimacion_ordenada',
   'autenticidad_impugnada',
+  'valoracion_judicial',
   'producida',
   'desistida',
   'no_admitida',
@@ -103,15 +104,11 @@ export function resolveEstadoImport(
   return undefined;
 }
 
-/** Vincula diligencias (oficios) a prueba informativa según campo IA `oficioVinculadoA`. */
+/** Vincula diligencias (oficios) con destinatario según campo IA `oficioVinculadoA`. */
 export function vincularDiligenciasImport(
   items: ControlPruebaItem[],
   rawItems: ControlPruebaImportOutput['items'],
 ): ControlPruebaItem[] {
-  const pruebasInformativa = items.filter(
-    (i) => (i.categoria ?? 'prueba') === 'prueba' && i.tipo === 'informativa',
-  );
-
   return items.map((item, idx): ControlPruebaItem => {
     if ((item.categoria ?? 'prueba') !== 'diligencia') return item;
     const raw = rawItems[idx];
@@ -135,9 +132,12 @@ export function vincularDiligenciasImport(
       return item;
     }
 
+    const documentales = items.filter(
+      (i) => (i.categoria ?? 'prueba') === 'prueba' && i.tipo === 'documental',
+    );
     let mejor: ControlPruebaItem | undefined;
     let mejorScore = 0.45;
-    for (const p of pruebasInformativa) {
+    for (const p of documentales) {
       const score = similitudDescripcion(ref, p.descripcion);
       if (score > mejorScore) {
         mejorScore = score;
@@ -145,24 +145,33 @@ export function vincularDiligenciasImport(
       }
     }
 
-    if (!mejor) return item;
+    if (!mejor) {
+      const dest = raw?.destinatarioOficio?.trim();
+      if (dest) {
+        return {
+          ...item,
+          diligencia: { ...baseDiligencia, destinatario: dest, objeto: baseDiligencia.objeto ?? ref },
+        };
+      }
+      return item;
+    }
 
     return {
       ...item,
       diligencia: {
         ...baseDiligencia,
         destinatario: raw?.destinatarioOficio?.trim() || baseDiligencia.destinatario,
-        objeto: baseDiligencia.objeto ?? item.descripcion,
+        objeto: baseDiligencia.objeto ?? ref,
         pruebaVinculadaId: mejor.id,
       },
       vinculo: item.vinculo ?? {
         parentItemId: mejor.id,
-        parentTipo: 'informativa',
+        parentTipo: 'documental',
         parentCategoria: 'prueba',
-        rol: 'oficio_informativa',
+        rol: 'oficio_autenticidad',
         autoCreated: false,
-        vinculoLabel: `Oficio — ${raw?.destinatarioOficio?.trim() || 'informativa'}`,
-        triggerKey: `import_oficio_informativa|${item.id}|${mejor.id}`,
+        vinculoLabel: `Oficio — ${raw?.destinatarioOficio?.trim() || ref.slice(0, 40)}`,
+        triggerKey: `import_oficio|${item.id}|${mejor.id}`,
       },
     };
   });

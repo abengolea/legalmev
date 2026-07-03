@@ -12,6 +12,8 @@ import {
   TRASLADO_PUNTOS_ESTADOS,
 } from '@/types/control-prueba';
 import { resolveCategoria, type EstadoStyle } from '@/lib/control-prueba';
+import { esCierrePrueba } from '@/lib/control-prueba-cierre';
+import { itemCuentaComoAudienciaFijadaEnFiltro } from '@/lib/control-prueba-audiencia-prueba';
 import { hijosDePadre } from '@/lib/control-prueba-subprocesos';
 
 export const PERICIAL_MOVIMIENTO_LABELS: Record<TipoTramitePericial, string> = {
@@ -181,10 +183,23 @@ export const PERICIAL_FASES_EN_TRAMITE = [
 export function estadoAgregadoPruebaChip(item: Pick<ControlPruebaItem, 'tipo' | 'estado'>): string {
   const estado = String(item.estado);
   if (item.tipo === 'pericial') {
-    if (estado === 'producida' || estado === 'desistida' || estado === 'no_admitida') return estado;
+    if (
+      estado === 'producida' ||
+      estado === 'valoracion_judicial' ||
+      estado === 'desistida' ||
+      estado === 'no_admitida'
+    ) {
+      return estado;
+    }
     return 'pendiente_produccion';
   }
   return estado;
+}
+
+/** Autenticidad impugnada sin cerrar → también visible en filtro Pend. producción. */
+function incluyeEnFiltroPendienteProduccion(item: ControlPruebaItem): boolean {
+  if (esCierrePrueba(String(item.estado))) return false;
+  return String(item.estado) === 'autenticidad_impugnada';
 }
 
 export function itemVisibleConFiltroEstado(
@@ -192,7 +207,11 @@ export function itemVisibleConFiltroEstado(
   filtro: string,
 ): boolean {
   if (filtro === 'all') return true;
-  return estadoAgregadoPruebaChip(item) === filtro;
+  if (filtro === 'audiencia_fijada' && itemCuentaComoAudienciaFijadaEnFiltro(item)) return true;
+  const chip = estadoAgregadoPruebaChip(item);
+  if (chip === filtro) return true;
+  if (filtro === 'pendiente_produccion' && incluyeEnFiltroPendienteProduccion(item)) return true;
+  return false;
 }
 
 export const PERICIAL_ESTADO_STYLE: Record<string, EstadoStyle> = {
@@ -225,6 +244,12 @@ export const PERICIAL_ESTADO_STYLE: Record<string, EstadoStyle> = {
     badgeClass: 'bg-fuchsia-100 text-fuchsia-900 border-fuchsia-300',
     rowClass: 'border-l-fuchsia-500 bg-fuchsia-50/40',
     dotClass: 'bg-fuchsia-500',
+  },
+  valoracion_judicial: {
+    label: 'A valoración judicial',
+    badgeClass: 'bg-indigo-100 text-indigo-900 border-indigo-400',
+    rowClass: 'border-l-indigo-500 bg-indigo-50/40',
+    dotClass: 'bg-indigo-500',
   },
   producida: {
     label: 'Producida',

@@ -89,6 +89,11 @@ export function ControlPruebaKanban({ items, onUpdateEstado, onFocusItem }: Prop
                       </span>
                     </div>
                     <p className="line-clamp-2 leading-snug">{item.descripcion || 'Sin descripción'}</p>
+                    {item.observaciones?.trim() && (
+                      <p className="mt-1 text-[10px] text-muted-foreground line-clamp-2 italic leading-snug">
+                        Obs: {item.observaciones.trim()}
+                      </p>
+                    )}
                     <div className="mt-1.5 flex flex-wrap gap-1">
                       {parte && (
                         <Badge

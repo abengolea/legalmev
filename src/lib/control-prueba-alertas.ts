@@ -66,7 +66,7 @@ export function evaluarAlertaItem(item: ControlPruebaItem, ahora = new Date()): 
   const fechaLimite = item.fechaLimite?.trim();
   if (!fechaLimite) {
     const sugerido = plazoSugeridoDiasHabiles(item.tipo);
-    if (sugerido && categoria === 'prueba' && ['pericial', 'informativa'].includes(item.tipo)) {
+    if (sugerido && categoria === 'prueba' && item.tipo === 'pericial') {
       return {
         itemId: item.id,
         orden: item.orden,

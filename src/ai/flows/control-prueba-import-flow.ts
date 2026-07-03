@@ -33,6 +33,7 @@ const ControlItemSchema = z.object({
       'audiencia_fijada',
       'intimacion_ordenada',
       'autenticidad_impugnada',
+      'valoracion_judicial',
       'producida',
       'desistida',
       'no_admitida',
@@ -157,7 +158,7 @@ Extraé ítems **únicamente** de:
 ## TRES CATEGORÍAS
 
 ### 1. prueba
-Tipos válidos: documental, documental_en_poder, pericial, informativa, inspeccion, otra
+Tipos válidos: documental, documental_en_poder, pericial, inspeccion, otra
 ofrecidaPor: **solo actor o demandado**
 
 **A) documental** — Documentación que la parte **ya presentó** con demanda, contestación o ampliaciones (obra en autos).
@@ -174,19 +175,22 @@ ofrecidaPor: **solo actor o demandado**
 - Si el auto ya ordenó intimación con plazo → intimacionOrdenada: true, estadoSugerido: intimacion_ordenada, fechaLimite = plazo de exhibición.
 - El sistema creará cédula de intimación automáticamente.
 
-**C) informativa** — Medio probatorio admitido (oficio a tercero para que informe).
-- Los oficios para cumplirla van como **diligencias** separadas (ver abajo), con oficioVinculadoA apuntando a esta informativa.
+**C) Prueba informativa admitida** — NO crear ítem prueba separado. Registrar como **diligencia tipo oficio** en Comunicaciones (ver abajo), con descripción del objeto probatorio en descripcion y oficioVinculadoA si aplica.
 
 **D) pericial, inspeccion, otra** — Según auto de apertura.
+- **IMPORTANTE:** "pericia de oficio", "pericia médica de oficio", "experticia de oficio" = prueba **pericial** ordenada por el tribunal (categoria=prueba, tipo=pericial). **NO** es diligencia tipo oficio.
+- Solo usar categoria=diligencia tipo=oficio cuando se trata de una **comunicación judicial** al destinatario (banco, hospital, registro, etc.): "oficio al…", "oficio electrónico a…", "libramiento de oficio…".
 
 ### 2. diligencia (Comunicaciones)
 Tipos: oficio, cedula, mandamiento, exhorto, oficio_electronico, cedula_electronica
 ofrecidaPor: tribunal (o parte si presentó el pedido)
 
 Incluir oficios/cédulas **pendientes de control** que instrumenten:
-- Prueba informativa admitida (oficioVinculadoA = descripción de la informativa)
+- Prueba informativa admitida (cada oficio como diligencia; oficioVinculadoA = objeto probatorio si hay documental vinculada)
 - Intimación documental (si ya fue librada cédula, puede figurar como diligencia)
-- Rogatorias / exhortos para pericia
+- Rogatorias / exhortos para pericia (comunicación al juzgado del domicilio del perito — NO confundir con la pericia en sí)
+
+**NO registrar como oficio:** pericias, experticias, dictámenes periciales ni inspecciones — aunque digan "de oficio".
 
 Para cada oficio indicar:
 - destinatarioOficio (ej. "Juzgado Civil y Comercial N° 2 de San Nicolás", "Banco X")

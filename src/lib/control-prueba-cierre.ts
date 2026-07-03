@@ -11,13 +11,23 @@ import {
 } from '@/lib/control-prueba-documental-autenticidad';
 import { usaFlujoDocumentalEnPoder } from '@/lib/control-prueba-documental-poder';
 
-/** Estados que cierran la prueba ofrecida (producida, desistida o no admitida). */
-export const ESTADOS_CIERRE_PRUEBA = ['producida', 'desistida', 'no_admitida'] as const;
+/** Estados que cierran la prueba ofrecida (incluye a valoración judicial). */
+export const ESTADOS_CIERRE_PRUEBA = [
+  'producida',
+  'valoracion_judicial',
+  'desistida',
+  'no_admitida',
+] as const;
 
 export type EstadoCierrePrueba = (typeof ESTADOS_CIERRE_PRUEBA)[number];
 
 export function esCierrePrueba(estado: string): estado is EstadoCierrePrueba {
   return (ESTADOS_CIERRE_PRUEBA as readonly string[]).includes(estado);
+}
+
+/** Cuenta en el progreso «producida» del expediente (sin confundirse con producida real). */
+export function cuentaComoProducidaEnProgreso(estado: string): boolean {
+  return estado === 'producida' || estado === 'valoracion_judicial';
 }
 
 function hoyIso(): string {

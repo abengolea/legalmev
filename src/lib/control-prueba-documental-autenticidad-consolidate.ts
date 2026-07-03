@@ -3,7 +3,6 @@ import type {
   DocumentalPruebaMeta,
   OficioAutenticidadPendiente,
 } from '@/types/control-prueba';
-import { esOficioInformativaAutenticidad } from '@/lib/control-prueba-documental-poder';
 import { normalizeOficiosAutenticidad } from '@/lib/control-prueba-import-meta';
 
 function normKey(s: string): string {
@@ -16,39 +15,6 @@ function normKey(s: string): string {
     .slice(0, 80);
 }
 
-function extractReferencia(obs?: string | null): string | null {
-  if (!obs) return null;
-  const m = obs.match(/\bRef:\s*(Doc\.?\s*[\d.a-z]+|[^\·]+)/i);
-  return m?.[1]?.trim() ?? null;
-}
-
-function esInformativaSoloAutenticidad(item: ControlPruebaItem): boolean {
-  if (item.tipo !== 'informativa') return false;
-  const t = `${item.descripcion} ${item.observaciones ?? ''} ${item.vinculo?.vinculoLabel ?? ''}`;
-  return (
-    item.vinculo?.rol === 'informativa_autenticidad' ||
-    /\binformativa\b.{0,40}\bautenticidad\b/i.test(t) ||
-    /\bautenticidad\b.{0,40}\bdocumental\b/i.test(t) ||
-    /\bimpugnaci[oó]n\b.{0,40}\bautenticidad\b/i.test(t)
-  );
-}
-
-function oficioDesdeDiligencia(
-  item: ControlPruebaItem,
-  documental: ControlPruebaItem,
-): OficioAutenticidadPendiente {
-  const dest = item.diligencia?.destinatario?.trim() || documental.documental?.destinatarioOficio?.trim() || '';
-  return {
-    id: crypto.randomUUID(),
-    referencia: extractReferencia(documental.observaciones),
-    descripcionDocumento: documental.descripcion,
-    destinatarioOficio: dest,
-    objetoOficio: item.diligencia?.objeto?.trim() || null,
-    estado: item.estado === 'librado' || item.estado === 'enviado' ? 'librado' : 'a_librar',
-    itemPruebaId: documental.id,
-    observaciones: item.observaciones ?? null,
-  };
-}
 
 function mergeOficios(
   prev: OficioAutenticidadPendiente[],
@@ -92,20 +58,11 @@ function patchDocumentalOficios(
   };
 }
 
-/** Ítems legados (informativa/oficio hijo) que no deben figurar como prueba suelta. */
+/** Ítems legados embebidos — ya no se ocultan los vínculos informativa/oficio. */
 export function esItemOcultoAutenticidadDocumental(
-  item: ControlPruebaItem,
-  allItems: ControlPruebaItem[],
+  _item: ControlPruebaItem,
+  _allItems: ControlPruebaItem[],
 ): boolean {
-  if (item.vinculo?.rol === 'informativa_autenticidad') return true;
-  if (esOficioInformativaAutenticidad(item)) {
-    const padreId = item.diligencia?.pruebaVinculadaId;
-    const padre = padreId ? allItems.find((i) => i.id === padreId) : undefined;
-    if (padre?.tipo === 'documental') return true;
-  }
-  if (esInformativaSoloAutenticidad(item) && !item.vinculo?.parentItemId) {
-    return true;
-  }
   return false;
 }
 
@@ -163,116 +120,14 @@ export function attachOficiosToDocumentalItems(
 }
 
 /**
- * Unifica documental negada: oficios embebidos en el ítem documental,
- * sin informativas sueltas ni oficios hijos en diligencias.
+ * Adjunta oficios importados al meta documental. Los vínculos informativa/oficio
+ * permanecen visibles en Comunicaciones con el flujo completo de diligencia.
  */
 export function consolidarAutenticidadDocumentalExpediente(
   items: ControlPruebaItem[],
   oficiosExpediente: OficioAutenticidadPendiente[] = [],
 ): { items: ControlPruebaItem[]; oficiosExpediente: OficioAutenticidadPendiente[] } {
-  let working = attachOficiosToDocumentalItems(items, normalizeOficiosAutenticidad(oficiosExpediente));
-  const removeIds = new Set<string>();
-
-  for (const item of working) {
-    if (item.vinculo?.rol !== 'informativa_autenticidad') continue;
-    const padreId = item.vinculo.parentItemId;
-    const padre = working.find((i) => i.id === padreId);
-    if (!padre || padre.tipo !== 'documental') {
-      removeIds.add(item.id);
-      continue;
-    }
-    const dest = padre.documental?.destinatarioOficio?.trim();
-    const oficio = {
-      id: crypto.randomUUID(),
-      referencia: extractReferencia(padre.observaciones),
-      descripcionDocumento: padre.descripcion,
-      destinatarioOficio: dest || 'Oficiado',
-      objetoOficio: `Autenticidad — ${padre.descripcion.slice(0, 100)}`,
-      estado: 'a_librar' as const,
-      itemPruebaId: padre.id,
-      observaciones: item.observaciones ?? null,
-    };
-    const idx = working.findIndex((i) => i.id === padre.id);
-    if (idx >= 0) {
-      const merged = mergeOficios(working[idx]!.documental?.oficiosAutenticidad ?? [], [oficio]);
-      working[idx] = patchDocumentalOficios(working[idx]!, merged);
-    }
-    removeIds.add(item.id);
-  }
-
-  for (const item of working) {
-    if (!esOficioInformativaAutenticidad(item)) continue;
-    const padreId = item.diligencia?.pruebaVinculadaId;
-    if (!padreId) continue;
-    const padre = working.find((i) => i.id === padreId);
-    if (!padre || padre.tipo !== 'documental') continue;
-    const idx = working.findIndex((i) => i.id === padre.id);
-    if (idx >= 0) {
-      const merged = mergeOficios(
-        working[idx]!.documental?.oficiosAutenticidad ?? [],
-        [oficioDesdeDiligencia(item, padre)],
-      );
-      working[idx] = patchDocumentalOficios(working[idx]!, merged);
-    }
-    removeIds.add(item.id);
-  }
-
-  for (const item of working) {
-    if (!esInformativaSoloAutenticidad(item) || item.vinculo?.parentItemId) continue;
-    const candidato = working.find(
-      (d) =>
-        d.tipo === 'documental' &&
-        !removeIds.has(d.id) &&
-        (normKey(d.descripcion).includes(normKey(item.descripcion).slice(0, 40)) ||
-          normKey(item.descripcion).includes(normKey(d.descripcion).slice(0, 40))),
-    );
-    if (!candidato) {
-      removeIds.add(item.id);
-      continue;
-    }
-    const dest =
-      candidato.documental?.destinatarioOficio?.trim() ||
-      item.observaciones?.match(/oficiar\s+a\s+([^·]+)/i)?.[1]?.trim();
-    const oficio: OficioAutenticidadPendiente = {
-      id: crypto.randomUUID(),
-      referencia: extractReferencia(candidato.observaciones),
-      descripcionDocumento: candidato.descripcion,
-      destinatarioOficio: dest || 'Oficiado',
-      objetoOficio: `Autenticidad — ${candidato.descripcion.slice(0, 100)}`,
-      estado: 'a_librar',
-      itemPruebaId: candidato.id,
-      observaciones: item.observaciones ?? null,
-    };
-    const idx = working.findIndex((i) => i.id === candidato.id);
-    if (idx >= 0) {
-      const merged = mergeOficios(working[idx]!.documental?.oficiosAutenticidad ?? [], [oficio]);
-      working[idx] = patchDocumentalOficios(working[idx]!, merged, dest);
-    }
-    removeIds.add(item.id);
-  }
-
-  working = working
-    .filter((i) => !removeIds.has(i.id))
-    .map((item) => {
-      if (item.tipo !== 'documental' || item.estado !== 'autenticidad_impugnada') return item;
-      const oficios = item.documental?.oficiosAutenticidad ?? [];
-      if (oficios.length > 0) return item;
-      const dest = item.documental?.destinatarioOficio?.trim();
-      if (!dest) return item;
-      return patchDocumentalOficios(item, [
-        {
-          id: crypto.randomUUID(),
-          referencia: extractReferencia(item.observaciones),
-          descripcionDocumento: item.descripcion,
-          destinatarioOficio: dest,
-          objetoOficio: `Autenticidad — ${item.descripcion.slice(0, 100)}`,
-          estado: 'a_librar',
-          itemPruebaId: item.id,
-          observaciones: null,
-        },
-      ]);
-    });
-
+  const working = attachOficiosToDocumentalItems(items, normalizeOficiosAutenticidad(oficiosExpediente));
   return { items: working, oficiosExpediente: [] };
 }
 

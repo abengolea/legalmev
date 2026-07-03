@@ -27,7 +27,7 @@ export const PERICIAL_ESPECIALIDAD_LABELS: Record<PericialEspecialidad, string> 
   otra: 'Otra',
 };
 
-const PERICIAL_PREFIX = 'pericial:';
+export const PERICIAL_PREFIX = 'pericial:';
 
 /** Valor unificado para el selector de tipo (incluye pericial + especialidad). */
 export function tipoPruebaSelectValue(item: ControlPruebaItem): string {

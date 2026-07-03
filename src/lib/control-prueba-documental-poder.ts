@@ -142,16 +142,19 @@ export function usaFlujoDocumentalEnPoder(item: ControlPruebaItem): boolean {
 /** @deprecated alias */
 export const usaFlujoIntimacionDocumental = usaFlujoDocumentalEnPoder;
 
-export function esOficioInformativaAutenticidad(
+export function esOficioAutenticidadDocumental(
   item: Pick<ControlPruebaItem, 'categoria' | 'tipo' | 'vinculo' | 'diligencia'>,
 ): boolean {
   return (
     item.categoria === 'diligencia' &&
     (item.tipo === 'oficio' || item.tipo === 'oficio_electronico') &&
-    item.vinculo?.rol === 'oficio_informativa' &&
+    (item.vinculo?.rol === 'oficio_autenticidad' || item.vinculo?.rol === 'oficio_informativa') &&
     Boolean(item.diligencia?.pruebaVinculadaId)
   );
 }
+
+/** @deprecated alias */
+export const esOficioInformativaAutenticidad = esOficioAutenticidadDocumental;
 
 /** Documental ya adjunta a demanda/contestación/ampliación — tipo `documental`, no `documental_en_poder`. */
 export function esDocumentalYaAcompanada(descripcion: string): boolean {
