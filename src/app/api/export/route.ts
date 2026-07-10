@@ -7,6 +7,7 @@ import type { ExportRequest, Expediente } from '@/types/expediente';
 
 const PROVEIDO_REGEX = /^https:\/\/mev\.scba\.gov\.ar\/proveido\.asp\?.*pidJuzgado=.*sCodi=.*nPosi=\d+/i;
 const PJN_REGEX = /^https:\/\/scw\.pjn\.gov\.ar/i;
+const SALTA_REGEX = /^https:\/\/plataforma\.justiciasalta\.gov\.ar/i;
 
 const FREE_QUOTA = 5;
 const PREMIUM_QUOTA_DEFAULT = 100;
@@ -118,6 +119,7 @@ export async function POST(request: NextRequest) {
     }
 
     const expedienteEsPJN = PJN_REGEX.test(expedienteUrl || '');
+    const expedienteEsSalta = SALTA_REGEX.test(expedienteUrl || '');
     const seen = new Set<string>();
     const actuacionesFiltradas = actuaciones.filter((item) => {
       if (typeof item !== 'object') return false;
@@ -125,7 +127,9 @@ export async function POST(request: NextRequest) {
       const tieneContenido = !!(item?.contenido || item?.content || item?.titulo || item?.title || item?.tipo);
       const esMEV = url && PROVEIDO_REGEX.test(url);
       const esPJN = (url && PJN_REGEX.test(url)) || (expedienteEsPJN && (url || true));
-      if (!esMEV && !(esPJN && tieneContenido)) return false;
+      const esSalta =
+        (url && SALTA_REGEX.test(url)) || (expedienteEsSalta && tieneContenido);
+      if (!esMEV && !(esPJN && tieneContenido) && !esSalta) return false;
       const key = (url || expedienteUrl) + '|' + (item?.numero ?? '') + '|' + (item?.titulo || item?.title || item?.tipo || '').slice(0, 50);
       if (seen.has(key)) return false;
       seen.add(key);
@@ -133,8 +137,13 @@ export async function POST(request: NextRequest) {
     });
 
     if (actuacionesFiltradas.length === 0) {
+      const hint = expedienteEsSalta
+        ? 'Verificá que estés en el expediente de Salta con la pestaña Actuaciones visible y que las actuaciones tengan contenido.'
+        : expedienteEsPJN
+          ? 'Verificá que estés en la página del expediente (expediente.seam) con la pestaña Actuaciones visible.'
+          : 'Verificá que el contenido de las actuaciones se haya leído correctamente.';
       return NextResponse.json(
-        { ok: false, error: 'No quedaron actuaciones válidas para exportar. Verificá que estés en la página del expediente (expediente.seam) con la pestaña Actuaciones visible.' },
+        { ok: false, error: `No quedaron actuaciones válidas para exportar. ${hint}` },
         { status: 400, headers: corsHeaders }
       );
     }

@@ -30,4 +30,6 @@ export type ExportRequest = {
   caratula?: string;
   nroExpediente?: string;
   juzgado?: string;
+  /** mev | pjn | mpba | salta — enviado por la extensión v1.4+ */
+  portal?: string;
 };
