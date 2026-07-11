@@ -47,6 +47,12 @@ export default function LandingLayout({
               {CONTACT_EMAIL}
             </a>
             <Link
+              href="/soporte"
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Soporte
+            </Link>
+            <Link
               href="/landing/instrucciones"
               className="text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
