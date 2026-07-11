@@ -9,12 +9,21 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion';
-import { Check, Mail } from 'lucide-react';
+import { Check, ExternalLink, Mail } from 'lucide-react';
 import { CONTACT_EMAIL, CONTACT_MAILTO } from '@/lib/site-contact';
 
 const EXTENSION_STORE_URL =
   process.env.NEXT_PUBLIC_EXTENSION_STORE_URL ||
   'https://chrome.google.com/webstore/search/legalmev';
+
+const SALTA_PUBLIC_URL =
+  'https://plataforma.justiciasalta.gov.ar/iol-ui/p/expedientes';
+
+const saltaSteps = [
+  'Buscá por nombre, apellido o CUIJ en la consulta pública de Salta.',
+  'Se abre la ficha del expediente solo. Entrá a la pestaña Actuaciones.',
+  'Abrí LegalMev en Chrome y exportá el PDF.',
+];
 
 const steps = [
   {
@@ -62,8 +71,8 @@ const steps = [
   },
   {
     num: 5,
-    title: 'Entrá a MEV, PJN o MPBA',
-    desc: 'Iniciá sesión en el portal judicial donde tengas el expediente. La extensión solo funciona cuando ya estás autenticado en esos portales y tenés el expediente abierto en pantalla.',
+    title: 'Entrá al portal judicial',
+    desc: 'Abrí el expediente en MEV, PJN, MPBA o en la consulta pública de Salta. En MEV, PJN y MPBA tenés que estar logueado en el portal. En Salta no hace falta cuenta judicial: ver la sección específica más abajo.',
   },
   {
     num: 6,
@@ -80,7 +89,7 @@ const faqs = [
         Te faltan dos pasos: <strong>conectar la extensión a tu cuenta</strong> y{' '}
         <strong>entrar al portal judicial</strong>. Hacé clic en el ícono de LegalMev en Chrome;
         si pide conectar, usá el botón para abrir legalmev.com.ar e iniciá sesión. Luego entrá a
-        MEV o PJN, abrí un expediente y exportá desde la extensión.
+        MEV, PJN, MPBA o Salta, abrí un expediente y exportá desde la extensión.
       </>
     ),
   },
@@ -99,7 +108,19 @@ const faqs = [
   },
   {
     q: '¿En qué portales funciona LegalMev?',
-    a: 'Funciona en MEV SCBA (Provincia de Buenos Aires), Portal del Poder Judicial de la Nación (PJN) y Ministerio Público de la Provincia de Buenos Aires (MPBA). Tenés que estar logueado en el portal y con el expediente abierto.',
+    a: 'Funciona en MEV SCBA (Provincia de Buenos Aires), Portal del Poder Judicial de la Nación (PJN), Ministerio Público de la Provincia de Buenos Aires (MPBA) y consulta pública del Poder Judicial de Salta. En MEV, PJN y MPBA tenés que estar logueado en el portal y con el expediente abierto. En Salta no hace falta login judicial: seguí los pasos de la sección Salta más abajo.',
+  },
+  {
+    q: '¿Cómo exporto un expediente de Salta si aparecen muchas causas en la lista?',
+    a: (
+      <>
+        La consulta pública de Salta muestra varias causas en una misma pantalla y LegalMev no
+        puede saber cuál querés descargar desde ahí. En la fila del expediente, tocá el ícono{' '}
+        <strong>↗</strong> (abrir en ventana) al lado de <em>EN TRÁMITE</em>. Eso abre solo ese
+        expediente; ahí entrá a <strong>Actuaciones</strong> y exportá con la extensión. Ver el
+        apartado <strong>Salta — consulta pública</strong> en esta página.
+      </>
+    ),
   },
   {
     q: '¿Cuántas descargas tengo con el plan gratuito?',
@@ -160,7 +181,7 @@ export default function InstruccionesPage() {
             <h2 className="font-semibold text-foreground">¿Ya tenés cuenta y la extensión instalada?</h2>
             <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
               El paso que suele faltar es <strong className="text-foreground">conectar la extensión</strong>{' '}
-              con tu usuario. Después, entrá a MEV o PJN, abrí un expediente y exportá desde el ícono
+              con tu usuario. Después, entrá al portal judicial, abrí un expediente y exportá desde el ícono
               de LegalMev en Chrome.
             </p>
             <Button asChild size="sm" className="mt-4">
@@ -201,6 +222,49 @@ export default function InstruccionesPage() {
         </div>
       </section>
 
+      <section className="mb-12">
+        <Card className="border-primary/40 bg-gradient-to-br from-primary/10 to-accent/5">
+          <CardHeader>
+            <CardTitle className="text-xl font-headline text-foreground">
+              Salta — consulta pública
+            </CardTitle>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              En Salta no necesitás usuario del Poder Judicial: la búsqueda es pública. Pero si
+              estás en la <strong className="text-foreground">lista de causas</strong>, la extensión
+              no detecta cuál expediente exportar hasta que abras uno en particular.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            <ol className="space-y-3 text-sm text-muted-foreground leading-relaxed list-decimal pl-5">
+              <li>{saltaSteps[0]}</li>
+              <li>
+                En la fila del expediente que querés descargar, tocá el ícono{' '}
+                <span
+                  className="inline-flex h-5 w-5 items-center justify-center rounded border border-primary text-primary text-xs font-bold align-middle mx-0.5"
+                  aria-hidden
+                >
+                  <ExternalLink className="h-3 w-3" />
+                </span>{' '}
+                (abrir en ventana) junto al cartel <em>EN TRÁMITE</em>.
+              </li>
+              <li>{saltaSteps[1]}</li>
+              <li>{saltaSteps[2]}</li>
+            </ol>
+            <p className="text-xs text-muted-foreground border-t border-border/60 pt-4">
+              El ícono ↗ está a la derecha del cartel amarillo <em>EN TRÁMITE</em>, en cada fila de
+              la lista. Si ya abriste el expediente, asegurate de tener visible la pestaña{' '}
+              <strong className="text-foreground">Actuaciones</strong> y recargá la página (F5)
+              antes de exportar.
+            </p>
+            <Button asChild variant="outline" size="sm">
+              <a href={SALTA_PUBLIC_URL} target="_blank" rel="noopener noreferrer">
+                Abrir consulta pública de Salta
+              </a>
+            </Button>
+          </CardContent>
+        </Card>
+      </section>
+
       <section className="mt-12 p-6 rounded-lg bg-muted/50 border border-border">
         <h2 className="font-semibold text-foreground mb-2">Portales compatibles</h2>
         <ul className="space-y-1 text-sm text-muted-foreground">
@@ -215,6 +279,10 @@ export default function InstruccionesPage() {
           <li className="flex items-center gap-2">
             <Check className="h-4 w-4 text-primary flex-shrink-0" />
             Ministerio Público de la Provincia de Buenos Aires (MPBA)
+          </li>
+          <li className="flex items-center gap-2">
+            <Check className="h-4 w-4 text-primary flex-shrink-0" />
+            Poder Judicial de Salta — consulta pública (sin login judicial)
           </li>
         </ul>
       </section>
