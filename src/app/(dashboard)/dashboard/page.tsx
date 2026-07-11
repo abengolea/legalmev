@@ -28,6 +28,7 @@ import { useSearchParams } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import { safeResJson } from '@/lib/utils';
 import { fetchCheckColegio } from '@/lib/check-colegio-client';
+import { SUPPORTED_PORTALS_DASHBOARD } from '@/lib/supported-portals';
 
 type UserData = {
   name?: string;
@@ -398,7 +399,7 @@ export default function DashboardPage() {
         <CardHeader>
           <CardTitle>Usar la extensión</CardTitle>
           <CardDescription>
-            Instalá la extensión LegalMev en Chrome, entrá a MEV o PJN, y exportá expedientes a PDF con un clic.
+            {SUPPORTED_PORTALS_DASHBOARD}
           </CardDescription>
         </CardHeader>
         <CardContent>

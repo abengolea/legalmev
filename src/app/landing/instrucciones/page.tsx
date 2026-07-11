@@ -20,7 +20,7 @@ const SALTA_PUBLIC_URL =
   'https://plataforma.justiciasalta.gov.ar/iol-ui/p/expedientes';
 
 const saltaSteps = [
-  'Buscá por nombre, apellido o CUIJ en la consulta pública de Salta.',
+  'Buscá por nombre, apellido o CUIJ en Salta.',
   'Se abre la ficha del expediente solo. Entrá a la pestaña Actuaciones.',
   'Abrí LegalMev en Chrome y exportá el PDF.',
 ];
@@ -72,7 +72,7 @@ const steps = [
   {
     num: 5,
     title: 'Entrá al portal judicial',
-    desc: 'Abrí el expediente en MEV, PJN, MPBA o en la consulta pública de Salta. En MEV, PJN y MPBA tenés que estar logueado en el portal. En Salta no hace falta cuenta judicial: ver la sección específica más abajo.',
+    desc: 'Abrí el expediente en MEV, PJN, MPBA o Salta. En MEV, PJN y MPBA tenés que estar logueado en el portal. En Salta no hace falta cuenta judicial: ver la sección específica más abajo.',
   },
   {
     num: 6,
@@ -108,17 +108,17 @@ const faqs = [
   },
   {
     q: '¿En qué portales funciona LegalMev?',
-    a: 'Funciona en MEV SCBA (Provincia de Buenos Aires), Portal del Poder Judicial de la Nación (PJN), Ministerio Público de la Provincia de Buenos Aires (MPBA) y consulta pública del Poder Judicial de Salta. En MEV, PJN y MPBA tenés que estar logueado en el portal y con el expediente abierto. En Salta no hace falta login judicial: seguí los pasos de la sección Salta más abajo.',
+    a: 'Funciona en MEV SCBA (Provincia de Buenos Aires), Portal del Poder Judicial de la Nación (PJN), Ministerio Público de la Provincia de Buenos Aires (MPBA) y Salta. En MEV, PJN y MPBA tenés que estar logueado en el portal y con el expediente abierto. En Salta no hace falta login judicial: seguí los pasos de la sección Salta más abajo.',
   },
   {
     q: '¿Cómo exporto un expediente de Salta si aparecen muchas causas en la lista?',
     a: (
       <>
-        La consulta pública de Salta muestra varias causas en una misma pantalla y LegalMev no
+        En Salta se muestran varias causas en una misma pantalla y LegalMev no
         puede saber cuál querés descargar desde ahí. En la fila del expediente, tocá el ícono{' '}
         <strong>↗</strong> (abrir en ventana) al lado de <em>EN TRÁMITE</em>. Eso abre solo ese
         expediente; ahí entrá a <strong>Actuaciones</strong> y exportá con la extensión. Ver el
-        apartado <strong>Salta — consulta pública</strong> en esta página.
+        apartado <strong>Salta</strong> en esta página.
       </>
     ),
   },
@@ -222,11 +222,11 @@ export default function InstruccionesPage() {
         </div>
       </section>
 
-      <section className="mb-12">
+      <section className="mb-12" id="salta">
         <Card className="border-primary/40 bg-gradient-to-br from-primary/10 to-accent/5">
           <CardHeader>
             <CardTitle className="text-xl font-headline text-foreground">
-              Salta — consulta pública
+              Salta
             </CardTitle>
             <p className="text-sm text-muted-foreground leading-relaxed">
               En Salta no necesitás usuario del Poder Judicial: la búsqueda es pública. Pero si
@@ -258,7 +258,7 @@ export default function InstruccionesPage() {
             </p>
             <Button asChild variant="outline" size="sm">
               <a href={SALTA_PUBLIC_URL} target="_blank" rel="noopener noreferrer">
-                Abrir consulta pública de Salta
+                Abrir Salta
               </a>
             </Button>
           </CardContent>
@@ -282,7 +282,7 @@ export default function InstruccionesPage() {
           </li>
           <li className="flex items-center gap-2">
             <Check className="h-4 w-4 text-primary flex-shrink-0" />
-            Poder Judicial de Salta — consulta pública (sin login judicial)
+            Salta (sin login judicial)
           </li>
         </ul>
       </section>

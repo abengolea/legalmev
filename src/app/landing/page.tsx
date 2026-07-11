@@ -5,6 +5,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { FileDown, Check, Zap, Mail, Gavel, Sparkles } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
+import {
+  SUPPORTED_PORTAL_ITEMS,
+  SUPPORTED_PORTALS_HERO,
+  SUPPORTED_PORTALS_SHORT,
+} from '@/lib/supported-portals';
 
 export default function LandingPage() {
   return (
@@ -18,7 +23,7 @@ export default function LandingPage() {
             <div className="flex flex-col items-center lg:items-start gap-2">
               <div className="inline-flex items-center gap-2 rounded-full border border-[#54A6A8]/40 bg-[#54A6A8]/15 px-4 py-2 text-sm text-[#7ec8ca]">
                 <FileDown className="h-4 w-4" />
-                Exportación de expedientes MEV y PJN
+                Exportación de expedientes — {SUPPORTED_PORTALS_SHORT}
               </div>
               <Link
                 href="/register"
@@ -36,7 +41,7 @@ export default function LandingPage() {
               <span className="text-slate-100">Exportá expedientes judiciales a PDF</span>
             </h1>
             <p className="text-lg md:text-xl text-slate-300 max-w-xl mx-auto lg:mx-0">
-              Instalá la extensión, navegá por MEV o PJN, y descargá expedientes completos en PDF con un solo clic. Simple, rápido y pensado para abogados.
+              {SUPPORTED_PORTALS_HERO}
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
               <Button size="lg" className="bg-[#2A6A78] hover:bg-[#3a7a88] text-white" asChild>
@@ -126,6 +131,40 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* Portales compatibles */}
+      <section className="container px-5 sm:px-6 lg:px-10 xl:px-12 py-20 md:py-24">
+        <h2 className="text-3xl md:text-4xl font-bold text-center font-headline text-foreground">
+          Portales compatibles
+        </h2>
+        <p className="md:w-2/3 mx-auto text-muted-foreground text-center mt-4 mb-12">
+          La extensión funciona en los sistemas judiciales más usados de la región. En Salta podés
+          exportar sin usuario del Poder Judicial.
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 max-w-5xl mx-auto">
+          {SUPPORTED_PORTAL_ITEMS.map((portal) => (
+            <Card key={portal.id} className="border-primary/25 bg-card">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-lg font-headline">{portal.name}</CardTitle>
+                <p className="text-sm text-muted-foreground">{portal.detail}</p>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground">
+                  {portal.requiresJudicialLogin
+                    ? 'Requiere login en el portal judicial'
+                    : portal.note ?? 'Sin login judicial'}
+                </p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+        <p className="text-center text-sm text-muted-foreground mt-8">
+          ¿Usás Salta?{' '}
+          <Link href="/landing/instrucciones#salta" className="text-primary hover:underline font-medium">
+            Ver guía paso a paso para Salta
+          </Link>
+        </p>
+      </section>
+
       {/* Plans Section */}
       <section className="container px-5 sm:px-6 lg:px-10 xl:px-12 py-24 sm:py-32">
         <h2 className="text-3xl md:text-4xl font-bold text-center font-headline text-foreground">
@@ -152,7 +191,7 @@ export default function LandingPage() {
                 {[
                   'Ideal para evaluar el servicio',
                   'Extensión incluida',
-                  '5 PDFs de expedientes (MEV/PJN)',
+                  '5 PDFs de expedientes (todos los portales)',
                   'Verificá tu email con el link que te enviamos',
                 ].map((item, i) => (
                   <li key={i} className="flex items-center gap-2 text-sm">
@@ -247,7 +286,7 @@ export default function LandingPage() {
               </div>
               <h3 className="font-semibold text-slate-100 text-lg">Exportá a PDF</h3>
               <p className="text-base text-slate-300 leading-relaxed max-w-xs mx-auto">
-                Entrá a MEV o PJN, abrí un expediente y descargalo con un clic.
+                Entrá a MEV, PJN, MPBA o Salta, abrí un expediente y descargalo con un clic.
               </p>
             </div>
           </div>

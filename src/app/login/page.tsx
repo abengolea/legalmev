@@ -21,6 +21,7 @@ import Image from 'next/image';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useToast } from '@/hooks/use-toast';
 import { Logo } from '@/components/Logo';
+import { SUPPORTED_PORTALS_LOGIN_EXTENSION } from '@/lib/supported-portals';
 
 const loginSchema = z.object({
   email: z.string().email('El email no es válido'),
@@ -127,7 +128,7 @@ export default function LoginPage() {
             </div>
             {redirectTo === '/extension-connect' ? (
               <p className="text-balance text-muted-foreground">
-                Para descargar expedientes desde la extensión en MEV o PJN, iniciá sesión primero en la web.
+                {SUPPORTED_PORTALS_LOGIN_EXTENSION}
               </p>
             ) : (
               <p className="text-balance text-muted-foreground">Introduce tu email para iniciar sesión en tu cuenta</p>

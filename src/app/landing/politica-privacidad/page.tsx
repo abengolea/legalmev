@@ -65,9 +65,9 @@ export default function PoliticaPrivacidadPage() {
             desde portales judiciales oficiales.
           </p>
           <p className="text-muted-foreground leading-relaxed mt-4">
-            La extensión funciona únicamente cuando el usuario se encuentra{' '}
-            <strong>previamente autenticado en los portales judiciales compatibles</strong>,
-            tales como:
+            La extensión funciona en los portales judiciales compatibles. En MEV SCBA, PJN y MPBA
+            el usuario debe estar autenticado en el portal correspondiente. En Salta no hace falta
+            login judicial.
           </p>
           <ul className="list-disc pl-6 mt-4 space-y-2 text-muted-foreground">
             <li>MEV SCBA (Provincia de Buenos Aires)</li>
@@ -75,10 +75,11 @@ export default function PoliticaPrivacidadPage() {
             <li>
               Portal del Ministerio Público de la Provincia de Buenos Aires (MPBA)
             </li>
+            <li>Salta (sin login judicial)</li>
           </ul>
           <p className="text-muted-foreground leading-relaxed mt-4">
-            La extensión actúa exclusivamente como una herramienta de asistencia para el usuario
-            dentro de su sesión activa en dichos portales.
+            La extensión actúa como herramienta de asistencia dentro de la sesión del usuario en
+            dichos portales o, en Salta, con el portal abierto en el navegador.
           </p>
         </section>
 

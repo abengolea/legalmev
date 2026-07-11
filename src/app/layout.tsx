@@ -13,7 +13,7 @@ const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.legalmev.com.a
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL.replace(/\/$/, '')),
   title: 'LegalMev',
-  description: 'Sistema de gestión legal',
+  description: 'Exportá expedientes judiciales a PDF desde MEV, PJN, MPBA y Salta.',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

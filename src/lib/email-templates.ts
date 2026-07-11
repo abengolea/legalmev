@@ -4,6 +4,7 @@
  */
 
 import { CONTACT_EMAIL } from '@/lib/site-contact';
+import { SUPPORTED_PORTALS_EMAIL_TAGLINE } from '@/lib/supported-portals';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.legalmev.com.ar';
 
@@ -55,7 +56,7 @@ function emailHeader(): string {
     <a href="${BASE}" style="text-decoration:none;color:inherit;">
       <span style="font-size:24px;font-weight:700;color:#2A6A78;letter-spacing:-0.02em;">LegalMev</span>
     </a>
-    <p style="margin:4px 0 0;font-size:12px;color:#6b7280;">Exportá expedientes a PDF desde MEV y PJN</p>
+    <p style="margin:4px 0 0;font-size:12px;color:#6b7280;">${SUPPORTED_PORTALS_EMAIL_TAGLINE}</p>
   </div>`;
 }
 

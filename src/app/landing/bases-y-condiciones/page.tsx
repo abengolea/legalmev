@@ -71,10 +71,10 @@ export default function BasesYCondicionesPage() {
           <p className="text-muted-foreground leading-relaxed">
             LegalMEV es un software como servicio (SaaS) que permite a profesionales del
             derecho exportar actuaciones de expedientes judiciales a archivo PDF desde
-            portales oficiales compatibles (por ejemplo, MEV, PJN y otros que la extensión
-            indique explícitamente). El procesamiento de los documentos se realiza en el
-            dispositivo del usuario; LegalMEV no almacena el contenido de los expedientes
-            exportados en sus servidores con fines de archivo.
+            portales oficiales compatibles: MEV SCBA, PJN, MPBA y Salta (según lo indique la extensión y el sitio al momento del uso). El
+            procesamiento de los documentos se realiza en el dispositivo del usuario; LegalMEV no
+            almacena el contenido de los expedientes exportados en sus servidores con fines de
+            archivo.
           </p>
           <p className="text-muted-foreground leading-relaxed mt-4">
             LegalMEV no es un organismo judicial ni sustituye los portales oficiales. No

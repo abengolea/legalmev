@@ -21,6 +21,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { useToast } from '@/hooks/use-toast';
 import { useState, useEffect } from 'react';
 import { safeResJson } from '@/lib/utils';
+import { SUPPORTED_PORTALS_REGISTER } from '@/lib/supported-portals';
 
 const registerSchema = z.object({
   firstName: z.string().min(1, 'El nombre es requerido'),
@@ -145,7 +146,7 @@ export default function RegisterPage() {
             <CardDescription>
               {isInvite
                 ? 'Completá tus datos para crear tu cuenta como responsable de colegio.'
-                : 'Creá tu cuenta para solicitar acceso a la exportación de expedientes (MEV/PJN) a PDF.'}
+                : SUPPORTED_PORTALS_REGISTER}
             </CardDescription>
           </CardHeader>
           <CardContent>
