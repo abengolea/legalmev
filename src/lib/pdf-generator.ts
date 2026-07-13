@@ -46,7 +46,8 @@ function sanitizarParaArchivo(s: string): string {
 export function generateFilename(expediente: Expediente, actuaciones: Actuacion[]): string {
   const url = expediente.url || '';
   const m = url.match(/nidCausa=(\d+)/i);
-  const nroExp = expediente.numero || (m ? m[1] : '');
+  // Entre Ríos (y otros) pueden traer "exp1 / exp2" — / rompe chrome.downloads
+  const nroExp = sanitizarParaArchivo(String(expediente.numero || (m ? m[1] : '')).replace(/\s*\/\s*/g, '-'));
 
   const caratula = sanitizarParaArchivo(expediente.caratula || '');
 
@@ -63,6 +64,7 @@ export function generateFilename(expediente: Expediente, actuaciones: Actuacion[
     base = `Expediente_${fecha}`;
   }
 
+  base = sanitizarParaArchivo(base) || `Expediente_${new Date().toISOString().slice(0, 10).replace(/-/g, '')}`;
   return (base.length > 200 ? base.slice(0, 200) : base) + '.pdf';
 }
 
