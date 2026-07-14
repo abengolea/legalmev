@@ -76,14 +76,20 @@ export function resolveEstadoImport(
   tipo: string,
 ): ControlItemEstado | undefined {
   const sug = raw.estadoSugerido;
-  if (sug && ESTADOS_PRUEBA_IMPORT.has(sug)) {
-    return sug as ControlItemEstado;
-  }
 
   if (categoria === 'prueba' && tipo === 'documental') {
     if (raw.impugnacionAutenticidad || constaImpugnacionAutenticidad(raw.descripcion, raw.observaciones)) {
       return 'autenticidad_impugnada';
     }
+    // Documental ya acompañada sin impugnación → producida (obra en autos).
+    // Sobrescribe pendiente_produccion si la IA lo dejó por defecto.
+    if (!sug || sug === 'pendiente_produccion') {
+      return 'producida';
+    }
+  }
+
+  if (sug && ESTADOS_PRUEBA_IMPORT.has(sug)) {
+    return sug as ControlItemEstado;
   }
 
   if (categoria === 'prueba' && tipo === 'documental_en_poder') {

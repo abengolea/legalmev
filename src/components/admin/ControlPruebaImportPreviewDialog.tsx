@@ -17,7 +17,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -149,15 +148,15 @@ export function ControlPruebaImportPreviewDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col">
-        <DialogHeader>
+      <DialogContent className="flex max-h-[90vh] h-[min(90vh,820px)] max-w-3xl flex-col gap-3 overflow-hidden p-6 sm:rounded-lg">
+        <DialogHeader className="shrink-0 space-y-1.5 pr-6">
           <DialogTitle>Revisá el import antes de guardar</DialogTitle>
           <DialogDescription>
             Indicá a quién representás, editá o eliminá ítems incorrectos y confirmá qué entra al control.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 space-y-2">
+        <div className="shrink-0 rounded-lg border border-primary/20 bg-primary/5 p-3 space-y-2">
           <Label className="text-xs font-medium text-primary">Representamos a</Label>
           <Select
             value={parteRepresentada || '_'}
@@ -182,7 +181,7 @@ export function ControlPruebaImportPreviewDialog({
           )}
         </div>
 
-        <ScrollArea className="flex-1 pr-4 -mr-4 max-h-[min(52vh,480px)]">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1 -mr-1">
           <div className="space-y-4 pb-2">
             {(resumenVisible?.aLibrar?.length ||
               resumenVisible?.pendiente?.length ||
@@ -215,7 +214,7 @@ export function ControlPruebaImportPreviewDialog({
               </div>
             )}
 
-            <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center justify-between gap-2 sticky top-0 z-10 bg-background/95 backdrop-blur-sm py-1">
               <p className="text-sm font-medium">
                 Ítems a importar ({selected.size}/{preview.items.length})
               </p>
@@ -244,9 +243,9 @@ export function ControlPruebaImportPreviewDialog({
               </p>
             )}
           </div>
-        </ScrollArea>
+        </div>
 
-        <DialogFooter className="gap-2 sm:gap-0">
+        <DialogFooter className="shrink-0 gap-2 sm:gap-0 border-t pt-3">
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={confirming}>
             Volver
           </Button>
