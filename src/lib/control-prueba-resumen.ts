@@ -1,4 +1,4 @@
-import { TIPO_LABELS } from '@/lib/control-prueba';
+import { esAudienciaOfrecida, TIPO_LABELS } from '@/lib/control-prueba';
 import { esEventoAudienciaPrueba } from '@/lib/control-prueba-audiencia-evento';
 import type {
   ControlPruebaItem,
@@ -16,7 +16,11 @@ const ESTADOS_PENDIENTE = new Set([
   'audiencia_fijada',
   'intimacion_ordenada',
   'autenticidad_impugnada',
+  // Eventos de audiencia abiertos (categoria audiencia)
+  'programada',
+  'reprogramada',
 ]);
+const ESTADOS_EVENTO_CERRADO = new Set(['realizada', 'cancelada']);
 
 function lineaItem(item: ControlPruebaItem): string {
   const tipo = TIPO_LABELS[item.tipo] ?? item.tipo;
@@ -24,6 +28,9 @@ function lineaItem(item: ControlPruebaItem): string {
   const base = desc.length > 90 ? `${tipo}: ${desc.slice(0, 87)}…` : `${tipo}: ${desc}`;
   if (String(item.estado) === 'valoracion_judicial') {
     return `${base} (a valoración judicial)`;
+  }
+  if (String(item.estado) === 'audiencia_fijada' || String(item.estado) === 'programada') {
+    return `${base} (audiencia pendiente)`;
   }
   return base;
 }
@@ -37,7 +44,7 @@ export function itemEsNuestraParte(
   const ofrecida = (item.ofrecidaPor ?? 'actor') as PruebaParte;
   if (ofrecida === parte) return true;
 
-  const padreId = item.vinculo?.parentItemId;
+  const padreId = item.vinculo?.parentItemId ?? item.diligencia?.pruebaVinculadaId ?? null;
   if (padreId) {
     const padre = items.find((i) => i.id === padreId);
     if (padre && (padre.ofrecidaPor ?? 'actor') === parte) return true;
@@ -56,6 +63,14 @@ function bucketEstado(item: ControlPruebaItem): keyof ResumenEjecutivoImport | n
   return 'pendiente';
 }
 
+function padreIdDeItem(item: ControlPruebaItem): string | null {
+  return item.vinculo?.parentItemId ?? item.diligencia?.pruebaVinculadaId ?? null;
+}
+
+function esAudienciaOEvento(item: ControlPruebaItem): boolean {
+  return esEventoAudienciaPrueba(item) || esAudienciaOfrecida(item);
+}
+
 /** Arma resumen ejecutivo solo con la prueba de la parte que representamos. */
 export function buildResumenNuestraParte(
   items: ControlPruebaItem[],
@@ -64,12 +79,12 @@ export function buildResumenNuestraParte(
 ): ResumenEjecutivoImport | undefined {
   if (!parte) return undefined;
 
-  const nuestra = items.filter(
-    (i) =>
-      !esEventoAudienciaPrueba(i) &&
-      i.vinculo?.rol !== 'audiencia_prueba' &&
-      itemEsNuestraParte(i, parte, items),
-  );
+  const nuestra = items.filter((i) => {
+    if (!itemEsNuestraParte(i, parte, items)) return false;
+    // Eventos cerrados: la prueba padre ya refleja el resultado
+    if (esEventoAudienciaPrueba(i) && ESTADOS_EVENTO_CERRADO.has(String(i.estado))) return false;
+    return true;
+  });
   if (nuestra.length === 0 && oficios.length === 0) return undefined;
 
   const out: ResumenEjecutivoImport = {
@@ -78,10 +93,45 @@ export function buildResumenNuestraParte(
     aLibrar: [],
   };
 
+  const lineasPendiente = new Set<string>();
+  const lineasProducida = new Set<string>();
+
   for (const item of nuestra) {
+    // Evitar duplicar evento si el confesional/testimonial padre ya figura en pendiente
+    if (esEventoAudienciaPrueba(item)) {
+      const padre = items.find((i) => i.id === item.vinculo?.parentItemId);
+      if (padre && ESTADOS_PENDIENTE.has(String(padre.estado))) continue;
+    }
+
     const bucket = bucketEstado(item);
     if (!bucket || bucket === 'recomendaciones') continue;
-    out[bucket]!.push(lineaItem(item));
+    const linea = lineaItem(item);
+    if (bucket === 'pendiente') {
+      if (lineasPendiente.has(linea)) continue;
+      lineasPendiente.add(linea);
+      out.pendiente!.push(linea);
+    } else if (bucket === 'producida') {
+      if (lineasProducida.has(linea)) continue;
+      lineasProducida.add(linea);
+      out.producida!.push(linea);
+    } else {
+      out.aLibrar!.push(linea);
+    }
+  }
+
+  // Cédulas/oficios de audiencia: si el padre no quedó en pendiente (p. ej. marcado producida),
+  // igual mostrar la audiencia en Pend. producción.
+  for (const item of nuestra) {
+    if (bucketEstado(item) !== 'aLibrar') continue;
+    const padreId = padreIdDeItem(item);
+    if (!padreId) continue;
+    const padre = items.find((i) => i.id === padreId);
+    if (!padre || !esAudienciaOEvento(padre)) continue;
+    if (ESTADOS_EVENTO_CERRADO.has(String(padre.estado))) continue;
+    const linea = lineaItem(padre);
+    if (lineasPendiente.has(linea)) continue;
+    lineasPendiente.add(linea);
+    out.pendiente!.push(linea);
   }
 
   const idsNuestra = new Set(

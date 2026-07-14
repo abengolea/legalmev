@@ -30,7 +30,9 @@ import {
   evaluarSubProcesosAutomaticos,
   hydrateAutenticidadDocumentalVinculos,
   marcarHijosSinEfectoPorPadreEliminado,
+  parteEfectivaItem,
 } from '@/lib/control-prueba-subprocesos';
+import { itemEsNuestraParte } from '@/lib/control-prueba-resumen';
 import { migrateExpedienteInformativaAOficio } from '@/lib/control-prueba-informativa-migrate';
 import { migrateModeloAudienciaPrueba } from '@/lib/control-prueba-audiencia-migrate';
 import {
@@ -229,9 +231,14 @@ function parteTabDeItem(ofrecidaPor?: PruebaParte): ParteTabId {
   return 'actor';
 }
 
-function tabDeItem(item: ControlPruebaItem): ParteTabId {
+function tabDeItem(item: ControlPruebaItem, allItems: ControlPruebaItem[] = []): ParteTabId {
   if (resolveCategoria(item) === 'mejor_proveer') return 'mejor_proveer';
-  return parteTabDeItem(item.ofrecidaPor as PruebaParte | undefined);
+  const directa = parteTabDeItem(item.ofrecidaPor as PruebaParte | undefined);
+  if (directa !== 'otros' || allItems.length === 0) return directa;
+  // Oficio/cédula vinculado a prueba de actor/demandada → ir a esa pestaña
+  if (itemEsNuestraParte(item, 'actor', allItems)) return 'actor';
+  if (itemEsNuestraParte(item, 'demandado', allItems)) return 'demandado';
+  return directa;
 }
 
 function newItem(
@@ -385,16 +392,6 @@ export function ControlPruebaPanel() {
 
   const oficiosDraft = useMemo(() => collectOficiosAutenticidadFromItems(draftItems), [draftItems]);
 
-  const buildPersistSnapshot = useCallback(
-    () => persistSnapshotFrom(headerDraft, draftItems, hitosDraft, oficiosDraft, resumenDraft),
-    [headerDraft, draftItems, hitosDraft, oficiosDraft, resumenDraft],
-  );
-
-  const isDirty = useMemo(
-    () => selectedId != null && buildPersistSnapshot() !== lastSavedSnapshotRef.current,
-    [selectedId, buildPersistSnapshot],
-  );
-
   const loadExpedientes = useCallback(async () => {
     setLoading(true);
     try {
@@ -545,7 +542,7 @@ export function ControlPruebaPanel() {
       setEstadoFilter('all');
       setHighlightItemId(itemId);
       const item = draftItems.find((i) => i.id === itemId);
-      if (item) setParteTab(tabDeItem(item));
+      if (item) setParteTab(tabDeItem(item, draftItems));
     },
     [draftItems],
   );
@@ -571,6 +568,19 @@ export function ControlPruebaPanel() {
     if (filtroParte !== 'all') list = list.filter((item) => (item.ofrecidaPor ?? 'actor') === filtroParte);
     if (estadoFilter !== 'all') {
       list = list.filter((item) => pasaFiltroEstadoProduccion(item, estadoFilter));
+      // Traer padres de cédulas/oficios visibles (audiencia/confesional) para que no queden huérfanos
+      if (estadoFilter === 'pendiente_produccion') {
+        const visibles = new Set(list.map((i) => i.id));
+        const parentIds = new Set<string>();
+        for (const item of list) {
+          const padreId = item.vinculo?.parentItemId ?? item.diligencia?.pruebaVinculadaId;
+          if (padreId) parentIds.add(padreId);
+        }
+        if (parentIds.size > 0) {
+          const extra = draftItems.filter((item) => parentIds.has(item.id) && !visibles.has(item.id));
+          if (extra.length) list = [...list, ...extra];
+        }
+      }
     }
     return list;
   }, [draftItems, filtroTipo, filtroParte, busquedaItem, estadoFilter]);
@@ -592,20 +602,20 @@ export function ControlPruebaPanel() {
 
   const itemsTerceroByCat = useMemo(
     () => ({
-      prueba: pruebaItems.filter((i) => i.ofrecidaPor === 'tercero'),
-      diligencia: itemsDiligencia.filter((i) => i.ofrecidaPor === 'tercero'),
-      audiencia: itemsAudiencia.filter((i) => i.ofrecidaPor === 'tercero'),
+      prueba: pruebaItems.filter((i) => parteEfectivaItem(i, draftItems) === 'tercero'),
+      diligencia: itemsDiligencia.filter((i) => parteEfectivaItem(i, draftItems) === 'tercero'),
+      audiencia: itemsAudiencia.filter((i) => parteEfectivaItem(i, draftItems) === 'tercero'),
     }),
-    [pruebaItems, itemsDiligencia, itemsAudiencia],
+    [pruebaItems, itemsDiligencia, itemsAudiencia, draftItems],
   );
 
   const itemsTribunalByCat = useMemo(
     () => ({
-      prueba: pruebaItems.filter((i) => i.ofrecidaPor === 'tribunal'),
-      diligencia: itemsDiligencia.filter((i) => i.ofrecidaPor === 'tribunal'),
-      audiencia: itemsAudiencia.filter((i) => i.ofrecidaPor === 'tribunal'),
+      prueba: pruebaItems.filter((i) => parteEfectivaItem(i, draftItems) === 'tribunal'),
+      diligencia: itemsDiligencia.filter((i) => parteEfectivaItem(i, draftItems) === 'tribunal'),
+      audiencia: itemsAudiencia.filter((i) => parteEfectivaItem(i, draftItems) === 'tribunal'),
     }),
-    [pruebaItems, itemsDiligencia, itemsAudiencia],
+    [pruebaItems, itemsDiligencia, itemsAudiencia, draftItems],
   );
 
   const tercerosConocidos = useMemo(
@@ -615,29 +625,29 @@ export function ControlPruebaPanel() {
 
   const itemsByGrupo = useMemo(
     () => ({
-      actor: pruebaItems.filter((i) => (i.ofrecidaPor ?? 'actor') === 'actor'),
-      demandado: pruebaItems.filter((i) => i.ofrecidaPor === 'demandado'),
+      actor: pruebaItems.filter((i) => parteEfectivaItem(i, draftItems) === 'actor'),
+      demandado: pruebaItems.filter((i) => parteEfectivaItem(i, draftItems) === 'demandado'),
       otros: itemsTerceroByCat.prueba,
     }),
-    [pruebaItems, itemsTerceroByCat.prueba],
+    [pruebaItems, itemsTerceroByCat.prueba, draftItems],
   );
 
   const diligenciaByGrupo = useMemo(
     () => ({
-      actor: itemsDiligencia.filter((i) => (i.ofrecidaPor ?? 'tribunal') === 'actor'),
-      demandado: itemsDiligencia.filter((i) => i.ofrecidaPor === 'demandado'),
+      actor: itemsDiligencia.filter((i) => parteEfectivaItem(i, draftItems) === 'actor'),
+      demandado: itemsDiligencia.filter((i) => parteEfectivaItem(i, draftItems) === 'demandado'),
       otros: itemsTerceroByCat.diligencia,
     }),
-    [itemsDiligencia, itemsTerceroByCat.diligencia],
+    [itemsDiligencia, itemsTerceroByCat.diligencia, draftItems],
   );
 
   const audienciaByGrupo = useMemo(
     () => ({
-      actor: itemsAudiencia.filter((i) => (i.ofrecidaPor ?? 'actor') === 'actor'),
-      demandado: itemsAudiencia.filter((i) => i.ofrecidaPor === 'demandado'),
+      actor: itemsAudiencia.filter((i) => parteEfectivaItem(i, draftItems) === 'actor'),
+      demandado: itemsAudiencia.filter((i) => parteEfectivaItem(i, draftItems) === 'demandado'),
       otros: itemsTerceroByCat.audiencia,
     }),
-    [itemsAudiencia, itemsTerceroByCat.audiencia],
+    [itemsAudiencia, itemsTerceroByCat.audiencia, draftItems],
   );
 
   const itemsMejorProveer = useMemo(
@@ -775,7 +785,13 @@ export function ControlPruebaPanel() {
   const handleSave = useCallback(
     async (opts?: { silent?: boolean }) => {
       if (!selected) return false;
-      const snapshot = buildPersistSnapshot();
+      const snapshot = persistSnapshotFrom(
+        headerDraft,
+        draftItems,
+        hitosDraft,
+        oficiosDraft,
+        resumenDraft,
+      );
       if (snapshot === lastSavedSnapshotRef.current) return true;
 
       if (saveInFlightRef.current) {
@@ -827,26 +843,38 @@ export function ControlPruebaPanel() {
         saveInFlightRef.current = false;
         if (pendingSaveRef.current) {
           pendingSaveRef.current = false;
-          void handleSave({ silent: true });
+          const stillDirty =
+            persistSnapshotFrom(headerDraft, draftItems, hitosDraft, oficiosDraft, resumenDraft) !==
+            lastSavedSnapshotRef.current;
+          if (stillDirty) {
+            void handleSaveRef.current({ silent: true });
+          }
         }
       }
     },
-    [selected, headerDraft, draftItems, hitosDraft, oficiosDraft, resumenDraft, resumenVisible, buildPersistSnapshot, toast],
+    [selected, headerDraft, draftItems, hitosDraft, oficiosDraft, resumenDraft, resumenVisible, toast],
   );
 
   const handleSaveRef = useRef(handleSave);
   handleSaveRef.current = handleSave;
 
+  const persistSnapshotValue = useMemo(
+    () => persistSnapshotFrom(headerDraft, draftItems, hitosDraft, oficiosDraft, resumenDraft),
+    [headerDraft, draftItems, hitosDraft, oficiosDraft, resumenDraft],
+  );
+
+  const isDirty = selectedId != null && persistSnapshotValue !== lastSavedSnapshotRef.current;
+
   useEffect(() => {
     if (!selectedId) return;
-    if (buildPersistSnapshot() === lastSavedSnapshotRef.current) return;
+    if (persistSnapshotValue === lastSavedSnapshotRef.current) return;
 
     setSaveStatus('pending');
     const timer = window.setTimeout(() => {
       void handleSaveRef.current({ silent: true });
     }, 1200);
     return () => window.clearTimeout(timer);
-  }, [selectedId, buildPersistSnapshot]);
+  }, [selectedId, persistSnapshotValue]);
 
   useEffect(() => {
     if (saveStatus !== 'saved') return;
@@ -856,14 +884,14 @@ export function ControlPruebaPanel() {
 
   useEffect(() => {
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (buildPersistSnapshot() !== lastSavedSnapshotRef.current) {
+      if (persistSnapshotValue !== lastSavedSnapshotRef.current) {
         e.preventDefault();
         e.returnValue = '';
       }
     };
     window.addEventListener('beforeunload', onBeforeUnload);
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
-  }, [buildPersistSnapshot]);
+  }, [persistSnapshotValue]);
 
   const closeImportDialog = () => {
     const reset = resetImportWizard();
@@ -1275,7 +1303,7 @@ export function ControlPruebaPanel() {
       queueMicrotask(() => {
         setEstadoFilter('all');
         setHighlightItemId(id);
-        setParteTab(tabDeItem({ ...anterior, ...patch } as ControlPruebaItem));
+        setParteTab(tabDeItem({ ...anterior, ...patch } as ControlPruebaItem, draftItems));
         toast({
           title: 'Movido a Prueba ofrecida',
           description: 'El ítem aparece arriba en la sección de prueba de esta parte.',
@@ -2199,7 +2227,7 @@ export function ControlPruebaPanel() {
                       ) : null}
                       {resumenVisible?.pendiente?.length ? (
                         <div className="rounded-lg border border-amber-300/60 bg-amber-50/80 p-2">
-                          <p className="font-medium text-amber-900 mb-1">Pendiente</p>
+                          <p className="font-medium text-amber-900 mb-1">Pend. producción</p>
                           <ul className="text-amber-900/90 space-y-0.5">
                             {resumenVisible.pendiente.map((t, i) => (
                               <li key={i} className="line-clamp-2">
@@ -2211,7 +2239,7 @@ export function ControlPruebaPanel() {
                       ) : null}
                       {resumenVisible?.aLibrar?.length ? (
                         <div className="rounded-lg border border-rose-300/60 bg-rose-50/80 p-2">
-                          <p className="font-medium text-rose-900 mb-1">A librar</p>
+                          <p className="font-medium text-rose-900 mb-1">Comunicaciones</p>
                           <ul className="text-rose-900/90 space-y-0.5">
                             {resumenVisible.aLibrar.map((t, i) => (
                               <li key={i} className="line-clamp-2">

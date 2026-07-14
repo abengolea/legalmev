@@ -51,7 +51,12 @@ import {
   estadoAgregadoPruebaChip,
   itemVisibleConFiltroEstado,
 } from '@/lib/control-prueba-pericial-movimientos';
-import { coerceEstadoAudienciaItem, ensureAudienciaPruebaMeta, syncFechaLimiteAudiencia } from '@/lib/control-prueba-audiencia-prueba';
+import {
+  coerceEstadoAudienciaItem,
+  ensureAudienciaPruebaMeta,
+  itemCuentaComoAudienciaFijadaEnFiltro,
+  syncFechaLimiteAudiencia,
+} from '@/lib/control-prueba-audiencia-prueba';
 import {
   ensureDocumentalEnPoderMeta,
   syncFechaLimiteDocumentalEnPoder,
@@ -390,6 +395,16 @@ export function itemPendienteDeControl(item: ControlPruebaItem): boolean {
   return false;
 }
 
+/**
+ * Estados de prueba aún abiertos que, con filtro «Pend. producción», deben verse
+ * junto a sus cédulas/oficios (si no, aparecen comunicaciones huérfanas).
+ */
+const ESTADOS_PRUEBA_ABIERTOS_EN_PEND_PRODUCCION = new Set([
+  'postpuesta_juez',
+  'audiencia_fijada',
+  'intimacion_ordenada',
+]);
+
 /** Filtro de estado del header: prueba ofrecida + comunicaciones/audiencias pendientes. */
 export function pasaFiltroEstadoProduccion(item: ControlPruebaItem, filtro: string): boolean {
   if (filtro === 'all') return true;
@@ -397,7 +412,17 @@ export function pasaFiltroEstadoProduccion(item: ControlPruebaItem, filtro: stri
     return itemVisibleConFiltroEstado(item, filtro);
   }
   if (usaEstadosProduccionPrueba(item)) {
-    return itemVisibleConFiltroEstado(item, filtro);
+    if (itemVisibleConFiltroEstado(item, filtro)) return true;
+    // Confesional/testimonial fijada o evento programado: siguen pendientes de producirse
+    // y suelen tener cédulas visibles bajo Pend. producción.
+    if (
+      filtro === 'pendiente_produccion' &&
+      (ESTADOS_PRUEBA_ABIERTOS_EN_PEND_PRODUCCION.has(String(item.estado)) ||
+        itemCuentaComoAudienciaFijadaEnFiltro(item))
+    ) {
+      return true;
+    }
+    return false;
   }
   if (filtro === 'pendiente_produccion') {
     return itemPendienteDeControl(item);
