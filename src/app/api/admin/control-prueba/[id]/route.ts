@@ -10,6 +10,7 @@ import {
   sanitizeForFirestore,
   serializeControlPruebaDoc,
 } from '@/lib/control-prueba';
+import { repairSpanishTextEncoding } from '@/lib/text-encoding-repair';
 import type { ControlPruebaExpedienteInput } from '@/types/control-prueba';
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -26,7 +27,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
     const { id } = await context.params;
     const adminDb = getAdminDb();
-    const owned = await assertControlPruebaExpedienteOwner(adminDb, id, auth.uid, auth.unlimited);
+    const owned = await assertControlPruebaExpedienteOwner(adminDb, id, auth.uid);
     if (!owned.ok) {
       return NextResponse.json({ ok: false, error: owned.error }, { status: owned.status });
     }
@@ -49,7 +50,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     const { id } = await context.params;
     const body = (await request.json()) as Partial<ControlPruebaExpedienteInput>;
     const adminDb = getAdminDb();
-    const owned = await assertControlPruebaExpedienteOwner(adminDb, id, auth.uid, auth.unlimited);
+    const owned = await assertControlPruebaExpedienteOwner(adminDb, id, auth.uid);
     if (!owned.ok) {
       return NextResponse.json({ ok: false, error: owned.error }, { status: owned.status });
     }
@@ -63,12 +64,12 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       if (!body.caratula.trim()) {
         return NextResponse.json({ ok: false, error: 'La carátula es obligatoria' }, { status: 400 });
       }
-      update.caratula = body.caratula.trim();
+      update.caratula = repairSpanishTextEncoding(body.caratula.trim());
     }
     if (body.numeroExpediente !== undefined) update.numeroExpediente = body.numeroExpediente.trim();
-    if (body.juzgado !== undefined) update.juzgado = body.juzgado.trim();
-    if (body.fuero !== undefined) update.fuero = body.fuero.trim();
-    if (body.notas !== undefined) update.notas = body.notas.trim();
+    if (body.juzgado !== undefined) update.juzgado = repairSpanishTextEncoding(body.juzgado.trim());
+    if (body.fuero !== undefined) update.fuero = repairSpanishTextEncoding(body.fuero.trim());
+    if (body.notas !== undefined) update.notas = repairSpanishTextEncoding(body.notas.trim());
     if (body.expedienteUrl !== undefined) {
       const url = body.expedienteUrl.trim();
       update.expedienteUrl = url;
@@ -116,7 +117,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
 
     const { id } = await context.params;
     const adminDb = getAdminDb();
-    const owned = await assertControlPruebaExpedienteOwner(adminDb, id, auth.uid, auth.unlimited);
+    const owned = await assertControlPruebaExpedienteOwner(adminDb, id, auth.uid);
     if (!owned.ok) {
       return NextResponse.json({ ok: false, error: owned.error }, { status: owned.status });
     }

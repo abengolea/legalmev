@@ -203,7 +203,7 @@ export function DashboardNav() {
                 </SidebarMenuButton>
               </SidebarMenuItem>
           )}
-          {canAccessCopilot && !userData?.isPlatformAdmin && (
+          {canAccessCopilot && (
             <SidebarMenuItem>
               <SidebarMenuButton
                 asChild
@@ -215,7 +215,7 @@ export function DashboardNav() {
               </SidebarMenuButton>
             </SidebarMenuItem>
           )}
-          {canUseControlPrueba && !userData?.isPlatformAdmin && (
+          {canUseControlPrueba && (
             <SidebarMenuItem className="relative">
               <SidebarMenuButton
                 asChild
@@ -268,18 +268,16 @@ export function DashboardNav() {
                         <Link href="/admin?tab=stats"><BarChart3 className="size-4" /> Estadísticas</Link>
                       </SidebarMenuSubButton>
                     </SidebarMenuSubItem>
-                    {userData?.canAccessControlPrueba && (
-                    <SidebarMenuSubItem className="relative">
-                      <SidebarMenuSubButton asChild isActive={adminTab === 'control-prueba'}>
-                        <Link href="/admin?tab=control-prueba"><FileSearch className="size-4" /> Control de prueba</Link>
+                    <SidebarMenuSubItem>
+                      <SidebarMenuSubButton asChild isActive={adminTab === 'audiencias'}>
+                        <Link href="/admin?tab=audiencias"><Gavel className="size-4" /> Uso Audiencias</Link>
                       </SidebarMenuSubButton>
-                      {controlPruebaRiesgo > 0 && (
-                        <SidebarMenuBadge className="bg-red-500 text-white">
-                          {controlPruebaRiesgo > 99 ? '99+' : controlPruebaRiesgo}
-                        </SidebarMenuBadge>
-                      )}
                     </SidebarMenuSubItem>
-                    )}
+                    <SidebarMenuSubItem>
+                      <SidebarMenuSubButton asChild isActive={adminTab === 'pruebas'}>
+                        <Link href="/admin?tab=pruebas"><FileSearch className="size-4" /> Uso Pruebas</Link>
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
                     <SidebarMenuSubItem>
                       <SidebarMenuSubButton asChild isActive={adminTab === 'payments'}>
                         <Link href="/admin?tab=payments"><CreditCard className="size-4" /> Pagos</Link>
@@ -295,13 +293,6 @@ export function DashboardNav() {
                         <Link href="/admin?tab=config&configTab=payments"><Settings className="size-4" /> Configuración</Link>
                       </SidebarMenuSubButton>
                     </SidebarMenuSubItem>
-                    {canAccessCopilot && (
-                      <SidebarMenuSubItem>
-                        <SidebarMenuSubButton asChild isActive={adminTab === 'audiencia-copilot'}>
-                          <Link href="/admin?tab=audiencia-copilot"><Gavel className="size-4" /> Copiloto Audiencias</Link>
-                        </SidebarMenuSubButton>
-                      </SidebarMenuSubItem>
-                    )}
                   </SidebarMenuSub>
                 </SidebarMenuItem>
               </SidebarGroupContent>

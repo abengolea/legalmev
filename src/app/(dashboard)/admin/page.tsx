@@ -29,10 +29,9 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Cpu, Database, Users, XCircle, FileText, MessageSquare, Bot, Send, PlusCircle, Zap, CreditCard, BarChart3, Building2, Upload, AlertTriangle, Receipt, Link2, UserPlus, LayoutDashboard, TrendingUp, DollarSign, FileOutput, ArrowRight, Settings, Mail, MoreHorizontal, Ban, Unlock, RefreshCw, History, StickyNote, Gavel, Search, FileSearch } from 'lucide-react';
-import { AudienciaCopilot } from '@/components/admin/AudienciaCopilot';
 import { AudienciaCopilotAdminReport } from '@/components/admin/AudienciaCopilotAdminReport';
 import { CopilotoAnnouncementEmailCard } from '@/components/admin/CopilotoAnnouncementEmailCard';
-import { ControlPruebaPanel } from '@/components/admin/ControlPruebaPanel';
+import { ControlPruebaAdminReport } from '@/components/admin/ControlPruebaAdminReport';
 import {
   AUDIENCIA_COPILOT_TRIAL_SESSIONS,
   type AudienciaCopilotTrial,
@@ -2286,8 +2285,7 @@ function AdminDashboard() {
   );
 }
 
-const BASE_TABS = ['dashboard', 'users', 'colegios', 'stats', 'audiencias', 'control-prueba', 'payments', 'config'] as const;
-const COPILOT_TAB = 'audiencia-copilot' as const;
+const BASE_TABS = ['dashboard', 'users', 'colegios', 'stats', 'audiencias', 'pruebas', 'payments', 'config'] as const;
 const VALID_COLEGIO_SUB = ['convenios', 'responsables'] as const;
 const VALID_CONFIG_TABS = ['payments', 'email', 'system', 'logs', 'ai-test'] as const;
 
@@ -2413,37 +2411,9 @@ function AdminTabs() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const tabParam = searchParams.get('tab');
-  const [canAccessCopilot, setCanAccessCopilot] = useState(false);
-  const [canAccessControlPrueba, setCanAccessControlPrueba] = useState(false);
-
-  useEffect(() => {
-    import('@/lib/firebase').then(({ auth }) => {
-      const unsub = auth.onAuthStateChanged(async (user) => {
-        if (!user) {
-          setCanAccessCopilot(false);
-          setCanAccessControlPrueba(false);
-          return;
-        }
-        try {
-          const token = await user.getIdToken();
-          const res = await fetch('/api/user/me', { headers: { Authorization: `Bearer ${token}` } });
-          const json = await res.json();
-          setCanAccessCopilot(!!json?.user?.audienciaCopilot?.hasAccess);
-          setCanAccessControlPrueba(!!json?.user?.canAccessControlPrueba);
-        } catch {
-          setCanAccessCopilot(false);
-          setCanAccessControlPrueba(false);
-        }
-      });
-      return () => unsub();
-    });
-  }, []);
-
-  const validTabs = [
-    ...BASE_TABS.filter((t) => t !== 'control-prueba' || canAccessControlPrueba),
-    ...(canAccessCopilot ? [COPILOT_TAB] : []),
-  ];
-  const activeTab = (validTabs.includes(tabParam as (typeof validTabs)[number]) ? tabParam : 'dashboard') as (typeof validTabs)[number];
+  const activeTab = (
+    BASE_TABS.includes(tabParam as (typeof BASE_TABS)[number]) ? tabParam : 'dashboard'
+  ) as (typeof BASE_TABS)[number];
 
   const setTab = (value: string) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -2459,15 +2429,10 @@ function AdminTabs() {
           <AdminTabTrigger value="users"><Users className="h-4 w-4 shrink-0"/> Usuarios</AdminTabTrigger>
           <AdminTabTrigger value="colegios"><Building2 className="h-4 w-4 shrink-0"/> Colegios</AdminTabTrigger>
           <AdminTabTrigger value="stats"><BarChart3 className="h-4 w-4 shrink-0"/> Estadísticas</AdminTabTrigger>
-          <AdminTabTrigger value="audiencias"><Gavel className="h-4 w-4 shrink-0"/> Audiencias</AdminTabTrigger>
-          {canAccessControlPrueba && (
-            <AdminTabTrigger value="control-prueba"><FileSearch className="h-4 w-4 shrink-0"/> Prueba</AdminTabTrigger>
-          )}
+          <AdminTabTrigger value="audiencias"><Gavel className="h-4 w-4 shrink-0"/> Uso Audiencias</AdminTabTrigger>
+          <AdminTabTrigger value="pruebas"><FileSearch className="h-4 w-4 shrink-0"/> Uso Pruebas</AdminTabTrigger>
           <AdminTabTrigger value="payments"><CreditCard className="h-4 w-4 shrink-0"/> Pagos</AdminTabTrigger>
           <AdminTabTrigger value="config"><Settings className="h-4 w-4 shrink-0"/> Config</AdminTabTrigger>
-          {canAccessCopilot && (
-            <AdminTabTrigger value="audiencia-copilot"><Gavel className="h-4 w-4 shrink-0"/> Copiloto</AdminTabTrigger>
-          )}
         </AdminTabsList>
       </AdminTabsScroll>
 
@@ -2483,7 +2448,6 @@ function AdminTabs() {
         <ColegiosSection />
       </TabsContent>
 
-
       <TabsContent value="stats">
         <Stats />
       </TabsContent>
@@ -2495,11 +2459,9 @@ function AdminTabs() {
         </div>
       </TabsContent>
 
-      {canAccessControlPrueba && (
-        <TabsContent value="control-prueba">
-          <ControlPruebaPanel />
-        </TabsContent>
-      )}
+      <TabsContent value="pruebas">
+        <ControlPruebaAdminReport />
+      </TabsContent>
 
       <TabsContent value="payments">
         <PagosControl />
@@ -2508,12 +2470,6 @@ function AdminTabs() {
       <TabsContent value="config">
         <ConfigTabs />
       </TabsContent>
-
-      {canAccessCopilot && (
-        <TabsContent value="audiencia-copilot">
-          <AudienciaCopilot />
-        </TabsContent>
-      )}
     </Tabs>
   );
 }

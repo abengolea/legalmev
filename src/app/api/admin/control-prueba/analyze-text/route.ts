@@ -77,7 +77,6 @@ export async function POST(request: NextRequest) {
           adminDb,
           expedienteId,
           auth.uid,
-          auth.unlimited,
         );
         if (!owned.ok) {
           return NextResponse.json({ ok: false, error: owned.error }, { status: owned.status });
@@ -135,6 +134,7 @@ export async function POST(request: NextRequest) {
             reclasificados: body.preview.reclasificados.length,
           },
           oficiosAutenticidad: body.preview.oficiosAutenticidadPendientes.length,
+          tokenUsage: body.preview.tokenUsage,
         },
       });
     }
