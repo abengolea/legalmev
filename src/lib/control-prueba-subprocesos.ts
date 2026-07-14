@@ -347,7 +347,7 @@ export function buildCedulaIntimacionDocumental(
     categoria: 'diligencia',
     tipo: tipoCedula,
     descripcion: `Cédula intimación documental — ${destinatario}`,
-    ofrecidaPor: 'tribunal',
+    ofrecidaPor: padre.ofrecidaPor ?? 'tribunal',
     estado: opts.estadoDiligencia ?? 'pendiente_realizacion',
     fechaLimite: plazo || null,
     fechaProduccion: null,
@@ -476,7 +476,8 @@ export function buildOficioAutenticidadDocumental(
     categoria: 'diligencia',
     tipo: 'oficio',
     descripcion: `Oficio autenticidad — ${padre.descripcion.slice(0, 100)}`,
-    ofrecidaPor: 'tribunal',
+    // Misma parte que el documental: así aparece en Actor/Demandada, no solo en Tribunal.
+    ofrecidaPor: padre.ofrecidaPor ?? 'tribunal',
     estado: 'pendiente',
     fechaLimite: null,
     fechaProduccion: null,
@@ -744,6 +745,26 @@ export function hydrateAutenticidadDocumentalVinculos(items: ControlPruebaItem[]
     result = ensureVinculosAutenticidadDocumental(result, item.id).items;
   }
   return result;
+}
+
+/**
+ * Parte efectiva de una diligencia: si quedó como `tribunal` pero el padre es actor/demandada/tercero,
+ * se atribuye al padre (listados sin mutar items → evita autosave en loop).
+ */
+export function parteEfectivaItem(
+  item: ControlPruebaItem,
+  allItems: ControlPruebaItem[],
+): NonNullable<ControlPruebaItem['ofrecidaPor']> {
+  const fallback = resolveCategoria(item) === 'diligencia' ? 'tribunal' : 'actor';
+  const directa = (item.ofrecidaPor ?? fallback) as NonNullable<ControlPruebaItem['ofrecidaPor']>;
+  if (directa !== 'tribunal') return directa;
+
+  const padreId = item.vinculo?.parentItemId ?? item.diligencia?.pruebaVinculadaId ?? null;
+  if (!padreId) return directa;
+  const padre = allItems.find((i) => i.id === padreId);
+  const partePadre = padre?.ofrecidaPor;
+  if (!partePadre || partePadre === 'tribunal') return directa;
+  return partePadre;
 }
 
 export function crearOficioAutenticidadManual(
