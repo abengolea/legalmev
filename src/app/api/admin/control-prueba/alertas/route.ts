@@ -11,13 +11,11 @@ export async function GET(request: NextRequest) {
     if (auth instanceof NextResponse) return auth;
 
     const adminDb = getAdminDb();
-    const snap = auth.unlimited
-      ? await adminDb.collection(CONTROL_PRUEBA_COLLECTION).limit(100).get()
-      : await adminDb
-          .collection(CONTROL_PRUEBA_COLLECTION)
-          .where('createdBy', '==', auth.uid)
-          .limit(100)
-          .get();
+    const snap = await adminDb
+      .collection(CONTROL_PRUEBA_COLLECTION)
+      .where('createdBy', '==', auth.uid)
+      .limit(100)
+      .get();
 
     let totalRiesgo = 0;
     let rojo = 0;

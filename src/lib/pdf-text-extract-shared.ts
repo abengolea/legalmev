@@ -1,3 +1,5 @@
+import { repairSpanishTextEncoding } from '@/lib/text-encoding-repair';
+
 export const PDF_EXTRACT_CODES = {
   SCANNED_PDF: 'SCANNED_PDF',
   EMPTY_PDF: 'EMPTY_PDF',
@@ -52,15 +54,16 @@ export const EMPTY_PDF_USER_MESSAGE =
 
 export function finalizePdfTextExtract(texto: string, numPages: number): LocalPdfExtractResult {
   const pages = Math.max(1, numPages);
-  if (!texto) {
+  const repaired = repairSpanishTextEncoding(texto.trim());
+  if (!repaired) {
     throw new PdfExtractError(EMPTY_PDF_USER_MESSAGE, PDF_EXTRACT_CODES.EMPTY_PDF);
   }
-  if (isLikelyScannedPdf(texto, pages)) {
+  if (isLikelyScannedPdf(repaired, pages)) {
     throw new PdfExtractError(SCANNED_PDF_USER_MESSAGE, PDF_EXTRACT_CODES.SCANNED_PDF);
   }
   return {
-    texto,
+    texto: repaired,
     numPages: pages,
-    charsPerPage: Math.round(texto.length / pages),
+    charsPerPage: Math.round(repaired.length / pages),
   };
 }

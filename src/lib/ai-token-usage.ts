@@ -79,3 +79,58 @@ export function formatTokenCount(value: number): string {
   if (value >= 1_000) return `${(value / 1000).toFixed(1)}k`;
   return value.toLocaleString('es-AR');
 }
+
+/**
+ * Extrae usage de respuestas Genkit/Gemini (varios caminos posibles).
+ */
+export function extractUsageFromAiResponse(response: unknown): AiTokenUsage {
+  if (!response || typeof response !== 'object') return { ...EMPTY_TOKEN_USAGE };
+  const root = response as Record<string, unknown>;
+  const nestedCustom =
+    root.custom && typeof root.custom === 'object'
+      ? (root.custom as Record<string, unknown>)
+      : undefined;
+
+  const candidates: unknown[] = [
+    root.usage,
+    root.usageMetadata,
+    nestedCustom?.usage,
+    nestedCustom?.usageMetadata,
+  ];
+
+  for (const candidate of candidates) {
+    const normalized = normalizeTokenUsage(candidate);
+    if (normalized.totalTokens > 0) return normalized;
+  }
+  return { ...EMPTY_TOKEN_USAGE };
+}
+
+/** Estimación chars→tokens (~4 chars/token, razonable para ES + Gemini). */
+export function estimateTokenUsageFromChars(
+  inputChars: number,
+  outputChars: number,
+): AiTokenUsage {
+  const inputTokens = Math.max(1, Math.ceil(Math.max(0, inputChars) / 4));
+  const outputTokens = Math.max(1, Math.ceil(Math.max(0, outputChars) / 4));
+  return {
+    inputTokens,
+    outputTokens,
+    totalTokens: inputTokens + outputTokens,
+  };
+}
+
+/**
+ * Estimación histórica para Control de Prueba cuando no se persistió usage.
+ * Usa cantidad de ítems como proxy de complejidad del expediente.
+ */
+export function estimateControlPruebaTokenUsageFromItems(itemCount: number): AiTokenUsage {
+  const n = Math.max(0, itemCount);
+  // Prompt base + texto del expediente (típicamente grande) + output JSON por ítem
+  const inputTokens = 12_000 + Math.min(n, 100) * 180;
+  const outputTokens = Math.max(600, n * 260);
+  return {
+    inputTokens,
+    outputTokens,
+    totalTokens: inputTokens + outputTokens,
+  };
+}

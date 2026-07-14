@@ -21,6 +21,14 @@ import {
 import { collectOficiosAutenticidadFromItems } from '@/lib/control-prueba-documental-autenticidad-consolidate';
 import { resumenParaParteRepresentada } from '@/lib/control-prueba-resumen';
 import type { ParteRepresentadaPrueba } from '@/types/control-prueba';
+import {
+  normalizeTokenUsage,
+  sumTokenUsage,
+  type AiTokenUsage,
+  type AiTokenUsageMeta,
+} from '@/lib/ai-token-usage';
+import { GEMINI_MODEL_ID } from '@/lib/gemini-model';
+import { repairSpanishTextEncoding } from '@/lib/text-encoding-repair';
 
 export type ImportPreviewPayload = {
   caratula: string;
@@ -40,6 +48,8 @@ export type ImportPreviewPayload = {
   descartados: { descripcion: string; motivo: string }[];
   reclasificados: { descripcion: string; de: string; a: string }[];
   descartadosMuestra: { descripcion: string; motivo: string }[];
+  /** Tokens del análisis IA que generó este preview (se acumulan al confirmar). */
+  tokenUsage?: AiTokenUsage;
 };
 
 export type RunImportAnalysisInput = {
@@ -109,6 +119,7 @@ export async function runImportAnalysis(input: RunImportAnalysisInput) {
   }
 
   const preview = buildPreviewPayload(analysis, importResult, input);
+  preview.tokenUsage = normalizeTokenUsage(usage);
   if (input.parteRepresentada) {
     preview.parteRepresentada = input.parteRepresentada;
     preview.resumenEjecutivo = resumenParaParteRepresentada(
@@ -124,6 +135,7 @@ export async function runImportAnalysis(input: RunImportAnalysisInput) {
     pdfFileName: input.pdfFileName ?? '',
     items: preview.items.length,
     oficiosAutenticidad: collectOficiosAutenticidadFromItems(preview.items).length,
+    tokens: preview.tokenUsage.totalTokens,
     ms: Date.now() - started,
   });
   return { ok: true as const, preview, usage, analysis };
@@ -145,17 +157,19 @@ function buildPreviewPayload(
 
   return {
     caratula:
-      input.caratula?.trim() ||
-      analysis.caratula?.trim() ||
-      input.pdfFileName?.replace(/\.pdf$/i, '') ||
-      'Causa importada desde PDF',
+      repairSpanishTextEncoding(
+        input.caratula?.trim() ||
+          analysis.caratula?.trim() ||
+          input.pdfFileName?.replace(/\.pdf$/i, '') ||
+          'Causa importada desde PDF',
+      ),
     numeroExpediente: input.numeroExpediente?.trim() || analysis.numeroExpediente?.trim() || '',
-    juzgado: input.juzgado?.trim() || analysis.juzgado?.trim() || '',
-    fuero: input.fuero?.trim() || analysis.fuero?.trim() || '',
+    juzgado: repairSpanishTextEncoding(input.juzgado?.trim() || analysis.juzgado?.trim() || ''),
+    fuero: repairSpanishTextEncoding(input.fuero?.trim() || analysis.fuero?.trim() || ''),
     expedienteUrl: input.expedienteUrl?.trim() ?? '',
-    notas: resumenNotas,
-    actor: analysis.actor?.trim() ?? '',
-    demandado: analysis.demandado?.trim() ?? '',
+    notas: repairSpanishTextEncoding(resumenNotas),
+    actor: repairSpanishTextEncoding(analysis.actor?.trim() ?? ''),
+    demandado: repairSpanishTextEncoding(analysis.demandado?.trim() ?? ''),
     parteRepresentada: input.parteRepresentada ?? '',
     resumenCaso: analysis.resumenCaso?.trim(),
     autoAperturaPrueba: analysis.autoAperturaPrueba?.trim(),
@@ -243,6 +257,17 @@ export async function applyImportToFirestore(input: ApplyImportInput) {
     ),
   };
 
+  const incomingUsage = normalizeTokenUsage(preview.tokenUsage);
+  // Siempre persistimos un usage (medido o ya estimado en el flow); no descartar ceros de más.
+  const tokenUsageMeta: AiTokenUsageMeta | undefined =
+    incomingUsage.totalTokens > 0
+      ? {
+          ...incomingUsage,
+          model: GEMINI_MODEL_ID,
+          lastUpdatedAt: nowIso,
+        }
+      : undefined;
+
   if (expedienteId && expedienteRef) {
     const snap = await expedienteRef.get();
     const prev = snap.data() ?? {};
@@ -258,6 +283,13 @@ export async function applyImportToFirestore(input: ApplyImportInput) {
     if (preview.notas && !prev.notas) update.notas = preview.notas;
     if (preview.expedienteUrl && !prev.expedienteUrl) update.expedienteUrl = preview.expedienteUrl;
     if (preview.parteRepresentada) update.parteRepresentada = preview.parteRepresentada;
+    if (tokenUsageMeta) {
+      update.tokenUsage = {
+        ...sumTokenUsage(normalizeTokenUsage(prev.tokenUsage), tokenUsageMeta),
+        model: GEMINI_MODEL_ID,
+        lastUpdatedAt: nowIso,
+      };
+    }
 
     await expedienteRef.update(update);
     const updated = await expedienteRef.get();
@@ -281,6 +313,7 @@ export async function applyImportToFirestore(input: ApplyImportInput) {
     notas: preview.notas,
     items: mergedItems,
     ...importMeta,
+    ...(tokenUsageMeta ? { tokenUsage: tokenUsageMeta } : {}),
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
     createdBy: input.uid,

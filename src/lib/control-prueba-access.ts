@@ -193,7 +193,6 @@ export async function assertControlPruebaExpedienteOwner(
   adminDb: Firestore,
   expedienteId: string,
   uid: string,
-  unlimited: boolean,
 ): Promise<{ ok: true; data: FirebaseFirestore.DocumentData } | { ok: false; error: string; status: number }> {
   const snap = await adminDb.collection('controlPrueba').doc(expedienteId).get();
   if (!snap.exists) {
@@ -201,7 +200,7 @@ export async function assertControlPruebaExpedienteOwner(
   }
 
   const data = snap.data() ?? {};
-  if (!unlimited && data.createdBy !== uid) {
+  if (data.createdBy !== uid) {
     return { ok: false, error: 'Sin permiso sobre este expediente', status: 403 };
   }
 

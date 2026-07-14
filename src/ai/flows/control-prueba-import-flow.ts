@@ -1,6 +1,10 @@
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
-import { normalizeTokenUsage, type AiFlowResult } from '@/lib/ai-token-usage';
+import {
+  estimateTokenUsageFromChars,
+  extractUsageFromAiResponse,
+  type AiFlowResult,
+} from '@/lib/ai-token-usage';
 
 const ControlItemSchema = z.object({
   categoria: z
@@ -229,8 +233,14 @@ export async function extractControlPruebaFromText(
   input: ControlPruebaImportInput,
 ): Promise<AiFlowResult<ControlPruebaImportOutput>> {
   const response = await controlPruebaImportPrompt(input);
-  return {
-    output: response.output!,
-    usage: normalizeTokenUsage(response.usage),
-  };
+  const output = response.output!;
+  let usage = extractUsageFromAiResponse(response);
+  if (usage.totalTokens === 0) {
+    // Genkit a veces no reporta usage; estimar para no perder el costo en el admin.
+    usage = estimateTokenUsageFromChars(
+      input.expedienteTexto.length,
+      JSON.stringify(output).length,
+    );
+  }
+  return { output, usage };
 }

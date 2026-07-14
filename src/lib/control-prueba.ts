@@ -23,6 +23,7 @@ import {
   normalizeOficiosAutenticidad,
   normalizeResumenEjecutivo,
 } from '@/lib/control-prueba-import-meta';
+import { repairSpanishTextEncoding } from '@/lib/text-encoding-repair';
 import {
   PRUEBA_ESTADOS,
   DILIGENCIA_ESTADOS,
@@ -932,7 +933,7 @@ export type ExpedienteMetadataLocal = {
 
 /** Metadatos desde nombre de archivo (sin IA). Ej: "VERA c ICBC ... FRO 014018.pdf" */
 export function extractMetadataFromFilename(fileName: string): Partial<ExpedienteMetadataLocal> {
-  const base = fileName.replace(/\.pdf$/i, '').trim();
+  const base = repairSpanishTextEncoding(fileName.replace(/\.pdf$/i, '').trim());
   if (!base) return {};
 
   const froMatch =
@@ -963,7 +964,7 @@ export function extractMetadataFromFilename(fileName: string): Partial<Expedient
         : '';
 
   return {
-    caratula: caratula || base,
+    caratula: repairSpanishTextEncoding(caratula || base),
     numeroExpediente,
     fuero,
   };
@@ -971,7 +972,7 @@ export function extractMetadataFromFilename(fileName: string): Partial<Expedient
 
 /** Metadatos desde texto del PDF (regex local, sin IA). */
 export function extractMetadataFromExpedienteText(texto: string): Partial<ExpedienteMetadataLocal> {
-  const head = texto.slice(0, 25_000);
+  const head = repairSpanishTextEncoding(texto).slice(0, 25_000);
   const out: Partial<ExpedienteMetadataLocal> = {};
 
   const caratulaMatch =
@@ -980,7 +981,7 @@ export function extractMetadataFromExpedienteText(texto: string): Partial<Expedi
     head.match(/SUMARIO\s+ACTOR:\s*([^\n-]{8,120})/i) ||
     head.match(/EXPEDIENTE\s+CAR[ÁA]TULA:\s*([^\n]{8,160})/i);
   if (caratulaMatch?.[1]) {
-    out.caratula = caratulaMatch[1].replace(/\s+/g, ' ').trim();
+    out.caratula = repairSpanishTextEncoding(caratulaMatch[1].replace(/\s+/g, ' ').trim());
   }
 
   const expPatterns = [
@@ -1055,17 +1056,17 @@ export function serializeControlPruebaDoc(
 ): import('@/types/control-prueba').ControlPruebaExpediente {
   return {
     id,
-    caratula: String(data.caratula ?? ''),
+    caratula: repairSpanishTextEncoding(String(data.caratula ?? '')),
     numeroExpediente: data.numeroExpediente ?? '',
-    juzgado: data.juzgado ?? '',
-    fuero: data.fuero ?? '',
+    juzgado: repairSpanishTextEncoding(String(data.juzgado ?? '')),
+    fuero: repairSpanishTextEncoding(String(data.fuero ?? '')),
     expedienteUrl: String(data.expedienteUrl ?? ''),
     sistema: data.sistema ?? detectSistemaFromUrl(String(data.expedienteUrl ?? '')),
-    notas: data.notas ?? '',
+    notas: repairSpanishTextEncoding(String(data.notas ?? '')),
     pdfFileName: data.pdfFileName ?? undefined,
     pdfImportedAt: data.pdfImportedAt ?? undefined,
-    actor: data.actor ?? undefined,
-    demandado: data.demandado ?? undefined,
+    actor: data.actor ? repairSpanishTextEncoding(String(data.actor)) : undefined,
+    demandado: data.demandado ? repairSpanishTextEncoding(String(data.demandado)) : undefined,
     terceros: Array.isArray(data.terceros)
       ? (data.terceros as string[]).map((t) => String(t).trim()).filter(Boolean)
       : undefined,
@@ -1089,5 +1090,6 @@ export function serializeControlPruebaDoc(
     createdAt: data.createdAt?.toDate?.()?.toISOString?.() ?? data.createdAt ?? undefined,
     updatedAt: data.updatedAt?.toDate?.()?.toISOString?.() ?? data.updatedAt ?? undefined,
     createdBy: data.createdBy ?? undefined,
+    tokenUsage: data.tokenUsage ?? undefined,
   };
 }

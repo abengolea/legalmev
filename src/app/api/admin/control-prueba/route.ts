@@ -13,6 +13,7 @@ import {
   sanitizeForFirestore,
   serializeControlPruebaDoc,
 } from '@/lib/control-prueba';
+import { repairSpanishTextEncoding } from '@/lib/text-encoding-repair';
 import type { ControlPruebaExpedienteInput } from '@/types/control-prueba';
 
 function serializeDoc(id: string, data: FirebaseFirestore.DocumentData) {
@@ -34,15 +35,13 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const q = searchParams.get('q')?.trim().toLowerCase();
 
-    let query = adminDb.collection(CONTROL_PRUEBA_COLLECTION).orderBy('updatedAt', 'desc').limit(100);
-    if (!auth.unlimited) {
-      query = adminDb
-        .collection(CONTROL_PRUEBA_COLLECTION)
-        .where('createdBy', '==', auth.uid)
-        .limit(100);
-    }
-
-    const snap = await query.get();
+    // Cada usuario solo ve sus propios expedientes (también superadmin / cuota ilimitada).
+    // El listado global de todos los usuarios está en /api/admin/control-prueba/report.
+    const snap = await adminDb
+      .collection(CONTROL_PRUEBA_COLLECTION)
+      .where('createdBy', '==', auth.uid)
+      .limit(100)
+      .get();
     let expedientes = snap.docs.map((d) => serializeDoc(d.id, d.data()));
 
     expedientes.sort((a, b) => {
@@ -126,13 +125,13 @@ export async function POST(request: NextRequest) {
     const now = FieldValue.serverTimestamp();
     const expedienteUrl = body.expedienteUrl?.trim() ?? '';
     const record = {
-      caratula: body.caratula!.trim(),
+      caratula: repairSpanishTextEncoding(body.caratula!.trim()),
       numeroExpediente: body.numeroExpediente?.trim() ?? '',
-      juzgado: body.juzgado?.trim() ?? '',
-      fuero: body.fuero?.trim() ?? '',
+      juzgado: repairSpanishTextEncoding(body.juzgado?.trim() ?? ''),
+      fuero: repairSpanishTextEncoding(body.fuero?.trim() ?? ''),
       expedienteUrl,
       sistema: body.sistema ?? detectSistemaFromUrl(expedienteUrl),
-      notas: body.notas?.trim() ?? '',
+      notas: repairSpanishTextEncoding(body.notas?.trim() ?? ''),
       items: sanitizeForFirestore(normalizeItems(body.items)),
       createdAt: now,
       updatedAt: now,

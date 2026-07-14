@@ -1,6 +1,7 @@
 import type { AiTokenUsageMeta } from '@/lib/ai-token-usage';
 import { normalizeTokenUsage, sumTokenUsage } from '@/lib/ai-token-usage';
 import type { AudienciaTestigo } from '@/lib/audiencia-session-types';
+import { estimateGeminiUsdCost } from '@/lib/gemini-token-pricing';
 
 export type AudienciaCopilotReportRow = {
   id: string;
@@ -22,6 +23,7 @@ export type AudienciaCopilotReportRow = {
     model?: string;
     lastUpdatedAt?: string;
   };
+  costUsd: number;
   pagoMonto?: number;
   pagoMoneda?: string;
   pagoAt?: string;
@@ -35,6 +37,7 @@ export type AudienciaCopilotReportSummary = {
   totalOutputTokens: number;
   totalTokens: number;
   totalIntercambios: number;
+  totalCostUsd: number;
 };
 
 export function countSessionIntercambios(testigos: AudienciaTestigo[] | undefined): number {
@@ -74,6 +77,7 @@ export function mapSessionDocToReportRow(
       model: tokenRaw?.model,
       lastUpdatedAt: tokenRaw?.lastUpdatedAt,
     },
+    costUsd: estimateGeminiUsdCost(tokenUsage),
     pagoMonto: typeof pagoMeta?.monto === 'number' ? pagoMeta.monto : undefined,
     pagoMoneda: pagoMeta?.moneda,
     pagoAt: pagoMeta?.paidAt,
@@ -90,5 +94,6 @@ export function summarizeAudienciaReport(rows: AudienciaCopilotReportRow[]): Aud
     totalOutputTokens: usage.outputTokens,
     totalTokens: usage.totalTokens,
     totalIntercambios: rows.reduce((n, r) => n + r.intercambiosTotal, 0),
+    totalCostUsd: rows.reduce((n, r) => n + r.costUsd, 0),
   };
 }

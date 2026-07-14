@@ -412,6 +412,14 @@ export type ControlPruebaExpediente = {
   hitos?: ExpedienteHito[];
   oficiosAutenticidadPendientes?: OficioAutenticidadPendiente[];
   resumenEjecutivo?: ResumenEjecutivoImport;
+  /** Tokens IA acumulados (imports / reanálisis). */
+  tokenUsage?: {
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+    model?: string;
+    lastUpdatedAt?: string;
+  };
   createdAt?: string;
   updatedAt?: string;
   createdBy?: string;

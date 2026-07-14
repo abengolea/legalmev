@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { auth } from '@/lib/firebase';
 import { cn, safeResJson } from '@/lib/utils';
 import { ControlPruebaItemsTable } from '@/components/admin/ControlPruebaItemsTable';
@@ -131,6 +132,7 @@ import {
   FileSearch,
   FileSpreadsheet,
   FileUp,
+  Link2,
   Loader2,
   Plus,
   RefreshCw,
@@ -143,6 +145,13 @@ import {
   Gavel,
   Mail,
 } from 'lucide-react';
+
+const CONTROL_PRUEBA_PATH = '/dashboard/control-prueba';
+
+function expedienteDeepLink(id: string): string {
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  return `${origin}${CONTROL_PRUEBA_PATH}?id=${encodeURIComponent(id)}`;
+}
 
 const EMPTY_FORM = {
   caratula: '',
@@ -306,6 +315,9 @@ function resetImportWizard() {
 
 export function ControlPruebaPanel() {
   const { toast } = useToast();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [expedientes, setExpedientes] = useState<ControlPruebaExpediente[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -415,6 +427,69 @@ export function ControlPruebaPanel() {
   useEffect(() => {
     void loadExpedientes();
   }, [loadExpedientes]);
+
+  const syncExpedienteInUrl = useCallback(
+    (id: string | null) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (id) params.set('id', id);
+      else params.delete('id');
+      const qs = params.toString();
+      const next = qs ? `${pathname}?${qs}` : pathname;
+      router.replace(next, { scroll: false });
+    },
+    [pathname, router, searchParams],
+  );
+
+  const selectExpediente = useCallback(
+    (id: string) => {
+      setSelectedId(id);
+      setSearch('');
+      setPickerOpen(false);
+      syncExpedienteInUrl(id);
+    },
+    [syncExpedienteInUrl],
+  );
+
+  const clearExpedienteSelection = useCallback(() => {
+    setSelectedId(null);
+    syncExpedienteInUrl(null);
+  }, [syncExpedienteInUrl]);
+
+  /** Abre el expediente del query ?id=… cuando la lista ya cargó. */
+  useEffect(() => {
+    if (loading) return;
+    const urlId = searchParams.get('id')?.trim() || null;
+    if (!urlId) return;
+    if (selectedId === urlId) return;
+    if (expedientes.some((e) => e.id === urlId)) {
+      setSelectedId(urlId);
+      return;
+    }
+    toast({
+      variant: 'destructive',
+      title: 'Expediente no encontrado',
+      description: 'El link no corresponde a un control tuyo o fue eliminado.',
+    });
+    syncExpedienteInUrl(null);
+  }, [loading, expedientes, searchParams, selectedId, syncExpedienteInUrl, toast]);
+
+  const handleCopyExpedienteLink = useCallback(async () => {
+    if (!selectedId) return;
+    const url = expedienteDeepLink(selectedId);
+    try {
+      await navigator.clipboard.writeText(url);
+      toast({
+        title: 'Link copiado',
+        description: 'Pegalo para abrir este expediente directo.',
+      });
+    } catch {
+      toast({
+        variant: 'destructive',
+        title: 'No se pudo copiar',
+        description: url,
+      });
+    }
+  }, [selectedId, toast]);
 
   useEffect(() => {
     if (!pickerOpen) return;
@@ -682,7 +757,7 @@ export function ControlPruebaPanel() {
       const json = await safeResJson<{ ok?: boolean; expediente?: ControlPruebaExpediente; error?: string }>(res);
       if (json.ok && json.expediente) {
         setExpedientes((prev) => [json.expediente!, ...prev]);
-        setSelectedId(json.expediente.id);
+        selectExpediente(json.expediente.id);
         setCreateOpen(false);
         setCreateForm(EMPTY_FORM);
         toast({ title: 'Expediente creado' });
@@ -965,6 +1040,7 @@ export function ControlPruebaPanel() {
           itemsAdded: number;
           filter?: { descartados: number; reclasificados?: number };
           oficiosAutenticidad?: number;
+          tokenUsage?: { inputTokens: number; outputTokens: number; totalTokens: number };
         };
         filter?: { descartados?: number; muestra?: { descripcion: string; motivo: string }[] };
         error?: string;
@@ -974,6 +1050,7 @@ export function ControlPruebaPanel() {
         const preview: ImportPreviewPayload = {
           ...json.preview,
           parteRepresentada: importParteRepresentada || json.preview.parteRepresentada || '',
+          tokenUsage: json.preview.tokenUsage ?? json.import?.tokenUsage,
         };
         setImportPreview(preview);
         setPreviewOpen(true);
@@ -1056,7 +1133,7 @@ export function ControlPruebaPanel() {
           }
           return [exp, ...prev];
         });
-        setSelectedId(exp.id);
+        selectExpediente(exp.id);
         const synced = syncDraftFromExpediente(exp);
         setDraftItems(synced.items);
         setHeaderDraft(synced.header);
@@ -1101,7 +1178,7 @@ export function ControlPruebaPanel() {
       const json = await safeResJson<{ ok?: boolean; error?: string }>(res);
       if (json.ok) {
         setExpedientes((prev) => prev.filter((e) => e.id !== selected.id));
-        setSelectedId(null);
+        clearExpedienteSelection();
         toast({ title: 'Expediente eliminado' });
       } else {
         toast({ variant: 'destructive', title: 'Error', description: json.error });
@@ -1733,12 +1810,6 @@ export function ControlPruebaPanel() {
     </div>
   );
 
-  const selectExpediente = (id: string) => {
-    setSelectedId(id);
-    setSearch('');
-    setPickerOpen(false);
-  };
-
   const pendientesDeExpediente = (exp: ControlPruebaExpediente) =>
     itemsOfrecidasProduccion(exp.items).filter((i) =>
       (['pendiente_produccion', 'postpuesta_juez', 'audiencia_fijada'] as const).some((f) =>
@@ -2007,6 +2078,15 @@ export function ControlPruebaPanel() {
                       </div>
                     </div>
                     <div className="flex shrink-0 flex-wrap gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => void handleCopyExpedienteLink()}
+                        title="Copiar link directo a este expediente"
+                      >
+                        <Link2 className="mr-1.5 h-3.5 w-3.5" />
+                        Copiar link
+                      </Button>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="outline" size="sm">
