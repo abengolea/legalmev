@@ -44,7 +44,7 @@ const ControlItemSchema = z.object({
     ])
     .optional()
     .describe(
-      'Estado actual si consta en el trámite. documental_en_poder con intimación → intimacion_ordenada. documental con impugnación de autenticidad → autenticidad_impugnada.',
+      'Estado actual. documental YA acompañada sin impugnación de autenticidad → producida. documental con autenticidad impugnada → autenticidad_impugnada. documental_en_poder con intimación → intimacion_ordenada.',
     ),
   impugnacionAutenticidad: z
     .boolean()
@@ -77,7 +77,9 @@ const ControlItemSchema = z.object({
   referenciaDocumental: z
     .string()
     .optional()
-    .describe('Solo documental acompañada: referencia corta ej. "Doc. 1 — Resumen cuenta Platinum". Un ítem por cada pieza documental ofrecida.'),
+    .describe(
+      'Solo documental sustancial acompañada: referencia corta ej. "Doc. 1 — Resumen cuenta". Un ítem por pieza sustancial. NO usar para DNI, CUIT del letrado, jus previsional ni bono ley.',
+    ),
   testigos: z
     .array(
       z.object({
@@ -158,6 +160,13 @@ Extraé ítems **únicamente** de:
 - Solicitudes al tribunal ("solicita reiteración", "solicita resolución integral")
 - **Documental que una parte acompaña durante el trámite** (ej. "actor acompaña anexo", "acompaña contestación de oficio") — NO es prueba ofrecida en apertura
 - Presentación de dictamen pericial ya producido
+- **Documentación formal / instrumental (NO sustancial al objeto del juicio)** — EXCLUIR siempre:
+  - Fotocopias o copias de DNI / documento de identidad de las partes o letrados
+  - Constancia de CUIT / CUIL del abogado o del estudio
+  - Anticipo / pago de jus previsional
+  - Bono ley 8480 (u otras tasas/bonos de actuación)
+  - Tasa de justicia, personería, matrícula profesional, poderes y acreditaciones formales similares
+  Solo incluir documental **sustancial** (contratos, comunicaciones, historias clínicas, comprobantes de hechos, etc.)
 
 ## TRES CATEGORÍAS
 
@@ -165,19 +174,26 @@ Extraé ítems **únicamente** de:
 Tipos válidos: documental, documental_en_poder, pericial, inspeccion, otra
 ofrecidaPor: **solo actor o demandado**
 
-**A) documental** — Documentación que la parte **ya presentó** con demanda, contestación o ampliaciones (obra en autos).
-- **UN ÍTEM POR CADA PIEZA DOCUMENTAL** (Doc. 1, Doc. 2…): resumen de cuenta, e-mail, carta documento, etc. Usar referenciaDocumental.
+**A) documental** — Documentación **sustancial** que la parte **ya presentó** con demanda, contestación o ampliaciones (obra en autos).
+- **UN ÍTEM POR CADA PIEZA SUSTANCIAL** (Doc. 1, Doc. 2…): resumen de cuenta, e-mail, carta documento, contrato, etc. Usar referenciaDocumental.
+- **NO** crear ítems por DNI, CUIT del letrado, jus previsional, bono ley u otras piezas formales.
 - NO crear ítems por cada "acompaña documentación" posterior al auto de apertura.
+- **Estado por defecto (muy importante):** si la pieza **obra en autos** y la contraparte **NO impugna/niega su autenticidad** → estadoSugerido: **producida** (ya está producida: acompañada e incorporada).
 - Si en contestación/trámite la contraparte **niega o impugna la autenticidad**:
   - estadoSugerido: autenticidad_impugnada
   - impugnacionAutenticidad: true
   - destinatarioOficio: entidad que debe informar (ej. otro juzgado, banco, registro, ARBA)
   - **NO crear ítem informativa separado** — la documental negada queda en el mismo ítem documental con oficios en oficiosAutenticidadPendientes
+- **Nunca** dejar documental ya acompañada en pendiente_produccion salvo que exista impugnación de autenticidad u otra obstáculo explícito en autos.
 
 **B) documental_en_poder** — Documentación en poder de la **contraparte**, ofrecida en apertura pero NO adjunta al escrito.
+- **UN SOLO ÍTEM** por oferente + parte que detenta los documentos (casi siempre: actor ofrece → demandada detenta).
+- En \`descripcion\`: título breve del ofrecimiento (ej. "Documental en poder de la demandada").
+- Listá **todos** los documentos pedidos en observaciones o en la descripción como viñetas / "1. … 2. …" — el listado completo va en **un** ítem.
+- **PROHIBIDO** crear un ítem por cada documento en poder de contraparte (eso genera N intimaciones; debe haber **una sola intimación** con el listado).
 - parteConDocumentos: actor | demandado | tercero (quien tiene los documentos)
 - Si el auto ya ordenó intimación con plazo → intimacionOrdenada: true, estadoSugerido: intimacion_ordenada, fechaLimite = plazo de exhibición.
-- El sistema creará cédula de intimación automáticamente.
+- El sistema creará **una** cédula de intimación automáticamente.
 
 **C) Prueba informativa admitida** — NO crear ítem prueba separado. Registrar como **diligencia tipo oficio** en Comunicaciones (ver abajo), con descripción del objeto probatorio en descripcion y oficioVinculadoA si aplica.
 
@@ -213,9 +229,16 @@ Si en autos: actor acompañó contrato con la demanda; demandado en contestació
 2. Si consta la negación → estadoSugerido autenticidad_impugnada, destinatarioOficio = entidad oficiada, oficio en oficiosAutenticidadPendientes
 3. **No** duplicar como prueba informativa suelta
 
+Si el mismo contrato **no** fue impugnado en autenticidad:
+1. Ítem documental con estadoSugerido **producida** (obra en autos, ya producida)
+
 ## EJEMPLO (documental en poder)
-Si en auto de apertura: "prueba documental en poder de la demandada: extractos bancarios" y el juez intimó a exhibir en 10 días:
-- tipo documental_en_poder, parteConDocumentos demandado, intimacionOrdenada true, fechaLimite = vencimiento
+Si en auto/demanda se ofrece documental en poder de la demandada con muchos documentos (contrato, comunicaciones, historia clínica, protocolos…):
+- **Un solo** ítem tipo documental_en_poder, parteConDocumentos demandado
+- descripcion: "Documental en poder de la demandada"
+- observaciones o cuerpo: listado completo numerado de todos los documentos
+- Si el juez intimó a exhibir → intimacionOrdenada true, fechaLimite = vencimiento
+- **Incorrecto:** 20 ítems documentales_en_poder (uno por documento)
 
 ## SALIDA
 - Completar TODOS los metadatos disponibles

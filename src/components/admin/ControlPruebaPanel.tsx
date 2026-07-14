@@ -517,7 +517,8 @@ export function ControlPruebaPanel() {
     setHeaderDraft(synced.header);
     setHitosDraft(synced.hitos);
     setResumenDraft(synced.resumen);
-    setParteTab('actor');
+    const parteIni = (synced.header.parteRepresentada || '') as ParteTabId | '';
+    setParteTab(parteIni === 'demandado' ? 'demandado' : 'actor');
     lastSavedSnapshotRef.current = synced.snapshot;
     setSaveStatus('idle');
   }, [selectedId]);
@@ -677,13 +678,55 @@ export function ControlPruebaPanel() {
     [draftItems],
   );
 
-  const matchingEstadoCount = useMemo(() => {
-    if (estadoFilter === 'all') return allPruebaItems.length;
-    return allPruebaItems.filter((i) => itemVisibleConFiltroEstado(i, estadoFilter)).length;
-  }, [allPruebaItems, estadoFilter]);
+  /** Prueba ofrecida de la pestaña activa (chips de estado cuentan solo esta parte). */
+  const pruebaDeParteActiva = useMemo(() => {
+    if (parteTab === 'mejor_proveer') return [];
+    return allPruebaItems.filter((item) => {
+      const parte = parteEfectivaItem(item, draftItems);
+      if (parteTab === 'actor') return parte === 'actor';
+      if (parteTab === 'demandado') return parte === 'demandado';
+      // Tercero: terceros + prueba del tribunal
+      return parte === 'tercero' || parte === 'tribunal';
+    });
+  }, [allPruebaItems, draftItems, parteTab]);
 
-  const counts = useMemo(() => countByEstado(allPruebaItems), [allPruebaItems]);
+  const matchingEstadoCount = useMemo(() => {
+    if (estadoFilter === 'all') return pruebaDeParteActiva.length;
+    return pruebaDeParteActiva.filter((i) => itemVisibleConFiltroEstado(i, estadoFilter)).length;
+  }, [pruebaDeParteActiva, estadoFilter]);
+
+  const counts = useMemo(() => countByEstado(pruebaDeParteActiva), [pruebaDeParteActiva]);
+
+  /** Totales por pestaña sin filtro de estado (para badges de Actor/Demandada). */
+  const conteoTotalPorParteTab = useMemo(() => {
+    const visibles = itemsVisiblesControlExpediente(draftItems);
+    const countParte = (parte: 'actor' | 'demandado' | 'tercero' | 'tribunal') =>
+      visibles.filter(
+        (i) =>
+          resolveCategoria(i) !== 'mejor_proveer' && parteEfectivaItem(i, draftItems) === parte,
+      ).length;
+    return {
+      actor: countParte('actor'),
+      demandado: countParte('demandado'),
+      otros: countParte('tercero') + countParte('tribunal'),
+      mejor_proveer: visibles.filter((i) => resolveCategoria(i) === 'mejor_proveer').length,
+    };
+  }, [draftItems]);
+
   const progresoPct = useMemo(() => progresoExpedienteHeader(draftItems), [draftItems]);
+
+  const labelParteActiva = useMemo(() => {
+    if (parteTab === 'actor') {
+      const n = (headerDraft.actor ?? selected?.actor ?? '').trim();
+      return n ? `Actor · ${n}` : 'Actor';
+    }
+    if (parteTab === 'demandado') {
+      const n = (headerDraft.demandado ?? selected?.demandado ?? '').trim();
+      return n ? `Demandada · ${n}` : 'Demandada';
+    }
+    if (parteTab === 'otros') return 'Tercero / tribunal';
+    return 'Mejor proveer';
+  }, [parteTab, headerDraft.actor, headerDraft.demandado, selected?.actor, selected?.demandado]);
 
   const parteRepresentada = (headerDraft.parteRepresentada ?? selected?.parteRepresentada ?? '') as
     | ParteRepresentadaPrueba
@@ -2085,6 +2128,9 @@ export function ControlPruebaPanel() {
                           onValueChange={(v) => {
                             const parte = v === '_' ? '' : (v as ParteRepresentadaPrueba);
                             setHeaderDraft((h) => ({ ...h, parteRepresentada: parte }));
+                            if (parte === 'actor' || parte === 'demandado') {
+                              setParteTab(parte);
+                            }
                           }}
                         >
                           <SelectTrigger>
@@ -2261,138 +2307,12 @@ export function ControlPruebaPanel() {
                 </Card>
               )}
 
-              <div className="space-y-2">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-xs font-medium text-muted-foreground">Filtrar por estado de prueba</p>
-                  {estadoFilter !== 'all' && (
-                    <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setEstadoFilter('all')}>
-                      Limpiar filtro
-                    </Button>
-                  )}
-                </div>
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
-                  {ESTADOS.map((estado) => {
-                    const activo = estadoFilter === estado;
-                    return (
-                      <button
-                        key={estado}
-                        type="button"
-                        aria-pressed={activo}
-                        onClick={() => setEstadoFilter(activo ? 'all' : estado)}
-                        className={cn(
-                          'rounded-lg border p-2 text-left transition-all hover:shadow-sm hover:border-primary/40',
-                          activo && 'border-primary bg-primary/10 ring-2 ring-primary ring-offset-1 shadow-sm',
-                          !activo && counts[estado] > 0 && estado === 'pendiente_produccion' && 'border-amber-300 bg-amber-50/50',
-                        )}
-                      >
-                        <div className="flex items-center gap-1.5">
-                          <span className={cn('h-2 w-2 shrink-0 rounded-full', ESTADO_CONFIG[estado].dotClass)} />
-                          <span className={cn('text-[10px] leading-tight', activo ? 'text-primary font-medium' : 'text-muted-foreground')}>
-                            {ESTADO_CONFIG[estado].label}
-                          </span>
-                        </div>
-                        <p className={cn('text-lg font-semibold mt-0.5', activo && 'text-primary')}>{counts[estado]}</p>
-                      </button>
-                    );
-                  })}
-                  <button
-                    type="button"
-                    aria-pressed={estadoFilter === 'all'}
-                    onClick={() => setEstadoFilter('all')}
-                    className={cn(
-                      'rounded-lg border p-2 text-left transition-all hover:shadow-sm hover:border-primary/40',
-                      estadoFilter === 'all' && 'border-primary bg-muted/40 ring-2 ring-primary ring-offset-1 shadow-sm',
-                    )}
-                  >
-                    <div className="flex items-center gap-1.5">
-                      <span className="h-2 w-2 shrink-0 rounded-full bg-muted-foreground/40" />
-                      <span className={cn('text-[10px] leading-tight', estadoFilter === 'all' ? 'text-primary font-medium' : 'text-muted-foreground')}>
-                        Ver todos
-                      </span>
-                    </div>
-                    <p className={cn('text-lg font-semibold mt-0.5', estadoFilter === 'all' && 'text-primary')}>
-                      {allPruebaItems.length}
-                    </p>
-                  </button>
-                </div>
-              </div>
-
               <div className="space-y-4">
-                <div className="flex flex-wrap items-center justify-end gap-2">
-                    <div className="relative">
-                      <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                      <Input
-                        value={busquedaItem}
-                        onChange={(e) => setBusquedaItem(e.target.value)}
-                        placeholder="Buscar en ítems..."
-                        className="h-8 w-44 pl-8 text-xs"
-                      />
-                    </div>
-                    <Select
-                      value={estadoFilter}
-                      onValueChange={(v) => setEstadoFilter(v as PruebaEstado | 'all')}
-                    >
-                      <SelectTrigger className="h-8 w-44 text-xs">
-                        <SelectValue placeholder="Estado prueba" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {ESTADOS.map((estado) => (
-                          <SelectItem key={estado} value={estado}>
-                            {ESTADO_CONFIG[estado].label} ({counts[estado]})
-                          </SelectItem>
-                        ))}
-                        <SelectItem value="all">Ver todos ({allPruebaItems.length})</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <Select value={filtroTipo} onValueChange={setFiltroTipo}>
-                      <SelectTrigger className="h-8 w-48 text-xs">
-                        <SelectValue placeholder="Tipo" />
-                      </SelectTrigger>
-                      <SelectContent className="max-h-72">
-                        <SelectItem value="all">Todos los tipos</SelectItem>
-                        {gruposFiltroTipo.map((grupo, idx) => (
-                          <div key={grupo}>
-                            {idx > 0 && <SelectSeparator />}
-                            <SelectGroup>
-                              <SelectLabel>{FILTRO_TIPO_GRUPO_LABELS[grupo]}</SelectLabel>
-                              {opcionesFiltroTipo
-                                .filter((o) => o.grupo === grupo)
-                                .map((o) => (
-                                  <SelectItem key={o.value} value={o.value}>
-                                    {o.label}
-                                  </SelectItem>
-                                ))}
-                            </SelectGroup>
-                          </div>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Select value={filtroParte} onValueChange={setFiltroParte}>
-                      <SelectTrigger className="h-8 w-28 text-xs"><SelectValue placeholder="Parte" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">Todas</SelectItem>
-                        <SelectItem value="actor">Actor</SelectItem>
-                        <SelectItem value="demandado">Demandada</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <Button
-                      variant={modoCompacto ? 'default' : 'outline'}
-                      size="sm"
-                      className="h-8"
-                      onClick={() => setModoCompacto((c) => !c)}
-                    >
-                      Compacto
-                    </Button>
-                </div>
-
-                <div className="space-y-6">
-              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <h3 className="text-base font-semibold">Control del expediente</h3>
                     <p className="text-sm text-muted-foreground">
-                      {estadoFilter !== 'all'
-                        ? `Prueba: ${ESTADO_CONFIG[estadoFilter].label} · ${matchingEstadoCount} de ${allPruebaItems.length}`
-                        : `${draftItems.length} ítems en total`}
+                      Primero elegí la parte · después filtrá por estado de su prueba
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
@@ -2418,16 +2338,20 @@ export function ControlPruebaPanel() {
 
                 <Tabs
                   value={parteTab}
-                  onValueChange={(v) => setParteTab(v as ParteTabId)}
+                  onValueChange={(v) => {
+                    setParteTab(v as ParteTabId);
+                    setFiltroParte('all');
+                  }}
                   className="space-y-4"
                 >
                   <TabsList className="h-auto w-full flex-wrap justify-start gap-1 bg-muted/40 p-1">
                     {GRUPOS_PRUEBA.map((grupo) => {
                       const nombreParte =
                         grupo.id === 'actor'
-                          ? (selected?.actor || '').trim()
-                          : (selected?.demandado || '').trim();
-                      const count = conteoPorParteTab[grupo.id];
+                          ? (headerDraft.actor || selected?.actor || '').trim()
+                          : (headerDraft.demandado || selected?.demandado || '').trim();
+                      const total = conteoTotalPorParteTab[grupo.id];
+                      const visibles = conteoPorParteTab[grupo.id];
                       return (
                         <TabsTrigger
                           key={grupo.id}
@@ -2441,7 +2365,9 @@ export function ControlPruebaPanel() {
                             </span>
                           ) : null}
                           <Badge variant="secondary" className="h-5 min-w-5 px-1.5 text-[10px]">
-                            {count}
+                            {estadoFilter !== 'all' && visibles !== total
+                              ? `${visibles}/${total}`
+                              : total}
                           </Badge>
                         </TabsTrigger>
                       );
@@ -2449,16 +2375,189 @@ export function ControlPruebaPanel() {
                     <TabsTrigger value="otros" className="gap-1.5 data-[state=active]:shadow-sm">
                       Tercero
                       <Badge variant="secondary" className="h-5 min-w-5 px-1.5 text-[10px]">
-                        {conteoPorParteTab.otros}
+                        {estadoFilter !== 'all' &&
+                        conteoPorParteTab.otros !== conteoTotalPorParteTab.otros
+                          ? `${conteoPorParteTab.otros}/${conteoTotalPorParteTab.otros}`
+                          : conteoTotalPorParteTab.otros}
                       </Badge>
                     </TabsTrigger>
                     <TabsTrigger value="mejor_proveer" className="gap-1.5 data-[state=active]:shadow-sm">
                       Mejor proveer
                       <Badge variant="secondary" className="h-5 min-w-5 px-1.5 text-[10px]">
-                        {conteoPorParteTab.mejor_proveer}
+                        {conteoTotalPorParteTab.mejor_proveer}
                       </Badge>
                     </TabsTrigger>
                   </TabsList>
+
+                  {parteTab !== 'mejor_proveer' && (
+                    <div className="space-y-2 rounded-lg border bg-muted/20 p-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <p className="text-xs font-medium text-foreground">
+                            Estado de la prueba · {labelParteActiva}
+                          </p>
+                          <p className="text-[11px] text-muted-foreground">
+                            Los recuadros cuentan solo la prueba ofrecida de esta parte
+                            {estadoFilter !== 'all'
+                              ? ` · filtro: ${ESTADO_CONFIG[estadoFilter].label} (${matchingEstadoCount}/${pruebaDeParteActiva.length})`
+                              : ` · ${pruebaDeParteActiva.length} prueba(s)`}
+                          </p>
+                        </div>
+                        {estadoFilter !== 'all' && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-xs"
+                            onClick={() => setEstadoFilter('all')}
+                          >
+                            Limpiar estado
+                          </Button>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
+                        {ESTADOS.map((estado) => {
+                          const activo = estadoFilter === estado;
+                          return (
+                            <button
+                              key={estado}
+                              type="button"
+                              aria-pressed={activo}
+                              onClick={() => setEstadoFilter(activo ? 'all' : estado)}
+                              className={cn(
+                                'rounded-lg border bg-background p-2 text-left transition-all hover:shadow-sm hover:border-primary/40',
+                                activo &&
+                                  'border-primary bg-primary/10 ring-2 ring-primary ring-offset-1 shadow-sm',
+                                !activo &&
+                                  counts[estado] > 0 &&
+                                  estado === 'pendiente_produccion' &&
+                                  'border-amber-300 bg-amber-50/50',
+                              )}
+                            >
+                              <div className="flex items-center gap-1.5">
+                                <span
+                                  className={cn(
+                                    'h-2 w-2 shrink-0 rounded-full',
+                                    ESTADO_CONFIG[estado].dotClass,
+                                  )}
+                                />
+                                <span
+                                  className={cn(
+                                    'text-[10px] leading-tight',
+                                    activo ? 'text-primary font-medium' : 'text-muted-foreground',
+                                  )}
+                                >
+                                  {ESTADO_CONFIG[estado].label}
+                                </span>
+                              </div>
+                              <p
+                                className={cn(
+                                  'text-lg font-semibold mt-0.5',
+                                  activo && 'text-primary',
+                                )}
+                              >
+                                {counts[estado]}
+                              </p>
+                            </button>
+                          );
+                        })}
+                        <button
+                          type="button"
+                          aria-pressed={estadoFilter === 'all'}
+                          onClick={() => setEstadoFilter('all')}
+                          className={cn(
+                            'rounded-lg border bg-background p-2 text-left transition-all hover:shadow-sm hover:border-primary/40',
+                            estadoFilter === 'all' &&
+                              'border-primary bg-muted/40 ring-2 ring-primary ring-offset-1 shadow-sm',
+                          )}
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <span className="h-2 w-2 shrink-0 rounded-full bg-muted-foreground/40" />
+                            <span
+                              className={cn(
+                                'text-[10px] leading-tight',
+                                estadoFilter === 'all'
+                                  ? 'text-primary font-medium'
+                                  : 'text-muted-foreground',
+                              )}
+                            >
+                              Ver todos
+                            </span>
+                          </div>
+                          <p
+                            className={cn(
+                              'text-lg font-semibold mt-0.5',
+                              estadoFilter === 'all' && 'text-primary',
+                            )}
+                          >
+                            {pruebaDeParteActiva.length}
+                          </p>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    <div className="relative">
+                      <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                      <Input
+                        value={busquedaItem}
+                        onChange={(e) => setBusquedaItem(e.target.value)}
+                        placeholder="Buscar en ítems..."
+                        className="h-8 w-44 pl-8 text-xs"
+                      />
+                    </div>
+                    {parteTab !== 'mejor_proveer' && (
+                      <Select
+                        value={estadoFilter}
+                        onValueChange={(v) => setEstadoFilter(v as PruebaEstado | 'all')}
+                      >
+                        <SelectTrigger className="h-8 w-48 text-xs">
+                          <SelectValue placeholder="Estado prueba" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {ESTADOS.map((estado) => (
+                            <SelectItem key={estado} value={estado}>
+                              {ESTADO_CONFIG[estado].label} ({counts[estado]})
+                            </SelectItem>
+                          ))}
+                          <SelectItem value="all">
+                            Ver todos ({pruebaDeParteActiva.length})
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    )}
+                    <Select value={filtroTipo} onValueChange={setFiltroTipo}>
+                      <SelectTrigger className="h-8 w-48 text-xs">
+                        <SelectValue placeholder="Tipo" />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-72">
+                        <SelectItem value="all">Todos los tipos</SelectItem>
+                        {gruposFiltroTipo.map((grupo, idx) => (
+                          <div key={grupo}>
+                            {idx > 0 && <SelectSeparator />}
+                            <SelectGroup>
+                              <SelectLabel>{FILTRO_TIPO_GRUPO_LABELS[grupo]}</SelectLabel>
+                              {opcionesFiltroTipo
+                                .filter((o) => o.grupo === grupo)
+                                .map((o) => (
+                                  <SelectItem key={o.value} value={o.value}>
+                                    {o.label}
+                                  </SelectItem>
+                                ))}
+                            </SelectGroup>
+                          </div>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      variant={modoCompacto ? 'default' : 'outline'}
+                      size="sm"
+                      className="h-8"
+                      onClick={() => setModoCompacto((c) => !c)}
+                    >
+                      Compacto
+                    </Button>
+                  </div>
 
                   {GRUPOS_PRUEBA.map((grupo) => (
                     <TabsContent key={grupo.id} value={grupo.id} className="mt-0">
@@ -2480,7 +2579,6 @@ export function ControlPruebaPanel() {
                     </CardContent>
                   </Card>
                 )}
-                </div>
               </div>
 
               <Card>

@@ -15,6 +15,8 @@ import {
   vincularDiligenciasImport,
 } from '@/lib/control-prueba-import-enrich';
 import {
+  consolidarDocumentalEnPoderItems,
+  esDocumentalFormalProcesal,
   esDocumentalYaAcompanada,
   esOfrecimientoDocumentalEnPoder,
   parteContrariaDefault,
@@ -308,6 +310,18 @@ export function filtrarItemsImportados(
             ? tipo
             : defaultTipoForCategoria(catFinal);
 
+    if (
+      catFinal === 'prueba' &&
+      (tipoFinal === 'documental' || tipoFinal === 'documental_en_poder') &&
+      esDocumentalFormalProcesal(descripcion, raw.referenciaDocumental)
+    ) {
+      descartados.push({
+        descripcion,
+        motivo: 'Documentación formal/procesal (DNI, CUIT letrado, jus, bono ley — no sustancial)',
+      });
+      continue;
+    }
+
     const estadoResuelto =
       resolveEstadoImport(raw, catFinal, tipoFinal) ?? defaultEstadoForItem(catFinal, tipoFinal);
 
@@ -383,8 +397,20 @@ export function filtrarItemsImportados(
     rawKept.push(raw);
   }
 
+  // Vincular oficios con ítems crudos (misma longitud/índice), luego consolidar
+  // documental_en_poder (N→1) y recién ahí crear cédulas de intimación.
   const vinculados = vincularDiligenciasImport(items, rawKept);
-  const enriquecidos = aplicarSubprocesosPostImport(vinculados);
+  const nAntes = vinculados.filter((i) => i.tipo === 'documental_en_poder').length;
+  const consolidados = consolidarDocumentalEnPoderItems(vinculados);
+  const nDespues = consolidados.filter((i) => i.tipo === 'documental_en_poder').length;
+  if (nDespues < nAntes) {
+    reclasificados.push({
+      descripcion: 'documental_en_poder',
+      de: `${nAntes} ítems`,
+      a: `${nDespues} ítem(s) consolidado(s) — una intimación`,
+    });
+  }
+  const enriquecidos = aplicarSubprocesosPostImport(consolidados);
 
   return { items: enriquecidos, descartados, reclasificados };
 }
