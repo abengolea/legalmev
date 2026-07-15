@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminDb } from '@/lib/firebase-admin';
 import { requireAuthWithDevice } from '@/lib/require-auth-device';
+import { PDF_DOWNLOADS_UNLIMITED, lifetimePremiumUserFields } from '@/lib/pdf-downloads-policy';
 import { maybeDowngradeLapsedSubscription, canUseFreeDownloads } from '@/lib/subscription-lapse';
 
 const FREE_QUOTA = 5;
@@ -51,6 +52,25 @@ export async function GET(request: NextRequest) {
 
     const { uid, userData } = authResult;
     const adminDb = getAdminDb();
+    const email = (userData.email as string) ?? '';
+
+    if (PDF_DOWNLOADS_UNLIMITED) {
+      if (userData.premiumForever !== true || userData.tier !== 'premium') {
+        await adminDb.collection('users').doc(uid).update({
+          ...lifetimePremiumUserFields(userData.premiumSource as string | null | undefined),
+          updatedAt: new Date().toISOString(),
+        });
+      }
+      const session: ExtensionSessionResponse = {
+        authenticated: true,
+        userId: uid,
+        email,
+        plan: 'unlimited',
+        remainingQueries: null,
+      };
+      return NextResponse.json(session, { headers: corsHeaders });
+    }
+
     let tier = userData.tier ?? 'free';
     let effectiveUserData = userData;
 
@@ -60,10 +80,8 @@ export async function GET(request: NextRequest) {
       effectiveUserData = { ...userData, tier: 'free', subscriptionLapsed: true };
     }
 
-    const email = (effectiveUserData.email as string) ?? '';
     const now = new Date();
 
-    // Obtener cuota premium (global o por colegio)
     const paymentsSnap = await adminDb.doc('settings/payments').get();
     const payments = paymentsSnap.data();
     const globalQuota =
@@ -93,10 +111,9 @@ export async function GET(request: NextRequest) {
         remainingQueries = Math.max(0, FREE_QUOTA - used);
       }
     } else {
-      // premium: pro (pago) o unlimited (colegio convenio)
       plan = isColegio ? 'unlimited' : 'pro';
       if (plan === 'unlimited') {
-        remainingQueries = null; // Sin límite práctico para convenios
+        remainingQueries = null;
       } else {
         let used = effectiveUserData.downloadsThisMonth ?? 0;
         const resetAt = effectiveUserData.monthlyResetAt ? new Date(effectiveUserData.monthlyResetAt) : null;

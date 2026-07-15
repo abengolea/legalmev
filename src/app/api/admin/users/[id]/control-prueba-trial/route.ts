@@ -4,7 +4,7 @@ import { getAdminDb } from '@/lib/firebase-admin';
 import { requirePlatformAdmin } from '@/lib/api-auth';
 import {
   buildDefaultControlPruebaTrial,
-  CONTROL_PRUEBA_TRIAL_MONTHLY_LIMIT,
+  CONTROL_PRUEBA_TRIAL_ADMIN_LIMIT,
 } from '@/lib/control-prueba-access';
 
 /**
@@ -40,7 +40,7 @@ export async function POST(
 
     return NextResponse.json({
       ok: true,
-      message: `Control de prueba habilitado (${CONTROL_PRUEBA_TRIAL_MONTHLY_LIMIT} controles/mes)`,
+      message: `Control de prueba habilitado (${CONTROL_PRUEBA_TRIAL_ADMIN_LIMIT} controles/mes)`,
     });
   } catch (err) {
     console.error('[admin/users/control-prueba-trial] POST error:', err);

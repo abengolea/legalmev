@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getAdminDb } from '@/lib/firebase-admin';
+import { PDF_DOWNLOADS_UNLIMITED } from '@/lib/pdf-downloads-policy';
 
 const SETTINGS_DOC = 'settings/payments';
 
@@ -10,11 +11,20 @@ const SETTINGS_DOC = 'settings/payments';
  */
 export async function GET() {
   try {
+    if (PDF_DOWNLOADS_UNLIMITED) {
+      return NextResponse.json({
+        ok: true,
+        unlimited: true,
+        freeQuota: null,
+        premiumQuotaPerMonth: null,
+      });
+    }
+
     const adminDb = getAdminDb();
     const docSnap = await adminDb.doc(SETTINGS_DOC).get();
     const data = docSnap.exists ? docSnap.data() : {};
 
-    const freeQuota = 5; // por ahora fijo
+    const freeQuota = 5;
     const premiumQuotaPerMonth =
       typeof data?.premiumQuotaPerMonth === 'number' && data.premiumQuotaPerMonth > 0
         ? data.premiumQuotaPerMonth
@@ -22,6 +32,7 @@ export async function GET() {
 
     return NextResponse.json({
       ok: true,
+      unlimited: false,
       freeQuota,
       premiumQuotaPerMonth,
     });

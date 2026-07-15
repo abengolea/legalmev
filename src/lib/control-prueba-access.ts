@@ -1,8 +1,17 @@
 import type { Firestore } from 'firebase-admin/firestore';
 import { isControlPruebaSuperAdminUser } from '@/lib/platform-admin';
 
-/** Controles de expediente incluidos por mes en la prueba gratuita. */
-export const CONTROL_PRUEBA_TRIAL_MONTHLY_LIMIT = 10;
+/** Controles incluidos al registrarse (prueba para todos). */
+export const CONTROL_PRUEBA_TRIAL_DEFAULT_LIMIT = 5;
+
+/**
+ * Controles por mes al habilitar/renovar desde admin.
+ * Quienes ya tienen 10 conservan ese cupo.
+ */
+export const CONTROL_PRUEBA_TRIAL_ADMIN_LIMIT = 10;
+
+/** @deprecated Usar CONTROL_PRUEBA_TRIAL_ADMIN_LIMIT o CONTROL_PRUEBA_TRIAL_DEFAULT_LIMIT */
+export const CONTROL_PRUEBA_TRIAL_MONTHLY_LIMIT = CONTROL_PRUEBA_TRIAL_ADMIN_LIMIT;
 
 const MONTH_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -29,10 +38,24 @@ export type ControlPruebaAccess = {
   monthlyResetAt?: string | null;
 };
 
+/** Prueba automática al registrarse: 5 controles en total (sin renovación mensual). */
+export function buildRegistrationControlPruebaTrial(
+  grantedBy = 'registration'
+): ControlPruebaTrial {
+  return {
+    limit: CONTROL_PRUEBA_TRIAL_DEFAULT_LIMIT,
+    used: 0,
+    grantedAt: new Date().toISOString(),
+    grantedBy,
+    monthlyResetAt: null,
+  };
+}
+
+/** Prueba otorgada por admin: 10 controles por mes. */
 export function buildDefaultControlPruebaTrial(grantedBy = 'admin'): ControlPruebaTrial {
   const now = new Date();
   return {
-    limit: CONTROL_PRUEBA_TRIAL_MONTHLY_LIMIT,
+    limit: CONTROL_PRUEBA_TRIAL_ADMIN_LIMIT,
     used: 0,
     grantedAt: now.toISOString(),
     grantedBy,
@@ -47,7 +70,8 @@ function effectiveTrialUsage(trial: ControlPruebaTrial, now = new Date()): {
   monthlyResetAt: string | null;
   shouldReset: boolean;
 } {
-  const limit = typeof trial.limit === 'number' ? trial.limit : CONTROL_PRUEBA_TRIAL_MONTHLY_LIMIT;
+  const limit =
+    typeof trial.limit === 'number' ? trial.limit : CONTROL_PRUEBA_TRIAL_DEFAULT_LIMIT;
   let used = typeof trial.used === 'number' ? trial.used : 0;
   const resetAtRaw = trial.monthlyResetAt ?? null;
   const resetAt = resetAtRaw ? new Date(resetAtRaw) : null;
@@ -90,6 +114,29 @@ export async function maybeResetControlPruebaTrial(
   });
 
   return next;
+}
+
+/**
+ * Garantiza prueba de Control de prueba.
+ * - Sin trial → otorga 5 (registro).
+ * - Con trial existente (incl. 10 admin) → no lo modifica ni reduce.
+ */
+export async function ensureControlPruebaTrialForUser(
+  adminDb: Firestore,
+  uid: string,
+  user: ControlPruebaUserFields,
+): Promise<ControlPruebaTrial> {
+  const existing = user.controlPruebaTrial;
+  if (existing && typeof existing.limit === 'number' && existing.limit > 0) {
+    return existing;
+  }
+
+  const trial = buildRegistrationControlPruebaTrial('registration');
+  await adminDb.collection('users').doc(uid).update({
+    controlPruebaTrial: trial,
+    updatedAt: new Date().toISOString(),
+  });
+  return trial;
 }
 
 export function resolveControlPruebaAccess(
@@ -142,7 +189,7 @@ export async function resolveControlPruebaAccessForUser(
     return resolveControlPruebaAccess(user, { superAdmin: true });
   }
 
-  let trial = user.controlPruebaTrial;
+  let trial = await ensureControlPruebaTrialForUser(adminDb, uid, user);
   if (trial && typeof trial.limit === 'number' && trial.limit > 0) {
     trial = await maybeResetControlPruebaTrial(adminDb, uid, trial);
   }
@@ -163,17 +210,16 @@ export async function consumeControlPruebaQuota(
     return { ok: true };
   }
   if (!access.canCreate) {
+    const isMonthly = Boolean(user.controlPruebaTrial?.monthlyResetAt);
     return {
       ok: false,
-      error: `Alcanzaste el límite de ${access.limit ?? CONTROL_PRUEBA_TRIAL_MONTHLY_LIMIT} controles este mes. Se renueva automáticamente.`,
+      error: isMonthly
+        ? `Alcanzaste el límite de ${access.limit ?? CONTROL_PRUEBA_TRIAL_ADMIN_LIMIT} controles este mes. Se renueva automáticamente.`
+        : `Alcanzaste el límite de ${access.limit ?? CONTROL_PRUEBA_TRIAL_DEFAULT_LIMIT} controles de prueba. Contactanos si necesitás más.`,
     };
   }
 
-  const trial = user.controlPruebaTrial;
-  if (!trial) {
-    return { ok: false, error: 'Sin prueba activa de Control de prueba' };
-  }
-
+  const trial = user.controlPruebaTrial ?? (await ensureControlPruebaTrialForUser(adminDb, uid, user));
   const { monthlyResetAt, shouldReset } = effectiveTrialUsage(trial);
   const used = shouldReset ? 1 : (trial.used ?? 0) + 1;
 
@@ -181,7 +227,7 @@ export async function consumeControlPruebaQuota(
     controlPruebaTrial: {
       ...trial,
       used,
-      monthlyResetAt: monthlyResetAt ?? new Date(Date.now() + MONTH_MS).toISOString(),
+      monthlyResetAt: monthlyResetAt ?? null,
     },
     updatedAt: new Date().toISOString(),
   });

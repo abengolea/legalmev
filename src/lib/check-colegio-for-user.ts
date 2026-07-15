@@ -1,6 +1,9 @@
 import type { Auth } from 'firebase-admin/auth';
 import type { Firestore } from 'firebase-admin/firestore';
 import { normalizeMembers, type ColegioMember } from '@/lib/colegio-members';
+import { PDF_DOWNLOADS_UNLIMITED, lifetimePremiumUserFields } from '@/lib/pdf-downloads-policy';
+import { buildRegistrationControlPruebaTrial } from '@/lib/control-prueba-access';
+import { buildDefaultAudienciaCopilotTrial } from '@/lib/audiencia-copilot-access';
 
 export type CheckColegioResult =
   | { ok: true; alreadyPremium: true; premiumSource?: string | null; colegioName?: string }
@@ -43,8 +46,23 @@ export async function ensureUserProfile(
   if (existing.exists) {
     const data = existing.data();
     const email = String(data?.email || '').toLowerCase().trim();
+    const updates: Record<string, unknown> = {};
     if (email && data?.email !== email) {
-      await userRef.update({ email, updatedAt: new Date().toISOString() });
+      updates.email = email;
+    }
+    if (
+      PDF_DOWNLOADS_UNLIMITED &&
+      (data?.premiumForever !== true || data?.tier !== 'premium')
+    ) {
+      Object.assign(updates, lifetimePremiumUserFields(data?.premiumSource as string | null | undefined));
+    }
+    const existingTrial = data?.controlPruebaTrial as { limit?: number } | null | undefined;
+    if (!existingTrial || typeof existingTrial.limit !== 'number' || existingTrial.limit <= 0) {
+      updates.controlPruebaTrial = buildRegistrationControlPruebaTrial('registration');
+    }
+    if (Object.keys(updates).length > 0) {
+      updates.updatedAt = new Date().toISOString();
+      await userRef.update(updates);
     }
     return email ? { email, created: false } : null;
   }
@@ -53,16 +71,20 @@ export async function ensureUserProfile(
   const email = String(authUser.email || '').toLowerCase().trim();
   if (!email) return null;
 
+  const now = new Date().toISOString();
   await userRef.set({
     name: authUser.displayName?.trim() || email.split('@')[0],
     email,
     role: 'abogado',
     status: 'activo',
-    tier: 'free',
-    freeDownloadsUsed: 0,
+    ...(PDF_DOWNLOADS_UNLIMITED
+      ? lifetimePremiumUserFields('lifetime')
+      : { tier: 'free', freeDownloadsUsed: 0 }),
+    audienciaCopilotTrial: buildDefaultAudienciaCopilotTrial('registration'),
+    controlPruebaTrial: buildRegistrationControlPruebaTrial('registration'),
     phone: '',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    createdAt: now,
+    updatedAt: now,
   });
 
   return { email, created: true };
@@ -137,9 +159,11 @@ export async function checkColegioForUser(
   }
 
   if (match?.estado === 'suspendido' && premiumSource === 'colegio') {
+    // PDFs siguen ilimitados para todos; solo se marca la suspensión del convenio.
     await userRef.update({
-      tier: 'free',
-      premiumSource: null,
+      ...(PDF_DOWNLOADS_UNLIMITED
+        ? lifetimePremiumUserFields('lifetime')
+        : { tier: 'free', premiumSource: null }),
       colegioSuspended: true,
       colegioId: match.colegioId,
       colegioName: match.colegioName,

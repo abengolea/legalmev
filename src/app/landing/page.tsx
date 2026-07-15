@@ -2,7 +2,7 @@
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { FileDown, Check, Zap, Mail, Gavel, Sparkles } from 'lucide-react';
+import { FileDown, Check, Zap, Mail, Gavel, Sparkles, FileSearch } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import {
@@ -82,48 +82,95 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Copiloto de Audiencias */}
+      {/* Copiloto + Control de pruebas */}
       <section className="border-y border-primary/20 bg-gradient-to-r from-primary/10 via-background to-accent/10">
         <div className="container px-5 sm:px-6 lg:px-10 xl:px-12 py-16 md:py-20">
-          <div className="mx-auto max-w-4xl rounded-2xl border border-primary/30 bg-card/80 p-8 md:p-10 shadow-sm">
-            <div className="flex flex-col md:flex-row md:items-start gap-8">
-              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-primary/15 ring-2 ring-primary/25">
-                <Gavel className="h-7 w-7 text-primary" />
-              </div>
-              <div className="flex-1 space-y-4">
-                <div className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-primary">
-                  <Sparkles className="h-3.5 w-3.5" />
-                  Nuevo en LegalMev
+          <div className="mx-auto max-w-5xl grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8">
+            <div className="rounded-2xl border border-primary/30 bg-card/80 p-8 md:p-10 shadow-sm overflow-hidden min-w-0">
+              <div className="flex flex-col items-start gap-6 min-w-0">
+                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-primary/15 ring-2 ring-primary/25">
+                  <Gavel className="h-7 w-7 text-primary" />
                 </div>
-                <h2 className="text-2xl md:text-3xl font-bold font-headline text-foreground">
-                  Copiloto de Audiencias con IA
-                </h2>
-                <p className="text-muted-foreground leading-relaxed max-w-2xl">
-                  Asistente para preparar y conducir audiencias: analiza el expediente, sugiere
-                  preguntas en vivo, detecta contradicciones y arma borradores de alegatos. Estamos
-                  en fase de prueba — tu cuenta incluye{' '}
-                  <strong className="text-foreground">1 audiencia gratuita</strong> para probarlo.
-                </p>
-                <ul className="grid sm:grid-cols-2 gap-2 text-sm text-muted-foreground">
-                  {[
-                    'Resumen del expediente y testigos',
-                    'Sugerencias mientras declara el testigo',
-                    'Contradicciones y admisiones en tiempo real',
-                    'Borrador de alegatos de cierre',
-                  ].map((item) => (
-                    <li key={item} className="flex items-start gap-2">
-                      <Check className="h-4 w-4 shrink-0 text-primary mt-0.5" />
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-                <div className="flex flex-col sm:flex-row gap-3 pt-2">
-                  <Button className="bg-primary hover:bg-primary/90" asChild>
-                    <Link href="/register">Probar el Copiloto — registro gratis</Link>
-                  </Button>
-                  <Button variant="outline" asChild>
-                    <Link href="/login">Ya tengo cuenta — iniciar sesión</Link>
-                  </Button>
+                <div className="space-y-4 w-full min-w-0">
+                  <div className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-primary">
+                    <Sparkles className="h-3.5 w-3.5" />
+                    Nuevo en LegalMev
+                  </div>
+                  <h2 className="text-2xl md:text-3xl font-bold font-headline text-foreground">
+                    Copiloto de Audiencias con IA
+                  </h2>
+                  <p className="text-muted-foreground leading-relaxed">
+                    Asistente para preparar y conducir audiencias: analiza el expediente, sugiere
+                    preguntas en vivo, detecta contradicciones y arma borradores de alegatos. Estamos
+                    en fase de prueba — tu cuenta incluye{' '}
+                    <strong className="text-foreground">1 audiencia gratuita</strong> para probarlo.
+                  </p>
+                  <ul className="grid sm:grid-cols-2 gap-2 text-sm text-muted-foreground">
+                    {[
+                      'Resumen del expediente y testigos',
+                      'Sugerencias mientras declara el testigo',
+                      'Contradicciones y admisiones en tiempo real',
+                      'Borrador de alegatos de cierre',
+                    ].map((item) => (
+                      <li key={item} className="flex items-start gap-2">
+                        <Check className="h-4 w-4 shrink-0 text-primary mt-0.5" />
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="flex flex-col gap-3 pt-2 w-full min-w-0">
+                    <Button className="w-full bg-primary hover:bg-primary/90" asChild>
+                      <Link href="/register">Probar el Copiloto — registro gratis</Link>
+                    </Button>
+                    <Button variant="outline" className="w-full" asChild>
+                      <Link href="/login">Ya tengo cuenta — iniciar sesión</Link>
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-primary/30 bg-card/80 p-8 md:p-10 shadow-sm overflow-hidden min-w-0">
+              <div className="flex flex-col items-start gap-6 min-w-0">
+                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-primary/15 ring-2 ring-primary/25">
+                  <FileSearch className="h-7 w-7 text-primary" />
+                </div>
+                <div className="space-y-4 w-full min-w-0">
+                  <div className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-primary">
+                    <Sparkles className="h-3.5 w-3.5" />
+                    Etapa beta
+                  </div>
+                  <h2 className="text-2xl md:text-3xl font-bold font-headline text-foreground">
+                    Control de pruebas con IA
+                  </h2>
+                  <p className="text-muted-foreground leading-relaxed">
+                    Armá y seguí el control de prueba del expediente: importá el PDF, la IA clasifica
+                    las pruebas y te ayuda a controlar plazos, diligencias y subprocesos. Estamos en
+                    etapa beta — tu cuenta incluye{' '}
+                    <strong className="text-foreground">5 controles de prueba gratis</strong> para
+                    probar la herramienta.
+                  </p>
+                  <ul className="grid sm:grid-cols-2 gap-2 text-sm text-muted-foreground">
+                    {[
+                      'Importación y armado con IA',
+                      'Seguimiento de plazos y alertas',
+                      'Testimonial, documental y pericial',
+                      'Cédulas, oficios y subprocesos',
+                    ].map((item) => (
+                      <li key={item} className="flex items-start gap-2">
+                        <Check className="h-4 w-4 shrink-0 text-primary mt-0.5" />
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="flex flex-col gap-3 pt-2 w-full min-w-0">
+                    <Button className="w-full bg-primary hover:bg-primary/90" asChild>
+                      <Link href="/register">Probar Control de pruebas — registro gratis</Link>
+                    </Button>
+                    <Button variant="outline" className="w-full" asChild>
+                      <Link href="/login">Ya tengo cuenta — iniciar sesión</Link>
+                    </Button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -168,66 +215,34 @@ export default function LandingPage() {
       {/* Plans Section */}
       <section className="container px-5 sm:px-6 lg:px-10 xl:px-12 py-24 sm:py-32">
         <h2 className="text-3xl md:text-4xl font-bold text-center font-headline text-foreground">
-          Planes y cuotas de descarga
+          Exportación de PDF gratis e ilimitada
         </h2>
         <p className="md:w-2/3 mx-auto text-muted-foreground text-center mt-4 mb-16">
-          Registrate con tu email y tendrás acceso a las primeras 5 descargas. Para uso intensivo, consultá por planes premium o convenios con colegios de abogados.
+          Registrate con tu email y exportá expedientes a PDF sin límites ni costos. Premium de por vida para todos los usuarios.
         </p>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
-          <Card className="border-primary/30 bg-card">
-            <CardHeader className="text-center pb-2">
-              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/15">
-                <FileDown className="h-6 w-6 text-primary" />
-              </div>
-              <CardTitle className="text-xl font-headline">Plan Gratuito</CardTitle>
-              <p className="text-sm text-muted-foreground mt-1">Para probar el servicio</p>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="text-center">
-                <span className="text-4xl font-bold text-primary">5</span>
-                <span className="text-muted-foreground ml-1">descargas en total</span>
-              </div>
-              <ul className="space-y-3">
-                {[
-                  'Ideal para evaluar el servicio',
-                  'Extensión incluida',
-                  '5 PDFs de expedientes (todos los portales)',
-                  'Verificá tu email con el link que te enviamos',
-                ].map((item, i) => (
-                  <li key={i} className="flex items-center gap-2 text-sm">
-                    <Check className="h-4 w-4 flex-shrink-0 text-primary" />
-                    {item}
-                  </li>
-                ))}
-              </ul>
-              <Button className="w-full" variant="outline" asChild>
-                <Link href="/register">Registrarse</Link>
-              </Button>
-            </CardContent>
-          </Card>
-
+        <div className="grid grid-cols-1 max-w-xl mx-auto">
           <Card className="relative border-primary/50 bg-primary/10">
             <div className="absolute -top-3 right-4 rounded-full bg-primary px-3 py-1 text-xs font-medium text-primary-foreground">
-              Recomendado
+              Para todos
             </div>
             <CardHeader className="text-center pb-2">
               <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/25">
                 <Zap className="h-6 w-6 text-primary" />
               </div>
-              <CardTitle className="text-xl font-headline">Plan Premium</CardTitle>
-              <p className="text-sm text-muted-foreground mt-1">Pago mensual de $6.000 · IVA incluido · O convenio con colegio</p>
+              <CardTitle className="text-xl font-headline">Plan Premium de por vida</CardTitle>
+              <p className="text-sm text-muted-foreground mt-1">Gratis · Sin suscripción · Sin cupos mensuales</p>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="text-center">
-                <span className="text-4xl font-bold text-primary">100</span>
-                <span className="text-muted-foreground ml-1">expedientes por mes</span>
+                <span className="text-4xl font-bold text-primary">Ilimitadas</span>
+                <span className="text-muted-foreground ml-1 block mt-1">descargas de PDF</span>
               </div>
               <ul className="space-y-3">
                 {[
-                  'Soporte prioritario',
-                  'Convenios con colegios de abogados',
-                  'Renovación cada mes',
-                  'Hasta 100 descargas mensuales',
+                  'Sin costo de registro ni cuota mensual',
+                  'Extensión incluida en todos los portales',
+                  'PDFs de expedientes sin límite',
+                  'Verificá tu email y empezá a exportar',
                 ].map((item, i) => (
                   <li key={i} className="flex items-center gap-2 text-sm">
                     <Check className="h-4 w-4 flex-shrink-0 text-primary" />
@@ -236,23 +251,11 @@ export default function LandingPage() {
                 ))}
               </ul>
               <Button className="w-full bg-primary hover:bg-primary/90 text-primary-foreground" asChild>
-                <Link href="/register">
-                  Crear cuenta para pagar
-                </Link>
+                <Link href="/register">Crear cuenta gratis</Link>
               </Button>
             </CardContent>
           </Card>
         </div>
-        <p className="text-center text-sm text-muted-foreground mt-8">
-          ¿Sos de un colegio de abogados?{' '}
-          <a
-            href="mailto:convenios@legalmev.com?subject=Consulta%20convenio%20colegio"
-            className="text-primary hover:underline font-medium"
-          >
-            Escríbenos para convenios especiales
-          </a>
-          .
-        </p>
       </section>
 
       {/* How it works */}
@@ -268,7 +271,7 @@ export default function LandingPage() {
               </div>
               <h3 className="font-semibold text-slate-100 text-lg">Registrate y verificá</h3>
               <p className="text-base text-slate-300 leading-relaxed max-w-xs mx-auto">
-                Creá tu cuenta, confirmá tu email y obtené 5 descargas gratuitas.
+                Creá tu cuenta, confirmá tu email y exportá PDFs sin límite.
               </p>
             </div>
             <div className="text-center space-y-4">
@@ -305,7 +308,7 @@ export default function LandingPage() {
             Empezá a exportar expedientes hoy
           </h2>
           <p className="text-muted-foreground mb-8 max-w-xl mx-auto">
-            Registrate gratis y recibí tus primeras 5 descargas.
+            Registrate gratis y exportá expedientes a PDF sin límites.
           </p>
           <Button size="lg" className="bg-primary hover:bg-primary/90 text-primary-foreground" asChild>
             <Link href="/register">Crear cuenta gratis</Link>

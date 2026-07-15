@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { MercadoPagoConfig, Preference } from 'mercadopago';
 import { getAuth, getAdminDb } from '@/lib/firebase-admin';
 import { getPaymentsBaseUrl } from '@/lib/payments-base-url';
+import { PDF_DOWNLOADS_UNLIMITED } from '@/lib/pdf-downloads-policy';
 
 const SETTINGS_DOC = 'settings/payments';
 
@@ -12,6 +13,16 @@ const SETTINGS_DOC = 'settings/payments';
  */
 export async function POST(request: NextRequest) {
   try {
+    if (PDF_DOWNLOADS_UNLIMITED) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'La exportación a PDF es gratuita e ilimitada. Ya no es necesario pagar un plan premium.',
+        },
+        { status: 400 }
+      );
+    }
+
     const accessToken = process.env.MERCADOPAGO_ACCESS_TOKEN;
     if (!accessToken?.trim()) {
       return NextResponse.json(

@@ -96,12 +96,12 @@ export default function BasesYCondicionesPage() {
         <section>
           <h2 className="text-xl font-semibold mt-10 mb-4">4. Planes, precios y facturación</h2>
           <p className="text-muted-foreground leading-relaxed">
-            LegalMEV ofrece un plan gratuito con cupo limitado de exportaciones y un plan
-            premium de pago con mayor cupo mensual, según se informe en el sitio al momento
-            de la contratación. Los precios, medios de pago y condiciones de renovación o
-            cancelación se muestran antes de confirmar la suscripción. Los convenios con
-            colegios de abogados pueden contemplar condiciones particulares acordadas por
-            escrito con cada entidad.
+            LegalMEV ofrece la exportación de expedientes a PDF de forma gratuita e ilimitada
+            para todos los usuarios registrados (Premium de por vida). Otras funcionalidades
+            adicionales del servicio pueden tener condiciones comerciales distintas, las cuales
+            se informan en el sitio al momento de su contratación. Los convenios con colegios
+            de abogados pueden contemplar condiciones particulares acordadas por escrito con
+            cada entidad.
           </p>
           <p className="text-muted-foreground leading-relaxed mt-4">
             Salvo disposición legal en contrario o acuerdo expreso, los importes abonados por

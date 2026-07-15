@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAdminDb, getAdminStorage, getStorageBucketName } from '@/lib/firebase-admin';
 import { requireAuthWithDevice } from '@/lib/require-auth-device';
 import { generateExpedientePDF, generateFilename } from '@/lib/pdf-generator';
+import { PDF_DOWNLOADS_UNLIMITED, lifetimePremiumUserFields } from '@/lib/pdf-downloads-policy';
 import { maybeDowngradeLapsedSubscription, canUseFreeDownloads } from '@/lib/subscription-lapse';
 import type { ExportRequest, Expediente } from '@/types/expediente';
 
@@ -37,64 +38,75 @@ export async function POST(request: NextRequest) {
     const { uid, userData } = authResult;
     const adminDb = getAdminDb();
 
-    const paymentsSnap = await adminDb.doc('settings/payments').get();
-    const payments = paymentsSnap.data();
-    const globalQuota = (payments?.premiumQuotaPerMonth && payments.premiumQuotaPerMonth > 0)
-      ? payments.premiumQuotaPerMonth
-      : PREMIUM_QUOTA_DEFAULT;
-
-    let premiumQuota = globalQuota;
-    if (userData.premiumSource === 'colegio' && userData.colegioId) {
-      const colegioSnap = await adminDb.collection('colegios').doc(userData.colegioId).get();
-      const colegioData = colegioSnap.data();
-      if (colegioData?.cuotaMensual != null && colegioData.cuotaMensual > 0) {
-        premiumQuota = colegioData.cuotaMensual;
-      }
-    }
-
     let tier = userData.tier ?? 'free';
     let effectiveUserData = userData;
-
-    const downgraded = await maybeDowngradeLapsedSubscription(adminDb, uid, userData as import('@/lib/subscription-lapse').UserData);
-    if (downgraded) {
-      tier = 'free';
-      effectiveUserData = { ...userData, tier: 'free', subscriptionLapsed: true };
-    }
-
     const now = new Date();
 
-    if (tier === 'free') {
-      if (!canUseFreeDownloads(effectiveUserData as import('@/lib/subscription-lapse').UserData)) {
-        return NextResponse.json(
-          { ok: false, error: 'Tu suscripción venció. Renová para seguir exportando expedientes.' },
-          { status: 403, headers: corsHeaders }
-        );
+    if (PDF_DOWNLOADS_UNLIMITED) {
+      // Premium lifetime para todos: sin límites ni downgrade por pago.
+      if (userData.premiumForever !== true || userData.tier !== 'premium') {
+        await adminDb.collection('users').doc(uid).update({
+          ...lifetimePremiumUserFields(userData.premiumSource as string | null | undefined),
+          updatedAt: now.toISOString(),
+        });
       }
-      const used = effectiveUserData.freeDownloadsUsed ?? 0;
-      if (used >= FREE_QUOTA) {
-        return NextResponse.json(
-          { ok: false, error: `Ya usaste tus ${FREE_QUOTA} descargas gratuitas. Contactanos para el plan premium (${premiumQuota}/mes).` },
-          { status: 403, headers: corsHeaders }
-        );
-      }
+      tier = 'premium';
+      effectiveUserData = { ...userData, tier: 'premium', premiumForever: true };
     } else {
-      const premiumForever = effectiveUserData.premiumForever === true;
-      if (!premiumForever) {
-        let used = effectiveUserData.downloadsThisMonth ?? 0;
-        const resetAt = effectiveUserData.monthlyResetAt ? new Date(effectiveUserData.monthlyResetAt) : null;
-        if (resetAt && now >= resetAt) {
-          await adminDb.collection('users').doc(uid).update({
-            downloadsThisMonth: 0,
-            monthlyResetAt: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-          });
-          used = 0;
-          (effectiveUserData as Record<string, unknown>).downloadsThisMonth = 0;
+      const paymentsSnap = await adminDb.doc('settings/payments').get();
+      const payments = paymentsSnap.data();
+      const globalQuota = (payments?.premiumQuotaPerMonth && payments.premiumQuotaPerMonth > 0)
+        ? payments.premiumQuotaPerMonth
+        : PREMIUM_QUOTA_DEFAULT;
+
+      let premiumQuota = globalQuota;
+      if (userData.premiumSource === 'colegio' && userData.colegioId) {
+        const colegioSnap = await adminDb.collection('colegios').doc(userData.colegioId).get();
+        const colegioData = colegioSnap.data();
+        if (colegioData?.cuotaMensual != null && colegioData.cuotaMensual > 0) {
+          premiumQuota = colegioData.cuotaMensual;
         }
-        if (used >= premiumQuota) {
+      }
+
+      const downgraded = await maybeDowngradeLapsedSubscription(adminDb, uid, userData as import('@/lib/subscription-lapse').UserData);
+      if (downgraded) {
+        tier = 'free';
+        effectiveUserData = { ...userData, tier: 'free', subscriptionLapsed: true };
+      }
+
+      if (tier === 'free') {
+        if (!canUseFreeDownloads(effectiveUserData as import('@/lib/subscription-lapse').UserData)) {
           return NextResponse.json(
-            { ok: false, error: `Llegaste al límite de ${premiumQuota} expedientes por mes. Se renueva automáticamente.` },
+            { ok: false, error: 'Tu suscripción venció. Renová para seguir exportando expedientes.' },
             { status: 403, headers: corsHeaders }
           );
+        }
+        const used = effectiveUserData.freeDownloadsUsed ?? 0;
+        if (used >= FREE_QUOTA) {
+          return NextResponse.json(
+            { ok: false, error: `Ya usaste tus ${FREE_QUOTA} descargas gratuitas. Contactanos para el plan premium (${premiumQuota}/mes).` },
+            { status: 403, headers: corsHeaders }
+          );
+        }
+      } else {
+        const premiumForever = effectiveUserData.premiumForever === true;
+        if (!premiumForever) {
+          let used = effectiveUserData.downloadsThisMonth ?? 0;
+          const resetAt = effectiveUserData.monthlyResetAt ? new Date(effectiveUserData.monthlyResetAt) : null;
+          if (resetAt && now >= resetAt) {
+            await adminDb.collection('users').doc(uid).update({
+              downloadsThisMonth: 0,
+              monthlyResetAt: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+            });
+            used = 0;
+            (effectiveUserData as Record<string, unknown>).downloadsThisMonth = 0;
+          }
+          if (used >= premiumQuota) {
+            return NextResponse.json(
+              { ok: false, error: `Llegaste al límite de ${premiumQuota} expedientes por mes. Se renueva automáticamente.` },
+              { status: 403, headers: corsHeaders }
+            );
+          }
         }
       }
     }
@@ -107,6 +119,7 @@ export async function POST(request: NextRequest) {
       caratula = '',
       nroExpediente = '',
       juzgado = '',
+      portal,
     } = body;
 
     if (!expedienteUrl?.trim()) {
@@ -171,6 +184,17 @@ export async function POST(request: NextRequest) {
     const pdfBytes = await generateExpedientePDF({
       expediente,
       actuaciones: actuacionesFiltradas,
+      portal:
+        portal ||
+        (expedienteEsPJN
+          ? 'PJN'
+          : expedienteEsSalta
+            ? 'SALTA'
+            : expedienteEsEntreRios
+              ? 'ENTRERIOS'
+              : expedienteEsTucuman
+                ? 'TUCUMAN'
+                : 'MEV'),
     });
 
     const filename = generateFilename(expediente, actuacionesFiltradas);
@@ -206,25 +230,28 @@ export async function POST(request: NextRequest) {
     if (expediente.juzgado) docData.juzgado = expediente.juzgado;
     await adminDb.collection('exportaciones').add(docData);
 
-    const userRef = adminDb.collection('users').doc(uid);
-    if (tier === 'free') {
-      const used = effectiveUserData.freeDownloadsUsed ?? 0;
-      await userRef.update({ freeDownloadsUsed: used + 1 });
-    } else {
-      const premiumForever = effectiveUserData.premiumForever === true;
-      let monthUsed = effectiveUserData.downloadsThisMonth ?? 0;
-      let newResetAt = effectiveUserData.monthlyResetAt;
-      if (!premiumForever) {
-        const resetAt = userData.monthlyResetAt ? new Date(userData.monthlyResetAt) : null;
-        if (resetAt && now >= resetAt) {
-          monthUsed = 0;
-          newResetAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    // Con PDFs ilimitados no consumimos cuota; solo registramos la exportación arriba.
+    if (!PDF_DOWNLOADS_UNLIMITED) {
+      const userRef = adminDb.collection('users').doc(uid);
+      if (tier === 'free') {
+        const used = effectiveUserData.freeDownloadsUsed ?? 0;
+        await userRef.update({ freeDownloadsUsed: used + 1 });
+      } else {
+        const premiumForever = effectiveUserData.premiumForever === true;
+        let monthUsed = effectiveUserData.downloadsThisMonth ?? 0;
+        let newResetAt = effectiveUserData.monthlyResetAt;
+        if (!premiumForever) {
+          const resetAt = userData.monthlyResetAt ? new Date(userData.monthlyResetAt) : null;
+          if (resetAt && now >= resetAt) {
+            monthUsed = 0;
+            newResetAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
+          }
         }
+        await userRef.update({
+          downloadsThisMonth: monthUsed + 1,
+          monthlyResetAt: premiumForever ? null : (newResetAt || new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString()),
+        });
       }
-      await userRef.update({
-        downloadsThisMonth: monthUsed + 1,
-        monthlyResetAt: premiumForever ? null : (newResetAt || new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString()),
-      });
     }
 
     return NextResponse.json({ ok: true, url, filename }, { headers: corsHeaders });

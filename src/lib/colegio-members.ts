@@ -1,4 +1,5 @@
 import type { DocumentData, Firestore, QueryDocumentSnapshot, UpdateData } from 'firebase-admin/firestore';
+import { PDF_DOWNLOADS_UNLIMITED, lifetimePremiumUserFields } from '@/lib/pdf-downloads-policy';
 
 export type MemberEstado = 'activo' | 'suspendido';
 
@@ -37,9 +38,11 @@ function colegioPremiumFields(
     premiumSource: 'colegio',
     colegioName,
     colegioSuspended: null,
-    premiumForever: null,
+    premiumForever: PDF_DOWNLOADS_UNLIMITED ? true : null,
     downloadsThisMonth: 0,
-    monthlyResetAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+    monthlyResetAt: PDF_DOWNLOADS_UNLIMITED
+      ? null
+      : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
     updatedAt: new Date().toISOString(),
   };
 }
@@ -81,12 +84,19 @@ export async function syncUserTiersForColegio(
       if (data?.tier !== 'premium' || data?.premiumSource !== 'colegio') activated++;
     } else {
       batch.update(doc.ref, {
-        tier: 'free',
-        premiumSource: null,
-        colegioSuspended: true,
+        ...(PDF_DOWNLOADS_UNLIMITED
+          ? {
+              ...lifetimePremiumUserFields('lifetime'),
+              colegioSuspended: true,
+            }
+          : {
+              tier: 'free',
+              premiumSource: null,
+              colegioSuspended: true,
+            }),
         updatedAt: new Date().toISOString(),
       });
-      if (data?.tier === 'premium') suspended++;
+      if (data?.tier === 'premium' && data?.premiumSource === 'colegio') suspended++;
     }
     batchOps++;
     if (batchOps >= FIRESTORE_BATCH_LIMIT) await commitBatch();

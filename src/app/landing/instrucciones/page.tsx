@@ -29,7 +29,7 @@ const steps = [
   {
     num: 1,
     title: 'Creá tu cuenta en LegalMev',
-    desc: 'Registrate con tu nombre, apellido y email. Al crear la cuenta recibís 5 descargas gratuitas para probar el servicio.',
+    desc: 'Registrate con tu nombre, apellido y email. Al crear la cuenta tenés Premium de por vida: descargas de PDF ilimitadas y gratis.',
     cta: (
       <Button asChild variant="outline" className="mt-4">
         <Link href="/register">Crear cuenta gratis</Link>
@@ -77,7 +77,7 @@ const steps = [
   {
     num: 6,
     title: 'Exportá el expediente a PDF',
-    desc: 'Con el expediente abierto, hacé clic en el ícono de LegalMev y elegí exportar. El PDF se descargará automáticamente en tu computadora. Cada exportación consume una descarga de tu cuota.',
+    desc: 'Con el expediente abierto, hacé clic en el ícono de LegalMev y elegí exportar. El PDF se descargará automáticamente en tu computadora. Las exportaciones a PDF son ilimitadas.',
   },
 ];
 
@@ -123,8 +123,8 @@ const faqs = [
     ),
   },
   {
-    q: '¿Cuántas descargas tengo con el plan gratuito?',
-    a: 'Al registrarte tenés 5 descargas en total para probar el servicio. Podés ver tu cuota restante en el panel de tu cuenta o en el popup de la extensión. Para más descargas, consultá el plan Premium o convenios con colegios de abogados.',
+    q: '¿Cuántas descargas de PDF tengo?',
+    a: 'Ilimitadas. Todos los usuarios tienen Premium de por vida: podés exportar expedientes a PDF sin cupo ni costo mensual.',
   },
   {
     q: '¿Puedo usar la extensión en más de una computadora?',
@@ -150,7 +150,7 @@ const faqs = [
   },
   {
     q: '¿Necesito pagar para empezar a usar LegalMev?',
-    a: 'No. Podés registrarte gratis y usar tus 5 descargas iniciales sin pagar. El plan Premium ($6.000/mes, IVA incluido) es para quienes necesitan hasta 100 expedientes por mes. Algunos colegios de abogados tienen convenio con acceso Premium.',
+    a: 'No. La exportación de expedientes a PDF es gratuita e ilimitada para todos los usuarios registrados. Solo necesitás crear una cuenta y verificar tu email.',
   },
 ];
 

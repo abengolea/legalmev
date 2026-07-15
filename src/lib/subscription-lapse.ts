@@ -1,5 +1,6 @@
 import { FieldValue } from 'firebase-admin/firestore';
 import type { Firestore } from 'firebase-admin/firestore';
+import { PDF_DOWNLOADS_UNLIMITED } from '@/lib/pdf-downloads-policy';
 
 const GRACE_DAYS_MS = 10 * 24 * 60 * 60 * 1000;
 
@@ -21,6 +22,8 @@ export async function maybeDowngradeLapsedSubscription(
   uid: string,
   userData: UserData
 ): Promise<boolean> {
+  // PDFs ilimitados para todos: no degradar por falta de pago.
+  if (PDF_DOWNLOADS_UNLIMITED) return false;
   if (userData.tier !== 'premium' || userData.premiumSource !== 'payment') {
     return false;
   }

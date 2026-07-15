@@ -176,7 +176,7 @@ export function buildConvenioSuspendedHtml(params: { colegioName: string }): str
   const content = `
     <p style="margin:0 0 16px;font-size:16px;">Hola,</p>
     <p style="margin:0 0 24px;">El convenio del Colegio de Abogados <strong>${colegioName}</strong> con LegalMev fue suspendido.</p>
-    <p style="margin:0 0 24px;">Tu acceso premium por convenio ya no está activo. Si necesitás seguir exportando expedientes, podés pasar al plan premium individual desde el dashboard.</p>
+    <p style="margin:0 0 24px;">La exportación de expedientes a PDF sigue siendo gratuita e ilimitada para todos los usuarios. Otras funcionalidades vinculadas al convenio pueden haberse visto afectadas.</p>
     ${ctaButton(`${BASE}/dashboard`, 'Ir al dashboard')}
     <p style="margin:0;font-size:14px;color:#6b7280;">Si tenés dudas, contactá al administrador de tu colegio o a LegalMev.</p>
     <p style="margin:24px 0 0;font-size:14px;color:#9ca3af;">— El equipo de LegalMev</p>

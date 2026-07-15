@@ -10,6 +10,7 @@ import { createUserWithEmailAndPassword, sendEmailVerification } from 'firebase/
 import { doc, setDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { buildDefaultAudienciaCopilotTrial } from '@/lib/audiencia-copilot-access';
+import { buildRegistrationControlPruebaTrial } from '@/lib/control-prueba-access';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -72,11 +73,16 @@ export default function RegisterPage() {
         email: emailNormalized,
         role: 'abogado',
         status: 'activo',
-        tier: 'free',
+        tier: 'premium',
+        premiumForever: true,
+        premiumSource: 'lifetime',
         freeDownloadsUsed: 0,
+        downloadsThisMonth: 0,
+        monthlyResetAt: null,
         phone: '',
         cuit: cuitClean || '',
         audienciaCopilotTrial: buildDefaultAudienciaCopilotTrial('registration'),
+        controlPruebaTrial: buildRegistrationControlPruebaTrial('registration'),
         createdAt: new Date().toISOString(),
       });
 

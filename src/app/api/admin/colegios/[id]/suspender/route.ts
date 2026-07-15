@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAdminDb } from '@/lib/firebase-admin';
 import { requirePlatformAdmin } from '@/lib/api-auth';
 import { sendConvenioSuspendedEmail } from '@/lib/payment-notifications';
+import { PDF_DOWNLOADS_UNLIMITED, lifetimePremiumUserFields } from '@/lib/pdf-downloads-policy';
 
 /** Verifica superadmin de plataforma (no responsables de colegio). */
 async function requireAdmin(request: NextRequest) {
@@ -16,7 +17,8 @@ async function requireAdmin(request: NextRequest) {
 
 /**
  * POST /api/admin/colegios/[id]/suspender
- * Suspende el convenio: pasa convenioActivo a false y quita premium a todos los miembros.
+ * Suspende el convenio: pasa convenioActivo a false y quita el vínculo de colegio.
+ * Con PDFs ilimitados, los usuarios conservan premium lifetime.
  */
 export async function POST(
   request: NextRequest,
@@ -47,17 +49,25 @@ export async function POST(
       const email = (doc.data()?.email as string) || '';
       if (email) emailsToNotify.push({ email });
       batch.update(doc.ref, {
-        tier: 'free',
-        colegioId: null,
-        premiumSource: null,
-        colegioName: null,
+        ...(PDF_DOWNLOADS_UNLIMITED
+          ? {
+              ...lifetimePremiumUserFields('lifetime'),
+              colegioId: null,
+              colegioName: null,
+              colegioSuspended: true,
+            }
+          : {
+              tier: 'free',
+              colegioId: null,
+              premiumSource: null,
+              colegioName: null,
+            }),
         updatedAt: new Date().toISOString(),
       });
       suspendidos++;
     }
     await batch.commit();
 
-    // Notificar por email a los usuarios afectados
     for (const { email } of emailsToNotify) {
       try {
         await sendConvenioSuspendedEmail({ to: email, colegioName });
@@ -69,7 +79,9 @@ export async function POST(
     return NextResponse.json({
       ok: true,
       suspendidos,
-      message: `Convenio suspendido. ${suspendidos} usuarios pasaron a plan gratuito.`,
+      message: PDF_DOWNLOADS_UNLIMITED
+        ? `Convenio suspendido. ${suspendidos} usuarios desvinculados (conservan PDFs ilimitados).`
+        : `Convenio suspendido. ${suspendidos} usuarios pasaron a plan gratuito.`,
     });
   } catch (err) {
     return NextResponse.json(
