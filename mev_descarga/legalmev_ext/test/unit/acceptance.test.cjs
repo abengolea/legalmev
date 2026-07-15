@@ -181,5 +181,26 @@ test('metadatos cloud: rechaza sin id/portal y acota campos', () => {
     assert.strictEqual((await repo.listAlertas()).length, 0);
   });
 
+  await testAsync('registrar: no duplica misma causa (portal+nro) aunque cambie la URL', async () => {
+    const repo = RepoMod.create(RepoMod.createMemoryDriver());
+    const motor = MotorMod.create({
+      repositorio: repo,
+      obtenerMovimientos: async () => [],
+    });
+    const a = await motor.registrar({
+      portal: 'PJN',
+      nroExpediente: '2543/21-A4',
+      url: 'https://scw.pjn.gov.ar/scw/expediente.seam?cid=1',
+    });
+    const b = await motor.registrar({
+      portal: 'PJN',
+      nroExpediente: '2543 / 21-A4',
+      url: 'https://scw.pjn.gov.ar/scw/expediente.seam?cid=999',
+    });
+    assert.strictEqual(a.id, b.id);
+    assert.strictEqual((await repo.listReferencias()).length, 1);
+    assert.ok(motor.findExisting(await repo.listReferencias(), { portal: 'PJN', nroExpediente: '2543/21-A4' }));
+  });
+
   console.log(`\n${passed} pruebas OK`);
 })();

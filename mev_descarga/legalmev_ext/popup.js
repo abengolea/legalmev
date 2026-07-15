@@ -1042,8 +1042,8 @@ async function followCurrentTabCase() {
   if (resp.ok) {
     const label = resp.case?.nroExpediente || meta.nroExpediente || "causa";
     alert(
-      resp.case?.baselineReady
-        ? `Causa guardada: ${label}.`
+      resp.alreadyFollowed
+        ? `Esta causa ya está en tu lista: ${label}.`
         : `Causa guardada: ${label}.`
     );
     await loadGestorList();

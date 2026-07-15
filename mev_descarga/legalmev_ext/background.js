@@ -373,8 +373,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const payload = { ...(message.payload || {}) };
     if (sender.tab?.id && !payload.tabId) payload.tabId = sender.tab.id;
     if (sender.tab?.url && !payload.url) payload.url = sender.tab.url;
-    self.LegalMevCaseMonitor.saveCase(payload)
-      .then((row) => sendResponse({ ok: true, case: row, baselineReady: !!row?.baselineReady }))
+    self.LegalMevMonitoring.activateMonitoring(payload)
+      .then((r) =>
+        sendResponse({
+          ok: true,
+          case: r.case,
+          baselineReady: !!(r.case?.baselineReady || r.baseline),
+          alreadyFollowed: !!r.alreadyFollowed,
+        })
+      )
       .catch((e) => sendResponse({ ok: false, error: e.message }));
     return true;
   }

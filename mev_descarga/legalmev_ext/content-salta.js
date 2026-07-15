@@ -922,9 +922,10 @@
             (resp) => {
               if (resp?.ok) {
                 alert(
-                  resp.case?.baselineReady
-                    ? 'Causa guardada para seguimiento. Línea de base OK (sin alertas históricas).'
-                    : 'Causa guardada para seguimiento.'
+                  window.LegalMevDownloadUi?.followResultMessage?.(resp) ||
+                    (resp.alreadyFollowed
+                      ? 'Esta causa ya está en tu lista de seguimiento.'
+                      : 'Causa guardada para seguimiento.')
                 );
               } else {
                 alert(resp?.error || 'No se pudo guardar la causa');

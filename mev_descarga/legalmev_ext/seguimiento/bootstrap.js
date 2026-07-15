@@ -66,13 +66,23 @@
   }
 
   async function activateMonitoring(input) {
+    const prev = motor.findExisting(await repo.listReferencias(), input);
     const row = await motor.registrar(input);
+    if (prev) {
+      await ensureAlarm();
+      return {
+        case: mapCase(row),
+        baseline: !!row.baselineLista,
+        alreadyFollowed: true,
+      };
+    }
     const scan = await motor.escanear(row.id, { reason: 'activate', tabId: input.tabId });
     root.LegalMevSegSync?.pushCase?.(scan.case || row)?.catch?.(() => {});
     await ensureAlarm();
     return {
       case: mapCase(scan.case || row),
       baseline: !!scan.baseline,
+      alreadyFollowed: false,
     };
   }
 

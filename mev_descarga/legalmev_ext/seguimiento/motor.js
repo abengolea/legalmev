@@ -38,13 +38,29 @@
       return `seg_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
     }
 
+    function normalizeNro(n) {
+      return String(n || '')
+        .replace(/\s+/g, '')
+        .toUpperCase();
+    }
+
+    /** Misma causa: portal + nro (o expId si no hay nro). */
+    function findExisting(list, input) {
+      const portal = String(input.portal || '').toUpperCase();
+      const nro = normalizeNro(input.nroExpediente);
+      const expId = String(input.portalRefs?.expId || input.portalRefs?.idExpediente || '').trim();
+      return (list || []).find((r) => {
+        if (String(r.portal || '').toUpperCase() !== portal) return false;
+        const rNro = normalizeNro(r.nroExpediente);
+        if (nro && rNro && nro === rNro) return true;
+        const rExp = String(r.portalRefs?.expId || r.portalRefs?.idExpediente || '').trim();
+        if (expId && rExp && expId === rExp) return true;
+        return false;
+      }) || null;
+    }
+
     async function registrar(input) {
-      const existing = (await repo.listReferencias()).find(
-        (r) =>
-          r.portal === String(input.portal || '').toUpperCase() &&
-          r.nroExpediente === String(input.nroExpediente || '').trim() &&
-          r.url === String(input.url || '').trim()
-      );
+      const existing = findExisting(await repo.listReferencias(), input);
       if (existing) return existing;
 
       const row = {
@@ -203,6 +219,7 @@
 
     return {
       ALARM_NAME,
+      findExisting,
       registrar,
       escanear,
       pausar,

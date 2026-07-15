@@ -535,9 +535,10 @@
               if (resp?.ok) {
                 const label = resp.case?.nroExpediente || datos.nroExpediente || 'causa';
                 alert(
-                  resp.case?.baselineReady
-                    ? `Causa guardada: ${label}. Línea de base OK.`
-                    : `Causa guardada: ${label}.`
+                  window.LegalMevDownloadUi?.followResultMessage?.(resp, label) ||
+                    (resp.alreadyFollowed
+                      ? `Esta causa ya está en tu lista: ${label}.`
+                      : `Causa guardada: ${label}.`)
                 );
               } else {
                 alert(resp?.error || 'No se pudo activar el monitoreo');

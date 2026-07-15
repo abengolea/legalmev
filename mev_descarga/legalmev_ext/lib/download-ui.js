@@ -510,7 +510,22 @@
     };
   }
 
-  const api = { mountFloatingBar, openPicker, closeModal };
+  function followResultMessage(resp, fallbackLabel) {
+    const label = resp?.case?.nroExpediente || fallbackLabel || '';
+    if (resp?.alreadyFollowed) {
+      return label
+        ? `Esta causa ya está en tu lista: ${label}.`
+        : 'Esta causa ya está en tu lista de seguimiento.';
+    }
+    if (resp?.case?.baselineReady || resp?.baselineReady) {
+      return label
+        ? `Causa guardada: ${label}. Línea de base OK.`
+        : 'Causa guardada para seguimiento. Línea de base OK.';
+    }
+    return label ? `Causa guardada: ${label}.` : 'Causa guardada para seguimiento.';
+  }
+
+  const api = { mountFloatingBar, openPicker, closeModal, followResultMessage };
   if (typeof window !== 'undefined') window.LegalMevDownloadUi = api;
   if (typeof self !== 'undefined') self.LegalMevDownloadUi = api;
 })();

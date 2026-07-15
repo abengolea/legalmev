@@ -1,7 +1,7 @@
 {
   "name": "LegalMev",
   "description": "Exportá y monitoreá expedientes (MEV, PJN, MPBA, Salta, Entre Ríos, Tucumán). Alertas de novedades sin guardar PDFs.",
-  "version": "1.7.20",
+  "version": "1.7.21",
   "manifest_version": 3,
   "background": {
     "service_worker": "background.js"
