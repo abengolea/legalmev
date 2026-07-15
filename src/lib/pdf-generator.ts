@@ -213,9 +213,21 @@ export async function generateExpedientePDF(params: {
     yTable -= rowH;
   }
 
-  // Página 2: Portada — MEV y PJN NUNCA se mezclan; el rótulo depende del portal
-  const esPJN = /^https:\/\/scw\.pjn\.gov\.ar/i.test(url);
-  const tituloPortada = esPJN ? 'EXPEDIENTE COMPLETO (PJN)' : 'EXPEDIENTE COMPLETO (MEV)';
+  // Página 2: Portada — el rótulo depende del portal (MEV/PJN/Salta/etc. no se mezclan)
+  const u = String(url || '');
+  const esPJN = /^https:\/\/scw\.pjn\.gov\.ar/i.test(u) || /portalpjn\.pjn\.gov\.ar/i.test(u);
+  const esSalta = /justiciasalta\.gov\.ar/i.test(u);
+  const esEntreRios = /jusentrerios\.gov\.ar/i.test(u);
+  const esTucuman = /justucuman\.gov\.ar/i.test(u);
+  const tituloPortada = esPJN
+    ? 'EXPEDIENTE COMPLETO (PJN)'
+    : esSalta
+      ? 'EXPEDIENTE COMPLETO (SALTA)'
+      : esEntreRios
+        ? 'EXPEDIENTE COMPLETO (ENTRE RÍOS)'
+        : esTucuman
+          ? 'EXPEDIENTE COMPLETO (TUCUMÁN)'
+          : 'EXPEDIENTE COMPLETO (MEV)';
   page = doc.addPage([A4_WIDTH, A4_HEIGHT]);
   page.drawText(tituloPortada, {
     x: 2 * CM,

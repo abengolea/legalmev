@@ -9,6 +9,7 @@ const PROVEIDO_REGEX = /^https:\/\/mev\.scba\.gov\.ar\/proveido\.asp\?.*pidJuzga
 const PJN_REGEX = /^https:\/\/scw\.pjn\.gov\.ar/i;
 const SALTA_REGEX = /^https:\/\/plataforma\.justiciasalta\.gov\.ar/i;
 const ENTRERIOS_REGEX = /^https:\/\/mesavirtual\.jusentrerios\.gov\.ar/i;
+const TUCUMAN_REGEX = /^https:\/\/consultaexpedientes\.justucuman\.gov\.ar/i;
 
 const FREE_QUOTA = 5;
 const PREMIUM_QUOTA_DEFAULT = 100;
@@ -122,6 +123,7 @@ export async function POST(request: NextRequest) {
     const expedienteEsPJN = PJN_REGEX.test(expedienteUrl || '');
     const expedienteEsSalta = SALTA_REGEX.test(expedienteUrl || '');
     const expedienteEsEntreRios = ENTRERIOS_REGEX.test(expedienteUrl || '');
+    const expedienteEsTucuman = TUCUMAN_REGEX.test(expedienteUrl || '');
     const seen = new Set<string>();
     const actuacionesFiltradas = actuaciones.filter((item) => {
       if (typeof item !== 'object') return false;
@@ -133,7 +135,9 @@ export async function POST(request: NextRequest) {
         (url && SALTA_REGEX.test(url)) || (expedienteEsSalta && tieneContenido);
       const esEntreRios =
         (url && ENTRERIOS_REGEX.test(url)) || (expedienteEsEntreRios && tieneContenido);
-      if (!esMEV && !(esPJN && tieneContenido) && !esSalta && !esEntreRios) return false;
+      const esTucuman =
+        (url && TUCUMAN_REGEX.test(url)) || (expedienteEsTucuman && tieneContenido);
+      if (!esMEV && !(esPJN && tieneContenido) && !esSalta && !esEntreRios && !esTucuman) return false;
       const key = (url || expedienteUrl) + '|' + (item?.numero ?? '') + '|' + (item?.titulo || item?.title || item?.tipo || '').slice(0, 50);
       if (seen.has(key)) return false;
       seen.add(key);
@@ -141,7 +145,9 @@ export async function POST(request: NextRequest) {
     });
 
     if (actuacionesFiltradas.length === 0) {
-      const hint = expedienteEsEntreRios
+      const hint = expedienteEsTucuman
+        ? 'Verificá que estés en la página Historia del expediente SAE (…/expediente/…/historia) y recargá (F5) con la extensión activa.'
+        : expedienteEsEntreRios
         ? 'Verificá que estés logueado en Mesa Virtual de Entre Ríos con un expediente abierto (/expedientes/…).'
         : expedienteEsSalta
         ? 'Verificá que estés en el expediente de Salta con la pestaña Actuaciones visible y que las actuaciones tengan contenido.'
