@@ -1,0 +1,197 @@
+{
+  "name": "LegalMev (Dev)",
+  "description": "Exporta expedientes judiciales a PDF: MEV SCBA, PJN, MPBA, Salta, Entre Ríos y Tucumán. — Build de desarrollo",
+  "version": "1.7.14",
+  "manifest_version": 3,
+  "background": {
+    "service_worker": "background.js"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_title": "LegalMev",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "downloads",
+    "storage"
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  },
+  "host_permissions": [
+    "https://mev.scba.gov.ar/*",
+    "https://scw.pjn.gov.ar/*",
+    "https://portalpjn.pjn.gov.ar/*",
+    "https://mv.mpba.gov.ar/*",
+    "https://mi.mpba.gov.ar/*",
+    "https://documentos.mpba.gov.ar/*",
+    "https://plataforma.justiciasalta.gov.ar/*",
+    "https://mesavirtual.jusentrerios.gov.ar/*",
+    "https://ol-sso.jusentrerios.gov.ar/*",
+    "https://consultaexpedientes.justucuman.gov.ar/*",
+    "https://conexpbe.justucuman.gov.ar/*",
+    "https://login.justucuman.gov.ar/*",
+    "https://*.justucuman.gov.ar/*",
+    "https://*/*",
+    "http://127.0.0.1:8787/*",
+    "http://localhost:8787/*",
+    "http://localhost:9003/*",
+    "http://localhost:3000/*",
+    "https://www.legalmev.com.ar/*",
+    "https://legalmev.com.ar/*",
+    "https://caseclarity-hij0x.web.app/*",
+    "https://caseclarity-hij0x.firebaseapp.com/*",
+    "https://legalmev-staging--caseclarity-hij0x.us-east4.hosted.app/*",
+    "https://storage.googleapis.com/*"
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["lib/pdf.worker.min.js"],
+      "matches": [
+        "https://scw.pjn.gov.ar/*",
+        "https://portalpjn.pjn.gov.ar/*",
+        "https://plataforma.justiciasalta.gov.ar/*",
+        "https://mesavirtual.jusentrerios.gov.ar/*",
+        "https://consultaexpedientes.justucuman.gov.ar/*"
+      ]
+    },
+    {
+      "resources": [
+        "lib/pdf.worker.min.js",
+        "lib/worker.min.js",
+        "lib/tesseract.min.js",
+        "lib/tesseract-core/tesseract-core-simd-lstm.wasm",
+        "lib/tesseract-core/tesseract-core-simd-lstm.js",
+        "lib/tesseract-core/tesseract-core-simd-lstm.wasm.js",
+        "lib/tesseract-lang/spa.traineddata.gz"
+      ],
+      "matches": ["https://mv.mpba.gov.ar/*", "https://mi.mpba.gov.ar/*"]
+    }
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://mev.scba.gov.ar/procesales.asp*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://scw.pjn.gov.ar/scw/expediente.seam*",
+        "https://portalpjn.pjn.gov.ar/*"
+      ],
+      "js": ["lib/pdf.min.js", "content-pjn.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://plataforma.justiciasalta.gov.ar/iol-ui/p/*"],
+      "js": [
+        "lib/pdf.min.js",
+        "lib/pdf-lib.min.js",
+        "exportacion/nombres.js",
+        "exportacion/categorias.js",
+        "lib/download-ui.js",
+        "lib/jspdf.min.js",
+        "exportacion/texto-pdf.js",
+        "exportacion/merge-pdfs.js",
+        "lib/jszip.min.js",
+        "exportacion/empaquetar.js",
+        "content-salta.js",
+        "content-salta-picker.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://mesavirtual.jusentrerios.gov.ar/*"],
+      "js": ["page-hook-entrerios.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": ["https://mesavirtual.jusentrerios.gov.ar/*"],
+      "js": [
+        "lib/pdf.min.js",
+        "exportacion/nombres.js",
+        "exportacion/categorias.js",
+        "lib/download-ui.js",
+        "lib/jspdf.min.js",
+        "exportacion/texto-pdf.js",
+        "lib/jszip.min.js",
+        "exportacion/empaquetar.js",
+        "content-entrerios.js",
+        "content-entrerios-picker.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://consultaexpedientes.justucuman.gov.ar/*"],
+      "js": ["page-hook-tucuman.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": ["https://consultaexpedientes.justucuman.gov.ar/*"],
+      "js": [
+        "lib/pdf.min.js",
+        "lib/pdf-lib.min.js",
+        "exportacion/nombres.js",
+        "exportacion/categorias.js",
+        "lib/download-ui.js",
+        "lib/jspdf.min.js",
+        "exportacion/texto-pdf.js",
+        "exportacion/merge-pdfs.js",
+        "lib/jszip.min.js",
+        "exportacion/empaquetar.js",
+        "content-tucuman.js",
+        "content-tucuman-picker.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://mv.mpba.gov.ar/Web/Proceso/VerProceso*",
+        "https://mi.mpba.gov.ar/Web/Proceso/VerProceso*"
+      ],
+      "js": [
+        "lib/pdf.min.js",
+        "lib/tesseract.min.js",
+        "exportacion/nombres.js",
+        "exportacion/categorias.js",
+        "lib/download-ui.js",
+        "lib/jspdf.min.js",
+        "exportacion/texto-pdf.js",
+        "lib/jszip.min.js",
+        "exportacion/empaquetar.js",
+        "content-mpba.js",
+        "content-mpba-picker.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://www.legalmev.com.ar/extension-connect*",
+        "https://legalmev.com.ar/extension-connect*",
+        "https://caseclarity-hij0x.web.app/extension-connect*",
+        "https://caseclarity-hij0x.firebaseapp.com/extension-connect*",
+        "https://legalmev-staging--caseclarity-hij0x.us-east4.hosted.app/extension-connect*",
+        "http://localhost:3000/extension-connect*",
+        "http://localhost:9007/extension-connect*",
+        "http://localhost:9003/extension-connect*"
+      ],
+      "js": ["content-extension-connect.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

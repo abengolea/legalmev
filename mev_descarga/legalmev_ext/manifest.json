@@ -1,0 +1,239 @@
+{
+  "name": "LegalMev",
+  "description": "Exportá y monitoreá expedientes (MEV, PJN, MPBA, Salta, Entre Ríos, Tucumán). Alertas de novedades sin guardar PDFs.",
+  "version": "1.7.20",
+  "manifest_version": 3,
+  "background": {
+    "service_worker": "background.js"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_title": "LegalMev",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "downloads",
+    "storage",
+    "notifications",
+    "alarms",
+    "tabs"
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  },
+  "host_permissions": [
+    "https://mev.scba.gov.ar/*",
+    "https://docs.scba.gov.ar/*",
+    "https://scw.pjn.gov.ar/*",
+    "https://portalpjn.pjn.gov.ar/*",
+    "https://api.pjn.gov.ar/*",
+    "https://mv.mpba.gov.ar/*",
+    "https://mi.mpba.gov.ar/*",
+    "https://documentos.mpba.gov.ar/*",
+    "https://plataforma.justiciasalta.gov.ar/*",
+    "https://mesavirtual.jusentrerios.gov.ar/*",
+    "https://ol-sso.jusentrerios.gov.ar/*",
+    "https://consultaexpedientes.justucuman.gov.ar/*",
+    "https://conexpbe.justucuman.gov.ar/*",
+    "https://login.justucuman.gov.ar/*",
+    "https://*.justucuman.gov.ar/*",
+    "https://*/*",
+    "https://legalmev.com.ar/*",
+    "https://www.legalmev.com.ar/*",
+    "https://fonts.googleapis.com/*",
+    "https://fonts.gstatic.com/*"
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "lib/pdf.worker.min.js",
+        "lib/worker.min.js",
+        "lib/tesseract.min.js",
+        "lib/tesseract-core/tesseract-core-simd-lstm.wasm",
+        "lib/tesseract-core/tesseract-core-simd-lstm.js",
+        "lib/tesseract-core/tesseract-core-simd-lstm.wasm.js",
+        "lib/tesseract-lang/spa.traineddata.gz",
+        "onboarding/onboarding.html"
+      ],
+      "matches": [
+        "https://mev.scba.gov.ar/*",
+        "https://scw.pjn.gov.ar/*",
+        "https://portalpjn.pjn.gov.ar/*",
+        "https://plataforma.justiciasalta.gov.ar/*",
+        "https://mesavirtual.jusentrerios.gov.ar/*",
+        "https://consultaexpedientes.justucuman.gov.ar/*",
+        "https://mv.mpba.gov.ar/*",
+        "https://mi.mpba.gov.ar/*"
+      ]
+    }
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://mev.scba.gov.ar/procesales.asp*"],
+      "js": [
+        "lib/pdf.min.js",
+        "lib/pdf-lib.min.js",
+        "lib/tesseract.min.js",
+        "lib/pdf-ocr.js",
+        "lib/robust-fetch.js",
+        "exportacion/nombres.js",
+        "exportacion/categorias.js",
+        "lib/download-ui.js",
+        "lib/jspdf.min.js",
+        "exportacion/texto-pdf.js",
+        "exportacion/merge-pdfs.js",
+        "lib/jszip.min.js",
+        "exportacion/empaquetar.js",
+        "content.js",
+        "content-mev-picker.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://scw.pjn.gov.ar/scw/*",
+        "https://portalpjn.pjn.gov.ar/*"
+      ],
+      "js": [
+        "lib/pdf.min.js",
+        "lib/pdf-lib.min.js",
+        "lib/tesseract.min.js",
+        "lib/pdf-ocr.js",
+        "lib/robust-fetch.js",
+        "exportacion/nombres.js",
+        "exportacion/categorias.js",
+        "lib/download-ui.js",
+        "lib/jspdf.min.js",
+        "exportacion/texto-pdf.js",
+        "exportacion/merge-pdfs.js",
+        "lib/jszip.min.js",
+        "exportacion/empaquetar.js",
+        "content-pjn.js",
+        "content-pjn-picker.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://plataforma.justiciasalta.gov.ar/iol-ui/p/*"],
+      "js": [
+        "lib/pdf.min.js",
+        "lib/pdf-lib.min.js",
+        "lib/tesseract.min.js",
+        "lib/pdf-ocr.js",
+        "lib/robust-fetch.js",
+        "exportacion/nombres.js",
+        "exportacion/categorias.js",
+        "lib/download-ui.js",
+        "lib/jspdf.min.js",
+        "exportacion/texto-pdf.js",
+        "exportacion/merge-pdfs.js",
+        "lib/jszip.min.js",
+        "exportacion/empaquetar.js",
+        "content-salta.js",
+        "content-salta-picker.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://mesavirtual.jusentrerios.gov.ar/*"],
+      "js": ["page-hook-entrerios.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": ["https://mesavirtual.jusentrerios.gov.ar/*"],
+      "js": [
+        "lib/pdf.min.js",
+        "lib/pdf-lib.min.js",
+        "lib/tesseract.min.js",
+        "lib/pdf-ocr.js",
+        "exportacion/nombres.js",
+        "exportacion/categorias.js",
+        "lib/download-ui.js",
+        "lib/jspdf.min.js",
+        "exportacion/texto-pdf.js",
+        "exportacion/merge-pdfs.js",
+        "lib/jszip.min.js",
+        "exportacion/empaquetar.js",
+        "content-entrerios.js",
+        "content-entrerios-picker.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://consultaexpedientes.justucuman.gov.ar/*"],
+      "js": ["page-hook-tucuman.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": ["https://consultaexpedientes.justucuman.gov.ar/*"],
+      "js": [
+        "lib/pdf.min.js",
+        "lib/pdf-lib.min.js",
+        "lib/tesseract.min.js",
+        "lib/pdf-ocr.js",
+        "exportacion/nombres.js",
+        "exportacion/categorias.js",
+        "lib/download-ui.js",
+        "lib/jspdf.min.js",
+        "exportacion/texto-pdf.js",
+        "exportacion/merge-pdfs.js",
+        "lib/jszip.min.js",
+        "exportacion/empaquetar.js",
+        "content-tucuman.js",
+        "content-tucuman-picker.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://mv.mpba.gov.ar/Web/Proceso/VerProceso*",
+        "https://mi.mpba.gov.ar/Web/Proceso/VerProceso*"
+      ],
+      "js": [
+        "lib/pdf.min.js",
+        "lib/tesseract.min.js",
+        "lib/pdf-ocr.js",
+        "exportacion/nombres.js",
+        "exportacion/categorias.js",
+        "lib/download-ui.js",
+        "lib/jspdf.min.js",
+        "exportacion/texto-pdf.js",
+        "lib/jszip.min.js",
+        "exportacion/empaquetar.js",
+        "lib/taskQueue.js",
+        "lib/humanDelay.js",
+        "lib/riskDetector.js",
+        "lib/backoffController.js",
+        "lib/localCache.js",
+        "lib/logger.js",
+        "lib/scheduler.js",
+        "content-mpba.js",
+        "content-mpba-picker.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://legalmev.com.ar/extension-connect*",
+        "https://www.legalmev.com.ar/extension-connect*"
+      ],
+      "js": ["content-extension-connect.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

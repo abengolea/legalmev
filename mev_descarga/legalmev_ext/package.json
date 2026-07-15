@@ -1,0 +1,26 @@
+{
+  "name": "legalmev_ext",
+  "version": "1.6.1",
+  "description": "LegalMev Chrome extension — v1.6 picker ZIP/PDF + tipografía Inter/Poppins",
+  "main": "content-pjn.js",
+  "directories": {
+    "lib": "lib"
+  },
+  "scripts": {
+    "test": "node test/unit/acceptance.test.cjs",
+    "test:seguimiento": "node test/unit/acceptance.test.cjs",
+    "generate-icons": "node scripts/generate-icons.js",
+    "vendor:tesseract-core": "node scripts/vendor-tesseract-core.js",
+    "patch:tesseract-no-cdn": "node scripts/patch-tesseract-no-cdn.js",
+    "vendor:tesseract": "npm run vendor:tesseract-core && npm run patch:tesseract-no-cdn"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "pdfjs-dist": "^4.2.67",
+    "sharp": "^0.33.5",
+    "tesseract.js-core": "5.0.0"
+  }
+}

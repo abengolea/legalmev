@@ -1,0 +1,7 @@
+# Empaquetados y dependencias de build — no versionar
+*.zip
+**/node_modules/
+legalmev_ext2/
+LegalMev-1.*/
+mev_exporter_ext/
+legalmev_monitor/

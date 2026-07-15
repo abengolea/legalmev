@@ -1,0 +1,451 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <title>LegalMev</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      width: 360px;
+      margin: 0;
+      padding: 0;
+      background: #f4f8f9;
+      color: #1a3a42;
+      max-height: 560px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .state { display: none; padding: 14px 14px 12px; overflow: auto; max-height: 560px; }
+    .state.active { display: block; }
+    #state1.active { display: flex; flex-direction: column; padding: 0; max-height: 560px; overflow: hidden; }
+
+    .gestor-head {
+      background: #2A6A78; color: #fff; padding: 14px 14px 12px; flex-shrink: 0;
+    }
+    .gestor-head h1 { margin: 0; font-size: 15px; font-weight: 700; font-family: Poppins, Inter, sans-serif; }
+    .gestor-head .sub { margin: 4px 0 0; font-size: 11.5px; opacity: .88; }
+    .gestor-head .greeting-saludo { color: #c5e8ea; font-size: 12px; font-weight: 600; margin: 0 0 6px; }
+
+    .tab-banner {
+      display: none; margin: 10px 12px 0; padding: 10px 11px; background: #fff;
+      border: 1px solid #c5dce0; border-radius: 8px; font-size: 12px;
+    }
+    .tab-banner.show { display: block; }
+    .tab-banner strong { color: #2A6A78; display: block; margin-bottom: 2px; }
+    .tab-banner .tb-meta { color: #5a7a82; margin-bottom: 8px; font-size: 11.5px; line-height: 1.35; }
+    .tab-banner .tb-actions { display: flex; gap: 6px; }
+    .tab-banner button {
+      width: auto; flex: 1; padding: 8px 10px; font-size: 12px; border-radius: 7px;
+    }
+    .btn-teal { background: #2A6A78; color: #fff; border: 0; }
+    .btn-teal:hover { background: #54A6A8; }
+    .btn-outline {
+      background: #fff; color: #2A6A78; border: 1px solid #2A6A78 !important;
+    }
+
+    .gestor-toolbar {
+      display: flex; gap: 6px; padding: 8px 12px; flex-shrink: 0;
+      border-bottom: 1px solid #d4e4e7; background: #fff;
+    }
+    .gestor-toolbar button {
+      width: auto; flex: 1; padding: 8px; font-size: 11.5px; border-radius: 7px;
+      border: 1px solid #c5dce0; background: #fff; color: #2A6A78;
+    }
+    .gestor-toolbar button.primary { background: #2A6A78; color: #fff; border-color: #2A6A78; }
+
+    .gestor-summary {
+      padding: 8px 14px; font-size: 11.5px; color: #5a7a82; background: #eef5f6; flex-shrink: 0;
+    }
+    .gestor-summary strong { color: #2A6A78; }
+
+    .gestor-list {
+      flex: 1; overflow: auto; padding: 8px 12px 12px; min-height: 120px;
+    }
+    .portal-group { margin-bottom: 12px; }
+    .portal-group h2 {
+      margin: 0 0 6px; font-size: 11px; font-weight: 700; letter-spacing: .04em;
+      text-transform: uppercase; color: #54A6A8;
+    }
+    .causa-row {
+      background: #fff; border: 1px solid #d4e4e7; border-radius: 8px;
+      padding: 9px 10px; margin-bottom: 6px; cursor: pointer;
+      position: relative;
+    }
+    .causa-row:hover { border-color: #2A6A78; }
+    .causa-row .cr-top { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; }
+    .causa-row .cr-nro { font-weight: 700; font-size: 12.5px; color: #2A6A78; flex: 1; min-width: 0; }
+    .causa-row .cr-right { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+    .causa-row .cr-car { font-size: 11px; color: #5a7a82; margin-top: 2px; line-height: 1.3;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; padding-right: 28px; }
+    .causa-menu-btn {
+      width: 26px; height: 26px; border: none; background: transparent; color: #5a7a82;
+      border-radius: 6px; cursor: pointer; font-size: 16px; line-height: 1;
+      display: flex; align-items: center; justify-content: center; padding: 0;
+      letter-spacing: 0; font-weight: 700;
+    }
+    .causa-menu-btn:hover, .causa-row.menu-open .causa-menu-btn { background: #eef5f6; color: #2A6A78; }
+    .causa-menu {
+      display: none; position: absolute; top: 34px; right: 8px; z-index: 20;
+      min-width: 160px; background: #fff; border: 1px solid #c5dce0;
+      border-radius: 8px; box-shadow: 0 8px 24px rgba(26, 58, 66, .14);
+      padding: 4px; overflow: hidden;
+    }
+    .causa-row.menu-open .causa-menu { display: block; }
+    .causa-menu button {
+      display: block; width: 100%; text-align: left; border: none; background: transparent;
+      padding: 8px 10px; font-size: 12px; color: #1a3a42; border-radius: 6px; cursor: pointer;
+      font-weight: 500;
+    }
+    .causa-menu button:hover { background: #eef7f8; color: #2A6A78; }
+    .causa-menu button.danger { color: #b42318; }
+    .causa-menu button.danger:hover { background: #fef2f2; color: #912018; }
+    .badge-nov {
+      font-size: 10px; font-weight: 700; background: #fef3c7; color: #b45309;
+      padding: 2px 6px; border-radius: 4px; white-space: nowrap;
+    }
+    .badge-ok {
+      font-size: 10px; font-weight: 600; background: #e8f7ef; color: #1b7a4a;
+      padding: 2px 6px; border-radius: 4px; white-space: nowrap;
+    }
+    .badge-paused {
+      font-size: 10px; font-weight: 600; background: #eef2f4; color: #64748b;
+      padding: 2px 6px; border-radius: 4px;
+    }
+    .gestor-empty {
+      text-align: center; padding: 28px 16px; color: #5a7a82; font-size: 12.5px; line-height: 1.45;
+    }
+    .gestor-foot {
+      padding: 8px 12px 10px; border-top: 1px solid #d4e4e7; background: #fff; flex-shrink: 0;
+    }
+    .gestor-foot label { font-size: 11px; color: #5a7a82; display: flex; gap: 6px; align-items: center; }
+    .gestor-foot a, .gestor-foot button.linkish {
+      width: auto; background: none; border: 0; color: #2A6A78; font-size: 11.5px;
+      font-weight: 600; padding: 4px 0; text-decoration: underline; cursor: pointer;
+    }
+
+    .icon-wrap {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 12px;
+      font-size: 28px;
+    }
+    .icon-inactivo { background: #e2e8f0; color: #64748b; }
+    .icon-ok { background: #d1fae5; color: #057a55; }
+    .icon-error { background: #fee2e2; color: #dc2626; }
+    .icon-proceso { background: #dbeafe; color: #1a56db; }
+
+    .title { font-size: 14px; font-weight: 600; color: #1e293b; margin: 0 0 4px; }
+    .subtitle { font-size: 12px; color: #64748b; margin: 0 0 16px; }
+    .greeting-saludo {
+      font-size: 15px;
+      font-weight: 600;
+      color: #057a55;
+      margin: 0 0 8px;
+    }
+
+    .progress-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 12px 0;
+    }
+    .progress-bar {
+      flex: 1;
+      height: 6px;
+      background: #e2e8f0;
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .progress-bar.indeterminate .progress-fill {
+      width: 30% !important;
+      animation: progress-indeterminate 1.2s ease-in-out infinite;
+    }
+    @keyframes progress-indeterminate {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(400%); }
+    }
+    .progress-fill {
+      height: 100%;
+      background: #1a56db;
+      border-radius: 3px;
+      transition: width 0.2s;
+    }
+    .progress-pct {
+      font-size: 12px;
+      font-weight: 600;
+      color: #64748b;
+      min-width: 36px;
+      text-align: right;
+    }
+    .progress-subtitle { font-size: 11px; margin: 0 0 4px; }
+
+    button {
+      width: 100%;
+      border: 0;
+      border-radius: 8px;
+      padding: 12px 16px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .btn-primary {
+      background: #057a55;
+      color: white;
+    }
+    .btn-primary:hover { background: #047857; }
+    .btn-secondary {
+      background: #64748b;
+      color: white;
+    }
+    .btn-secondary:hover { background: #475569; }
+    button:disabled {
+      background: #94a3b8;
+      cursor: not-allowed;
+    }
+
+    .check-big { font-size: 48px; color: #057a55; margin: 8px 0; }
+
+    .export-options {
+      margin: 12px 0 16px;
+      padding: 10px 12px;
+      background: #f1f5f9;
+      border-radius: 8px;
+      font-size: 12px;
+    }
+    .radio-opt {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      margin-bottom: 8px;
+    }
+    .radio-opt:last-child { margin-bottom: 0; }
+    .radio-opt input[type="number"] {
+      width: 48px;
+      padding: 4px 6px;
+      border: 1px solid #cbd5e1;
+      border-radius: 4px;
+      font-size: 12px;
+    }
+    .radio-opt input[type="number"]:disabled {
+      background: #e2e8f0;
+      cursor: not-allowed;
+    }
+    .settings-block {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid #e2e8f0;
+      font-size: 11px;
+      color: #64748b;
+    }
+    .settings-block label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+    .greeting-user {
+      font-size: 16px;
+      font-weight: 700;
+      color: #057a55;
+      margin: 0 0 8px;
+      text-align: center;
+    }
+    .login-link {
+      font-size: 12px;
+      color: #057a55;
+      text-decoration: underline;
+      cursor: pointer;
+      margin-top: 8px;
+      display: inline-block;
+    }
+    .login-link:hover { color: #047857; }
+
+    .salta-guide {
+      margin: 0 0 12px;
+      padding: 12px;
+      background: linear-gradient(135deg, #e8f4f5 0%, #f0f9fa 100%);
+      border: 1px solid #54a6a8;
+      border-radius: 8px;
+      font-size: 12px;
+      color: #1e293b;
+      line-height: 1.45;
+    }
+    .salta-guide-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #2a6a78;
+      margin: 0 0 8px;
+    }
+    .salta-guide ol {
+      margin: 0;
+      padding-left: 18px;
+    }
+    .salta-guide li { margin-bottom: 6px; }
+    .salta-guide li:last-child { margin-bottom: 0; }
+    .salta-guide .open-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 18px;
+      height: 18px;
+      border: 1.5px solid #2a6a78;
+      border-radius: 3px;
+      font-size: 11px;
+      font-weight: 700;
+      vertical-align: middle;
+      margin: 0 2px;
+      color: #2a6a78;
+    }
+    .salta-guide-note {
+      margin: 8px 0 0;
+      font-size: 11px;
+      color: #64748b;
+    }
+  </style>
+</head>
+<body>
+  <!-- Estado 0: No autenticado -->
+  <div id="state0" class="state">
+    <div class="icon-wrap icon-inactivo">🔐</div>
+    <p class="title">No estás conectado</p>
+    <p class="subtitle">Para descargar expedientes desde MEV, PJN, MPBA, Salta, Entre Ríos o Tucumán, primero iniciá sesión en la web.</p>
+    <button id="connectBtn" class="btn-primary">Abrir legalmev.com.ar e iniciar sesión</button>
+  </div>
+
+  <!-- Estado 1: Gestor de causas (home al abrir la extensión) -->
+  <div id="state1" class="state active">
+    <div class="gestor-head">
+      <p class="greeting-saludo" id="greetingInactivo"></p>
+      <h1>Gestor de causas</h1>
+      <p class="sub">Causas que seguís · novedades por portal</p>
+    </div>
+
+    <div id="tabBanner" class="tab-banner">
+      <strong id="tabBannerTitle">Expediente en esta pestaña</strong>
+      <div class="tb-meta" id="tabBannerMeta"></div>
+      <div class="tb-actions">
+        <button type="button" class="btn-teal" id="tabExportBtn">Bajar en PDF</button>
+        <button type="button" class="btn-outline" id="tabFollowBtn">Seguir causa</button>
+      </div>
+    </div>
+
+    <div class="gestor-toolbar">
+      <button type="button" class="primary" id="gestorRefresh">Actualizar</button>
+      <button type="button" id="gestorScanAll">Escanear todas</button>
+      <button type="button" id="gestorOpenFull">Abrir panel</button>
+    </div>
+    <div class="gestor-summary" id="gestorSummary">Cargando…</div>
+    <div class="gestor-list" id="gestorList"></div>
+
+    <div id="saltaInstructivo" class="salta-guide" style="display:none; margin:0 12px 8px">
+      <p class="salta-guide-title" id="saltaGuideTitle">Salta — consulta pública</p>
+      <p id="saltaGuideIntro" style="margin:0 0 8px">En la lista hay muchas causas. LegalMev necesita que abras <strong>un solo expediente</strong>:</p>
+      <ol id="saltaGuideSteps">
+        <li>Elegí la causa que querés descargar en la lista.</li>
+        <li>Tocá el ícono <span class="open-icon" title="Abrir en ventana">↗</span> al lado de <em>EN TRÁMITE</em>.</li>
+        <li>En la ficha, abrí la pestaña <strong>Actuaciones</strong>.</li>
+        <li>Volvé a abrir LegalMev.</li>
+      </ol>
+      <p class="salta-guide-note" id="saltaGuideNote">Si ya abriste el expediente, recargá (F5).</p>
+    </div>
+    <div id="entreriosInstructivo" class="salta-guide" style="display:none; margin:0 12px 8px">
+      <p class="salta-guide-title">Entre Ríos — Mesa Virtual</p>
+      <p id="erGuideIntro" style="margin:0 0 8px">Abrí la ficha de <strong>un expediente</strong> (no el listado).</p>
+      <ol id="erGuideSteps">
+        <li>Iniciá sesión en Mesa Virtual Entre Ríos.</li>
+        <li>Entrá a un expediente (URL con <code>/expedientes/…</code>).</li>
+        <li>Volvé a abrir LegalMev.</li>
+      </ol>
+      <p class="salta-guide-note" id="erGuideNote">Requiere usuario judicial.</p>
+    </div>
+    <div id="tucumanInstructivo" class="salta-guide" style="display:none; margin:0 12px 8px">
+      <p class="salta-guide-title">Tucumán — Portal SAE</p>
+      <p id="tucGuideIntro" style="margin:0 0 8px">Elegí el centro y el fuero, abrí el expediente y entrá a <strong>Historia</strong>:</p>
+      <ol id="tucGuideSteps">
+        <li>Iniciá sesión en el Portal del SAE (CUIL).</li>
+        <li>En Consulta de Expedientes, elegí centro judicial y fuero.</li>
+        <li>Abrí la causa y andá a la página <strong>Historia</strong> (tabla de movimientos).</li>
+        <li>Volvé a abrir LegalMev.</li>
+      </ol>
+      <p class="salta-guide-note" id="tucGuideNote">Si ya estás en Historia, recargá (F5) con la extensión activa.</p>
+    </div>
+
+    <div class="gestor-foot" id="settingsBlock">
+      <p class="subtitle" style="font-size:10px;margin:0 0 6px" id="serverStatus"></p>
+      <p style="margin:0 0 6px"><button type="button" class="linkish" id="openMonitorBtn">Panel completo de seguimiento</button></p>
+      <label>
+        <input type="checkbox" id="closeTabAfterConnect" />
+        <span>Cerrar pestaña al conectar cuenta</span>
+      </label>
+    </div>
+  </div>
+
+  <!-- Estado 2: Expediente detectado / exportar -->
+  <div id="state2" class="state">
+    <button type="button" class="btn-secondary" id="backToGestor" style="margin-bottom:10px;background:#e8f1f2;color:#2A6A78">← Volver al gestor</button>
+    <div class="icon-wrap icon-ok">✓</div>
+    <p class="greeting-saludo" id="greetingDetectado"></p>
+    <p class="title" id="expedienteName">Expediente</p>
+    <p class="subtitle" id="actuacionesCount">0 actuaciones encontradas</p>
+    <p class="subtitle" style="font-size:10px" id="serverStatus2"></p>
+    <div class="export-options">
+      <label class="radio-opt">
+        <input type="radio" name="exportScope" value="all" checked />
+        <span>Todo el expediente</span>
+      </label>
+      <label class="radio-opt">
+        <input type="radio" name="exportScope" value="last" />
+        <span>Últimos</span>
+        <input type="number" id="ultimosN" min="1" value="10" placeholder="10" disabled />
+        <span>movimientos</span>
+      </label>
+    </div>
+    <button id="exportBtn" class="btn-primary">Bajar en PDF</button>
+    <div id="settingsBlock2" class="settings-block">
+      <button type="button" id="followFromExport" class="btn-secondary" style="width:100%;margin-bottom:8px;background:#2A6A78">Seguir esta causa</button>
+      <label>
+        <input type="checkbox" id="closeTabAfterConnect2" />
+        <span>Cerrar pestaña automáticamente al conectar cuenta</span>
+      </label>
+    </div>
+  </div>
+
+  <!-- Estado 3: Procesando -->
+  <div id="state3" class="state">
+    <div class="icon-wrap icon-proceso">⋯</div>
+    <p class="title" id="progressText">Procesando actuación 1 de 12...</p>
+    <p class="subtitle" id="progressSubtext" style="margin-top:0; margin-bottom:4px"></p>
+    <p class="subtitle progress-time-hint" id="progressTimeHint" style="font-size:10px; color:#64748b; margin:0 0 8px"></p>
+    <div class="progress-row">
+      <div class="progress-bar" id="progressBar">
+        <div id="progressFill" class="progress-fill" style="width: 0%"></div>
+      </div>
+      <span id="progressPct" class="progress-pct">0%</span>
+    </div>
+    <button id="cancelBtn" class="btn-secondary">Cancelar</button>
+    <p class="subtitle" style="font-size:10px; margin-top:8px; color:#94a3b8">Podés cerrar esta ventana; el proceso sigue en segundo plano. El progreso se ve en el ícono (ej. 45/151) y recibís una notificación al terminar.</p>
+  </div>
+
+  <!-- Estado 4: Completado -->
+  <div id="state4" class="state">
+    <div class="check-big">✅</div>
+    <p class="title" id="completedText">PDF generado — 34 páginas</p>
+    <button id="downloadOtherBtn" class="btn-primary">Descargar otro</button>
+  </div>
+
+  <!-- Estado 5: Error -->
+  <div id="state5" class="state">
+    <div class="icon-wrap icon-error">✕</div>
+    <p class="title" id="errorText">Ocurrió un error</p>
+    <button id="retryBtn" class="btn-primary">Reintentar</button>
+  </div>
+
+  <script src="lib/sessionManager.js"></script>
+  <script src="lib/humanizeError.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>LegalMev — Monitoreo</title>
+  <style>
+    :root {
+      --teal: #2A6A78;
+      --teal2: #54A6A8;
+      --bg: #f4f8f9;
+      --text: #1a3a42;
+      --muted: #5a7a82;
+      --line: #d4e4e7;
+      --warn: #b45309;
+      --ok: #1b7a4a;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; font-family: Inter, system-ui, sans-serif; background: var(--bg); color: var(--text);
+      min-height: 100vh;
+    }
+    header {
+      background: var(--teal); color: #fff; padding: 18px 20px;
+    }
+    header h1 { margin: 0; font-size: 18px; font-weight: 700; }
+    header p { margin: 6px 0 0; opacity: .85; font-size: 13px; }
+    .toolbar {
+      display: flex; flex-wrap: wrap; gap: 8px; padding: 14px 20px; background: #fff; border-bottom: 1px solid var(--line);
+    }
+    button {
+      border: 1px solid var(--line); background: #fff; color: var(--teal);
+      border-radius: 8px; padding: 8px 12px; font-weight: 600; font-size: 13px; cursor: pointer;
+    }
+    button.primary { background: var(--teal); color: #fff; border-color: var(--teal); }
+    button:disabled { opacity: .5; cursor: wait; }
+    main { padding: 16px 20px 40px; max-width: 920px; margin: 0 auto; }
+    .summary {
+      background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin-bottom: 16px;
+      font-size: 13px; color: var(--muted);
+    }
+    .summary strong { color: var(--teal); }
+    .case {
+      background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 14px; margin-bottom: 12px;
+    }
+    .case-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
+    .case-title { font-weight: 700; color: var(--teal); font-size: 15px; margin: 0; }
+    .badge {
+      font-size: 11px; font-weight: 700; letter-spacing: .04em; padding: 3px 8px; border-radius: 4px;
+    }
+    .badge.nov { background: #fef3c7; color: var(--warn); }
+    .badge.ok { background: #e8f7ef; color: var(--ok); }
+    .badge.paused { background: #eef2f4; color: var(--muted); }
+    .meta { font-size: 12px; color: var(--muted); margin: 8px 0; line-height: 1.45; }
+    .actions { display: flex; flex-wrap: wrap; gap: 6px; }
+    .alerts { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 10px; }
+    .alert {
+      font-size: 12.5px; padding: 8px 0; border-bottom: 1px solid #eef3f4;
+      display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: start;
+    }
+    .alert.unread .desc { font-weight: 600; }
+    .alert .desc { color: var(--text); }
+    .empty { text-align: center; padding: 48px 16px; color: var(--muted); }
+    .status-line { font-size: 12px; color: var(--muted); padding: 0 20px 12px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>LegalMev · Monitoreo de causas</h1>
+    <p>Solo metadatos y alertas. No se guardan PDFs ni el expediente completo.</p>
+  </header>
+  <div class="toolbar">
+    <button type="button" class="primary" id="btnRefresh">Actualizar</button>
+    <button type="button" id="btnScanAll">Escanear todas ahora</button>
+    <button type="button" id="btnMarkAll">Marcar todo leído</button>
+  </div>
+  <p class="status-line" id="status">Cargando…</p>
+  <main>
+    <div class="summary" id="summary"></div>
+    <div id="list"></div>
+  </main>
+  <script src="panel.js"></script>
+</body>
+</html>

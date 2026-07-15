@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <title>LegalMev — test seguimiento</title>
+</head>
+<body>
+  <h1>Seguimiento LegalMev</h1>
+  <p>Abrí la consola. Preferí: <code>node test/unit/acceptance.test.cjs</code></p>
+  <script src="../seguimiento/errores.js"></script>
+  <script src="../seguimiento/idempotencia.js"></script>
+  <script src="../seguimiento/comparar.js"></script>
+  <script src="../seguimiento/repositorio.js"></script>
+  <script src="../seguimiento/motor.js"></script>
+  <script src="../portales/adaptador-mock.js"></script>
+  <script>
+    (async () => {
+      const repo = LegalMevSegRepositorio.create(LegalMevSegRepositorio.createMemoryDriver());
+      LegalMevSegAdaptadorMock.setSecuencia([
+        [{ id: '1', fecha: '1', tipo: 'A', descripcion: 'x' }],
+        [{ id: '1', fecha: '1', tipo: 'A', descripcion: 'x' }, { id: '2', fecha: '2', tipo: 'B', descripcion: 'y' }],
+      ]);
+      const motor = LegalMevSegMotor.create({
+        repositorio: repo,
+        obtenerMovimientos: LegalMevSegAdaptadorMock.obtenerMovimientos,
+      });
+      const ref = await motor.registrar({ portal: 'MEV', nroExpediente: 'T', url: 'https://x' });
+      console.log('baseline', await motor.escanear(ref.id));
+      console.log('novedad', await motor.escanear(ref.id));
+      console.log('OK seguimiento browser smoke');
+    })();
+  </script>
+</body>
+</html>
