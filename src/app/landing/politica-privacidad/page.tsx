@@ -3,9 +3,9 @@ import { Button } from '@/components/ui/button';
 import { CONTACT_EMAIL, CONTACT_MAILTO } from '@/lib/site-contact';
 
 export const metadata = {
-  title: 'Política de Privacidad – LegalMEV',
+  title: 'Política de Privacidad – LegalMev',
   description:
-    'Política de Privacidad de la extensión LegalMEV. Cómo tratamos la información cuando utilizás esta herramienta.',
+    'Política de Privacidad de la extensión LegalMev. Cómo tratamos la información cuando utilizás esta herramienta.',
 };
 
 export default function PoliticaPrivacidadPage() {
@@ -21,24 +21,26 @@ export default function PoliticaPrivacidadPage() {
 
       <header className="mb-12">
         <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-foreground">
-          Política de Privacidad – LegalMEV
+          Política de Privacidad – LegalMev
         </h1>
         <p className="mt-2 text-muted-foreground">
-          <strong>Última actualización:</strong> 2026
+          <strong>Última actualización:</strong> 15 de julio de 2026
         </p>
       </header>
 
       <div className="prose prose-slate dark:prose-invert max-w-none space-y-8 text-foreground">
         <p className="text-muted-foreground leading-relaxed">
           La presente Política de Privacidad describe cómo funciona la extensión{' '}
-          <strong>LegalMEV</strong> y el tratamiento de la información cuando los usuarios
-          utilizan esta herramienta.
+          <strong>LegalMev</strong> para navegador y el tratamiento de la información cuando
+          los usuarios la utilizan. Se refiere únicamente a la extensión (no al sitio web ni a
+          otros productos de LegalMev, salvo la conexión de cuenta necesaria para usar la
+          extensión).
         </p>
 
         <section>
           <h2 className="text-xl font-semibold mt-10 mb-4">1. Responsable</h2>
           <p className="text-muted-foreground leading-relaxed">
-            La extensión LegalMEV es desarrollada y mantenida por:
+            La extensión LegalMev es desarrollada y mantenida por:
           </p>
           <address className="not-italic mt-4 p-4 rounded-lg bg-muted/50 border border-border">
             <strong>NOTIFICAS SRL</strong>
@@ -60,118 +62,125 @@ export default function PoliticaPrivacidadPage() {
         <section>
           <h2 className="text-xl font-semibold mt-10 mb-4">2. Finalidad de la extensión</h2>
           <p className="text-muted-foreground leading-relaxed">
-            LegalMEV es una herramienta destinada a facilitar a los profesionales del derecho la{' '}
-            <strong>exportación de actuaciones de expedientes judiciales a archivos PDF</strong>{' '}
-            desde portales judiciales oficiales.
+            LegalMev es una herramienta de asistencia para profesionales del derecho que
+            facilita la <strong>exportación de actuaciones de un expediente judicial a un
+            archivo PDF (o ZIP, según el caso)</strong> desde portales judiciales oficiales
+            abiertos en el navegador.
           </p>
           <p className="text-muted-foreground leading-relaxed mt-4">
-            La extensión funciona en los portales judiciales compatibles. En MEV SCBA, PJN y MPBA
-            el usuario debe estar autenticado en el portal correspondiente. En Salta no hace falta
-            login judicial.
+            La extensión interactúa únicamente con los portales judiciales compatibles y con
+            el dominio de LegalMev necesario para la cuenta del usuario. Los portales
+            compatibles son:
           </p>
           <ul className="list-disc pl-6 mt-4 space-y-2 text-muted-foreground">
             <li>MEV SCBA (Provincia de Buenos Aires)</li>
-            <li>Portal del Poder Judicial de la Nación</li>
-            <li>
-              Portal del Ministerio Público de la Provincia de Buenos Aires (MPBA)
-            </li>
-            <li>Salta (sin login judicial)</li>
+            <li>PJN – Poder Judicial de la Nación</li>
+            <li>Mesa Virtual MPBA</li>
+            <li>Poder Judicial de Salta</li>
+            <li>Mesa Virtual de Entre Ríos</li>
+            <li>Portal SAE de Tucumán</li>
           </ul>
           <p className="text-muted-foreground leading-relaxed mt-4">
-            La extensión actúa como herramienta de asistencia dentro de la sesión del usuario en
-            dichos portales o, en Salta, con el portal abierto en el navegador.
+            En la mayoría de esos portales, la exportación requiere que el usuario ya tenga
+            sesión iniciada en el portal correspondiente. En Salta, la consulta pública puede
+            no requerir login judicial. LegalMev no modifica el funcionamiento de los sistemas
+            judiciales ni evita sus mecanismos de autenticación.
           </p>
         </section>
 
         <section>
-          <h2 className="text-xl font-semibold mt-10 mb-4">3. Datos que recopila la extensión</h2>
-          <p className="text-muted-foreground leading-relaxed font-medium">
-            LegalMEV no recopila, almacena ni transmite datos personales de los usuarios.
+          <h2 className="text-xl font-semibold mt-10 mb-4">3. Cuenta LegalMev</h2>
+          <p className="text-muted-foreground leading-relaxed">
+            Para usar la extensión es necesario vincular una cuenta de LegalMev. Al conectar la
+            cuenta, la extensión almacena de forma local en el navegador un{' '}
+            <strong>token de sesión</strong> y, en su caso, un identificador de dispositivo, el
+            nombre para mostrar y la URL base del servicio.
           </p>
           <p className="text-muted-foreground leading-relaxed mt-4">
-            La extensión:
+            Con esos datos, la extensión se comunica con los servidores de LegalMev
+            (legalmev.com.ar) para validar la sesión y el estado del servicio. Eso no incluye
+            el envío del contenido del expediente al servidor en el flujo habitual de
+            exportación descrito más abajo.
           </p>
-          <ul className="list-disc pl-6 mt-4 space-y-2 text-muted-foreground">
-            <li>no solicita información personal</li>
-            <li>no recopila credenciales</li>
-            <li>no registra actividad del usuario</li>
-            <li>no transmite información a servidores externos</li>
-          </ul>
+        </section>
+
+        <section>
+          <h2 className="text-xl font-semibold mt-10 mb-4">4. Datos del expediente</h2>
+          <p className="text-muted-foreground leading-relaxed">
+            Cuando el usuario solicita una exportación, la extensión lee la información del
+            expediente que <strong>ya está visible o accesible en la pestaña abierta</strong>{' '}
+            (actuaciones, documentos vinculados, metadatos como carátula o número) y genera el
+            archivo en el propio navegador del usuario.
+          </p>
           <p className="text-muted-foreground leading-relaxed mt-4">
-            Toda la información procesada corresponde únicamente al{' '}
-            <strong>contenido visible en la página web que el usuario está consultando</strong>,
-            y se utiliza exclusivamente para generar el archivo PDF solicitado por el propio
-            usuario.
+            En el flujo vigente de exportación, el PDF/ZIP se arma{' '}
+            <strong>de manera local en el dispositivo</strong> y se descarga con las funciones
+            del navegador. NOTIFICAS SRL no recibe ni almacena esos archivos a través de ese
+            flujo.
+          </p>
+          <p className="text-muted-foreground leading-relaxed mt-4">
+            La extensión no está pensada para recopilar datos de navegación ajenos a esa
+            función ni para acceder a sitios distintos de los portales listados y de LegalMev.
           </p>
         </section>
 
         <section>
           <h2 className="text-xl font-semibold mt-10 mb-4">
-            4. Procesamiento local de la información
+            5. Credenciales de portales judiciales
           </h2>
           <p className="text-muted-foreground leading-relaxed">
-            El procesamiento de la información se realiza{' '}
-            <strong>exclusivamente de manera local en el navegador del usuario</strong>.
+            Si el usuario decide guardar credenciales de acceso a un portal judicial en la
+            extensión, esas claves se almacenan{' '}
+            <strong>únicamente de forma local en el navegador</strong> (almacenamiento de la
+            extensión) y se usan solo para asistir el inicio de sesión en ese portal, cuando
+            esa función está disponible.
           </p>
           <p className="text-muted-foreground leading-relaxed mt-4">
-            Esto significa que:
-          </p>
-          <ul className="list-disc pl-6 mt-4 space-y-2 text-muted-foreground">
-            <li>los datos del expediente permanecen en el dispositivo del usuario</li>
-            <li>la extensión no envía información a servidores externos</li>
-            <li>
-              la generación del archivo PDF ocurre únicamente dentro del navegador
-            </li>
-          </ul>
-        </section>
-
-        <section>
-          <h2 className="text-xl font-semibold mt-10 mb-4">5. Descarga de archivos</h2>
-          <p className="text-muted-foreground leading-relaxed">
-            Cuando el usuario solicita exportar un expediente, la extensión genera un archivo
-            PDF que es descargado directamente en el dispositivo del usuario mediante las
-            funciones de descarga del navegador.
-          </p>
-          <p className="text-muted-foreground leading-relaxed mt-4">
-            La empresa desarrolladora no tiene acceso a dichos archivos.
+            LegalMev <strong>no envía</strong> esas credenciales judiciales a los servidores
+            de LegalMev ni a terceros. El guardado es opcional y bajo control del usuario.
           </p>
         </section>
 
         <section>
           <h2 className="text-xl font-semibold mt-10 mb-4">6. Uso de permisos del navegador</h2>
           <p className="text-muted-foreground leading-relaxed">
-            La extensión utiliza determinados permisos del navegador únicamente para:
+            La extensión solicita permisos del navegador únicamente en la medida necesaria
+            para:
           </p>
           <ul className="list-disc pl-6 mt-4 space-y-2 text-muted-foreground">
-            <li>acceder a las páginas de los portales judiciales compatibles</li>
-            <li>leer la información visible del expediente que el usuario está consultando</li>
-            <li>generar el archivo PDF solicitado</li>
-            <li>descargar el archivo en el dispositivo del usuario</li>
-            <li>almacenar configuraciones locales de la extensión</li>
+            <li>actuar en las páginas de los portales judiciales compatibles;</li>
+            <li>leer la información del expediente abierto por el usuario;</li>
+            <li>generar y descargar el PDF/ZIP solicitado;</li>
+            <li>guardar de forma local preferencias, token de cuenta LegalMev y, si aplica, credenciales de portal;</li>
+            <li>comunicarse con pestañas del navegador relacionadas con esa funcionalidad;</li>
+            <li>mostrar avisos del navegador vinculados al resultado de operaciones de la extensión.</li>
           </ul>
           <p className="text-muted-foreground leading-relaxed mt-4">
-            Estos permisos se utilizan exclusivamente para el funcionamiento de la herramienta
-            y no para recopilar información de los usuarios.
+            Estos permisos no se utilizan para seguimiento publicitario ni para analítica de
+            terceros.
           </p>
         </section>
 
         <section>
-          <h2 className="text-xl font-semibold mt-10 mb-4">7. Transferencia de datos</h2>
+          <h2 className="text-xl font-semibold mt-10 mb-4">7. Transferencia y terceros</h2>
           <p className="text-muted-foreground leading-relaxed font-medium">
-            LegalMEV no vende, alquila ni transfiere datos de usuarios a terceros.
+            LegalMev no vende ni alquila datos de usuarios a terceros.
           </p>
           <p className="text-muted-foreground leading-relaxed mt-4">
-            Dado que la extensión no recopila datos personales ni envía información a
-            servidores externos, no existe transferencia de datos.
+            La comunicación con servidores se limita a LegalMev (cuenta / sesión / estado del
+            servicio), según se describe en esta política. No utilizamos herramientas de
+            analítica de terceros dentro de la extensión.
           </p>
         </section>
 
         <section>
           <h2 className="text-xl font-semibold mt-10 mb-4">8. Seguridad</h2>
           <p className="text-muted-foreground leading-relaxed">
-            LegalMEV está diseñada para funcionar dentro del entorno seguro del navegador del
-            usuario. Todo el procesamiento de la información se realiza localmente, lo que
-            reduce riesgos asociados a la transmisión de datos.
+            El procesamiento del expediente en el flujo de exportación vigente ocurre en el
+            navegador del usuario. El token de cuenta LegalMev y eventuales credenciales de
+            portal quedan sujetos a las protecciones del almacenamiento de extensiones del
+            navegador y al control físico del dispositivo. Recomendamos no compartir el equipo
+            ni la sesión del navegador con terceros no autorizados.
           </p>
         </section>
 
@@ -181,11 +190,11 @@ export default function PoliticaPrivacidadPage() {
           </h2>
           <p className="text-muted-foreground leading-relaxed">
             NOTIFICAS SRL podrá actualizar esta Política de Privacidad cuando resulte
-            necesario para reflejar mejoras de la extensión o cambios normativos.
+            necesario para reflejar cambios reales en la extensión o exigencias normativas.
           </p>
           <p className="text-muted-foreground leading-relaxed mt-4">
-            Las actualizaciones se publicarán junto con la extensión y entrarán en vigencia
-            desde su publicación.
+            Las actualizaciones se publicarán en esta página e indicarán la fecha de última
+            modificación.
           </p>
         </section>
 

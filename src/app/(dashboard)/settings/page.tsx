@@ -370,7 +370,13 @@ function JudicialIntegrationsForm() {
 export default function SettingsPage() {
   const [webhookUrl, setWebhookUrl] = useState('');
   const searchParams = useSearchParams();
-  const defaultTab = searchParams.get('tab') || 'profile';
+  /** Monitoreo / mesas cloud ocultos por ahora. */
+  const SHOW_MONITORING_SETTINGS = false;
+  const rawTab = searchParams.get('tab') || 'profile';
+  const defaultTab =
+    !SHOW_MONITORING_SETTINGS && (rawTab === 'integrations' || rawTab === 'filters')
+      ? 'profile'
+      : rawTab;
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -383,14 +389,18 @@ export default function SettingsPage() {
     <div className="flex flex-col gap-8">
       <div>
         <h1 className="text-3xl font-bold font-headline">Configuración</h1>
-        <p className="text-muted-foreground">Gestiona tu cuenta, integraciones y filtros de casos.</p>
+        <p className="text-muted-foreground">Gestiona tu cuenta e integraciones.</p>
       </div>
       <Tabs defaultValue={defaultTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className={`grid w-full ${SHOW_MONITORING_SETTINGS ? 'grid-cols-4' : 'grid-cols-2'}`}>
           <TabsTrigger value="profile">Perfil</TabsTrigger>
           <TabsTrigger value="whatsapp">WhatsApp</TabsTrigger>
-          <TabsTrigger value="integrations">Integraciones Judiciales</TabsTrigger>
-          <TabsTrigger value="filters">Filtros de Casos</TabsTrigger>
+          {SHOW_MONITORING_SETTINGS && (
+            <TabsTrigger value="integrations">Integraciones Judiciales</TabsTrigger>
+          )}
+          {SHOW_MONITORING_SETTINGS && (
+            <TabsTrigger value="filters">Filtros de Casos</TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="profile">
@@ -435,13 +445,15 @@ export default function SettingsPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="integrations">
+        {SHOW_MONITORING_SETTINGS && (
+          <TabsContent value="integrations">
             <Card>
                 <JudicialIntegrationsForm />
             </Card>
-        </TabsContent>
+          </TabsContent>
+        )}
 
-
+        {SHOW_MONITORING_SETTINGS && (
         <TabsContent value="filters">
           <Card>
             <CardHeader>
@@ -474,6 +486,7 @@ export default function SettingsPage() {
             </CardFooter>
           </Card>
         </TabsContent>
+        )}
       </Tabs>
     </div>
   );
