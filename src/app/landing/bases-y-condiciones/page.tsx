@@ -1,12 +1,15 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { CONTACT_EMAIL, CONTACT_MAILTO } from '@/lib/site-contact';
+import { buildPageMetadata } from '@/lib/seo';
 
-export const metadata = {
-  title: 'Bases y Condiciones – LegalMEV',
+export const metadata: Metadata = buildPageMetadata({
+  title: 'Bases y Condiciones',
   description:
-    'Bases y Condiciones de uso del servicio LegalMEV: sitio web, extensión Chrome y planes de suscripción.',
-};
+    'Bases y Condiciones de uso de LegalMev: sitio web, extensión Chrome para exportar expedientes a PDF y servicios con IA.',
+  path: '/landing/bases-y-condiciones',
+});
 
 function LegalContactAddress({
   label = 'Correo electrónico de contacto',

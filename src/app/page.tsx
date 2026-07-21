@@ -1,5 +1,6 @@
-import { redirect } from 'next/navigation';
+import { permanentRedirect } from 'next/navigation';
 
+/** La home canónica de marketing es /landing (SEO + sitemap). */
 export default function RootPage() {
-  redirect('/landing');
+  permanentRedirect('/landing');
 }

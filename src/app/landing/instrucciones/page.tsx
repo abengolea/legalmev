@@ -108,7 +108,7 @@ const faqs = [
   },
   {
     q: '¿En qué portales funciona LegalMev?',
-    a: 'Funciona en MEV SCBA (Provincia de Buenos Aires), Portal del Poder Judicial de la Nación (PJN), Ministerio Público de la Provincia de Buenos Aires (MPBA) y Salta. En MEV, PJN y MPBA tenés que estar logueado en el portal y con el expediente abierto. En Salta no hace falta login judicial: seguí los pasos de la sección Salta más abajo.',
+    a: 'Funciona en MEV SCBA (Provincia de Buenos Aires), Portal del Poder Judicial de la Nación (PJN), Ministerio Público de la Provincia de Buenos Aires (MPBA), Poder Judicial de Salta, Mesa Virtual de Entre Ríos y Portal SAE de Tucumán. En la mayoría de los portales tenés que estar logueado y con el expediente abierto. En Salta no hace falta login judicial: seguí los pasos de la sección Salta más abajo.',
   },
   {
     q: '¿Cómo exporto un expediente de Salta si aparecen muchas causas en la lista?',

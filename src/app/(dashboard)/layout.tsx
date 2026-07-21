@@ -1,5 +1,6 @@
 import { Inter } from 'next/font/google';
 import type { CSSProperties } from 'react';
+import type { Metadata } from 'next';
 import { DashboardNav } from '@/components/DashboardNav';
 import { DashboardAuthGuard } from '@/components/DashboardAuthGuard';
 import { ColegioResponsableGuard } from '@/components/ColegioResponsableGuard';
@@ -9,6 +10,10 @@ import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
 import { DashboardChromeBar } from '@/components/DashboardChromeBar';
 
 const inter = Inter({ subsets: ['latin'], display: 'swap' });
+
+export const metadata: Metadata = {
+  robots: { index: false, follow: false },
+};
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (

@@ -1,12 +1,15 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { CONTACT_EMAIL, CONTACT_MAILTO } from '@/lib/site-contact';
+import { buildPageMetadata } from '@/lib/seo';
 
-export const metadata = {
-  title: 'Política de Privacidad – LegalMev',
+export const metadata: Metadata = buildPageMetadata({
+  title: 'Política de Privacidad',
   description:
-    'Política de Privacidad de la extensión LegalMev. Cómo tratamos la información cuando utilizás esta herramienta.',
-};
+    'Política de Privacidad de LegalMev y su extensión Chrome. Cómo tratamos la información al exportar expedientes judiciales a PDF.',
+  path: '/landing/politica-privacidad',
+});
 
 export default function PoliticaPrivacidadPage() {
   return (

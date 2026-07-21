@@ -2,8 +2,7 @@
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { FileDown, Check, Zap, Mail, Gavel, Sparkles, FileSearch } from 'lucide-react';
-import Image from 'next/image';
+import { FileDown, Check, Zap, Gavel, Sparkles, FileSearch } from 'lucide-react';
 import Link from 'next/link';
 import {
   SUPPORTED_PORTAL_ITEMS,
@@ -65,15 +64,30 @@ export default function LandingPage() {
               </Link>
             </p>
           </div>
-          <div className="relative z-10">
-            <div className="rounded-xl border border-[#2A6A78]/40 bg-[#1e4a55]/50 p-2 shadow-2xl shadow-[#2A6A78]/10">
-              <Image
-                src="https://picsum.photos/800/500?random=1"
-                width={800}
-                height={500}
-                alt="Interfaz de exportación de expedientes"
-                className="rounded-lg object-cover"
-              />
+          <div className="relative z-10 w-full max-w-lg">
+            <div
+              className="rounded-xl border border-[#2A6A78]/40 bg-[#1e4a55]/50 p-6 shadow-2xl shadow-[#2A6A78]/10"
+              role="img"
+              aria-label="LegalMev: exportación de expedientes judiciales a PDF desde MEV, PJN, MPBA, Salta, Entre Ríos y Tucumán"
+            >
+              <p className="text-xs uppercase tracking-wider text-[#7ec8ca]/80 mb-3">
+                Extensión Chrome · PDF judicial
+              </p>
+              <p className="text-2xl font-bold text-slate-100 mb-2">Expediente → PDF</p>
+              <p className="text-sm text-slate-300 leading-relaxed mb-6">
+                Un clic desde el portal oficial. Descargas ilimitadas para el estudio.
+              </p>
+              <ul className="space-y-2 text-sm text-slate-200">
+                {SUPPORTED_PORTAL_ITEMS.map((portal) => (
+                  <li key={portal.id} className="flex items-center gap-2">
+                    <Check className="h-4 w-4 text-[#54A6A8] shrink-0" />
+                    <span>
+                      {portal.name}
+                      <span className="text-slate-400"> — {portal.detail}</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
               <div className="absolute -bottom-4 -right-4 rounded-lg bg-[#2A6A78] px-4 py-2 text-sm font-medium text-white shadow-lg">
                 ✓ PDF listo en segundos
               </div>
@@ -194,13 +208,6 @@ export default function LandingPage() {
                 <CardTitle className="text-lg font-headline">{portal.name}</CardTitle>
                 <p className="text-sm text-muted-foreground">{portal.detail}</p>
               </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground">
-                  {portal.requiresJudicialLogin
-                    ? 'Requiere login en el portal judicial'
-                    : portal.note ?? 'Sin login judicial'}
-                </p>
-              </CardContent>
             </Card>
           ))}
         </div>
@@ -289,7 +296,7 @@ export default function LandingPage() {
               </div>
               <h3 className="font-semibold text-slate-100 text-lg">Exportá a PDF</h3>
               <p className="text-base text-slate-300 leading-relaxed max-w-xs mx-auto">
-                Entrá a MEV, PJN, MPBA o Salta, abrí un expediente y descargalo con un clic.
+                Entrá a MEV, PJN, MPBA, Salta, Entre Ríos o Tucumán, abrí un expediente y descargalo con un clic.
               </p>
             </div>
           </div>
