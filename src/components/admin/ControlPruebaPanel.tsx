@@ -49,10 +49,12 @@ import {
   countByEstado,
   defaultEstadoForItem,
   defaultTipoForCategoria,
+  esPruebaOfrecida,
   ESTADO_CONFIG,
   GRUPOS_PRUEBA,
   inferCategoriaFromTipo,
   itemsOfrecidasProduccion,
+  completarArbolFiltroEstado,
   pasaFiltroEstadoProduccion,
   resolveCategoria,
   sistemaLabel,
@@ -69,7 +71,6 @@ import {
   itemPasaFiltroTipo,
   opcionesFiltroTipoExpediente,
 } from '@/lib/control-prueba-filtros';
-import { resumenParaParteRepresentada } from '@/lib/control-prueba-resumen';
 import {
   TERCERO_SIN_IDENTIFICAR,
   agruparItemsPorTercero,
@@ -569,25 +570,14 @@ export function ControlPruebaPanel() {
     if (filtroParte !== 'all') list = list.filter((item) => (item.ofrecidaPor ?? 'actor') === filtroParte);
     if (estadoFilter !== 'all') {
       list = list.filter((item) => pasaFiltroEstadoProduccion(item, estadoFilter));
-      // Traer padres de cédulas/oficios visibles (audiencia/confesional) para que no queden huérfanos
-      if (estadoFilter === 'pendiente_produccion') {
-        const visibles = new Set(list.map((i) => i.id));
-        const parentIds = new Set<string>();
-        for (const item of list) {
-          const padreId = item.vinculo?.parentItemId ?? item.diligencia?.pruebaVinculadaId;
-          if (padreId) parentIds.add(padreId);
-        }
-        if (parentIds.size > 0) {
-          const extra = draftItems.filter((item) => parentIds.has(item.id) && !visibles.has(item.id));
-          if (extra.length) list = [...list, ...extra];
-        }
-      }
+      // Padres de cédulas/oficios + hijos de las pruebas del filtro (oficios, cédulas, audiencias).
+      list = completarArbolFiltroEstado(list, draftItems, estadoFilter);
     }
     return list;
   }, [draftItems, filtroTipo, filtroParte, busquedaItem, estadoFilter]);
 
   const pruebaItems = useMemo(
-    () => baseFilteredItems.filter((i) => resolveCategoria(i) === 'prueba'),
+    () => baseFilteredItems.filter((i) => esPruebaOfrecida(i)),
     [baseFilteredItems],
   );
 
@@ -597,7 +587,10 @@ export function ControlPruebaPanel() {
   );
 
   const itemsAudiencia = useMemo(
-    () => baseFilteredItems.filter((i) => resolveCategoria(i) === 'audiencia'),
+    () =>
+      baseFilteredItems.filter(
+        (i) => resolveCategoria(i) === 'audiencia' && !esPruebaOfrecida(i),
+      ),
     [baseFilteredItems],
   );
 
@@ -732,28 +725,6 @@ export function ControlPruebaPanel() {
     | ParteRepresentadaPrueba
     | '';
 
-  const resumenVisible = useMemo(
-    () =>
-      resumenParaParteRepresentada(
-        draftItems,
-        oficiosDraft,
-        parteRepresentada,
-        resumenDraft,
-        headerDraft.actor ?? selected?.actor,
-        headerDraft.demandado ?? selected?.demandado,
-      ),
-    [
-      draftItems,
-      oficiosDraft,
-      parteRepresentada,
-      resumenDraft,
-      headerDraft.actor,
-      headerDraft.demandado,
-      selected?.actor,
-      selected?.demandado,
-    ],
-  );
-
   const expedienteDraft = useMemo(
     (): ControlPruebaExpediente => ({
       id: selected?.id ?? '',
@@ -765,12 +736,12 @@ export function ControlPruebaPanel() {
       actor: headerDraft.actor ?? selected?.actor,
       demandado: headerDraft.demandado ?? selected?.demandado,
       parteRepresentada: headerDraft.parteRepresentada ?? selected?.parteRepresentada ?? '',
-      resumenEjecutivo: resumenVisible,
+      resumenEjecutivo: resumenDraft,
       oficiosAutenticidadPendientes: [],
       items: draftItems,
       hitos: hitosDraft,
     }),
-    [selected, headerDraft, draftItems, hitosDraft, oficiosDraft, resumenVisible],
+    [selected, headerDraft, draftItems, hitosDraft, resumenDraft],
   );
 
   const handleExport = useCallback(
@@ -853,7 +824,7 @@ export function ControlPruebaPanel() {
             items: draftItems,
             hitos: hitosDraft,
             oficiosAutenticidadPendientes: [],
-            resumenEjecutivo: resumenVisible ?? resumenDraft,
+            resumenEjecutivo: resumenDraft ?? null,
             parteRepresentada: headerDraft.parteRepresentada ?? '',
           }),
         });
@@ -895,7 +866,7 @@ export function ControlPruebaPanel() {
         }
       }
     },
-    [selected, headerDraft, draftItems, hitosDraft, oficiosDraft, resumenDraft, resumenVisible, toast],
+    [selected, headerDraft, draftItems, hitosDraft, oficiosDraft, resumenDraft, toast],
   );
 
   const handleSaveRef = useRef(handleSave);
@@ -2241,72 +2212,6 @@ export function ControlPruebaPanel() {
                 </CardHeader>
               </Card>
 
-              {(resumenVisible?.aLibrar?.length ||
-                resumenVisible?.pendiente?.length ||
-                resumenVisible?.producida?.length ||
-                resumenVisible?.recomendaciones?.length) && (
-                <Card className="border-primary/15 bg-muted/20">
-                  <CardHeader className="py-3">
-                    <CardTitle className="text-sm">
-                      Resumen ejecutivo
-                      {parteRepresentada ? ' — nuestra prueba' : ''}
-                    </CardTitle>
-                    <CardDescription className="text-xs">
-                      {parteRepresentada
-                        ? `Solo la prueba de ${parteRepresentada === 'actor' ? headerDraft.actor || 'actor' : headerDraft.demandado || 'demandada'}. Cambiá "Representamos a" arriba para ver otra vista.`
-                        : 'Semáforo importado desde el PDF. Indicá a quién representás para filtrar a tu parte.'}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="pt-0">
-                    <div className="grid gap-2 sm:grid-cols-3 text-xs">
-                      {resumenVisible?.producida?.length ? (
-                        <div className="rounded-lg border border-emerald-300/60 bg-emerald-50/80 p-2">
-                          <p className="font-medium text-emerald-900 mb-1">Producida</p>
-                          <ul className="text-emerald-900/90 space-y-0.5">
-                            {resumenVisible.producida.map((t, i) => (
-                              <li key={i} className="line-clamp-2">
-                                {t}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      ) : null}
-                      {resumenVisible?.pendiente?.length ? (
-                        <div className="rounded-lg border border-amber-300/60 bg-amber-50/80 p-2">
-                          <p className="font-medium text-amber-900 mb-1">Pend. producción</p>
-                          <ul className="text-amber-900/90 space-y-0.5">
-                            {resumenVisible.pendiente.map((t, i) => (
-                              <li key={i} className="line-clamp-2">
-                                {t}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      ) : null}
-                      {resumenVisible?.aLibrar?.length ? (
-                        <div className="rounded-lg border border-rose-300/60 bg-rose-50/80 p-2">
-                          <p className="font-medium text-rose-900 mb-1">Comunicaciones</p>
-                          <ul className="text-rose-900/90 space-y-0.5">
-                            {resumenVisible.aLibrar.map((t, i) => (
-                              <li key={i} className="line-clamp-2">
-                                {t}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      ) : null}
-                    </div>
-                    {resumenVisible?.recomendaciones?.length ? (
-                      <ul className="mt-3 text-xs text-muted-foreground list-disc pl-4 space-y-0.5">
-                        {resumenVisible.recomendaciones.map((r, i) => (
-                          <li key={i}>{r}</li>
-                        ))}
-                      </ul>
-                    ) : null}
-                  </CardContent>
-                </Card>
-              )}
-
               <div className="space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
@@ -2397,7 +2302,8 @@ export function ControlPruebaPanel() {
                             Estado de la prueba · {labelParteActiva}
                           </p>
                           <p className="text-[11px] text-muted-foreground">
-                            Los recuadros cuentan solo la prueba ofrecida de esta parte
+                            Solo cuentan pruebas ofrecidas (testimonial, confesional, documental…). Los
+                            oficios/cédulas son hijos y no suman
                             {estadoFilter !== 'all'
                               ? ` · filtro: ${ESTADO_CONFIG[estadoFilter].label} (${matchingEstadoCount}/${pruebaDeParteActiva.length})`
                               : ` · ${pruebaDeParteActiva.length} prueba(s)`}

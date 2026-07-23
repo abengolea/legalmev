@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 import type { ControlPruebaExpediente, ControlPruebaItem, ItemCategoria, PruebaParte, TipoTramitePericial } from '@/types/control-prueba';
 import {
   esAudienciaOfrecida,
+  esPruebaOfrecida,
   estadosParaItem,
   getEstadoConfig,
   PARTE_LABELS,
@@ -45,6 +46,7 @@ import { patchEstadoPruebaOfrecida } from '@/lib/control-prueba-cierre';
 import {
   patchDocumentalEnPoder,
   usaFlujoDocumentalEnPoder,
+  intimacionDocumentalActiva,
 } from '@/lib/control-prueba-documental-poder';
 import {
   usaFlujoAutenticidadDocumental,
@@ -56,7 +58,6 @@ import {
   esEventoAudienciaPrueba,
   patchEventoAudienciaMeta,
   patchFechaEventoAudiencia,
-  pruebaIdDeEventoAudiencia,
 } from '@/lib/control-prueba-audiencia-evento';
 import { ControlPruebaAutoTextarea } from '@/components/admin/ControlPruebaAutoTextarea';
 import { ControlPruebaDateField } from '@/components/admin/ControlPruebaDateField';
@@ -136,6 +137,27 @@ const PARTES_MEJOR_PROVEER = ['actor', 'demandado', 'tercero'] as const;
 
 function usaColumnaObservaciones(categoria: ItemCategoria): boolean {
   return categoria === 'prueba' || categoria === 'diligencia' || categoria === 'audiencia';
+}
+
+/** Prueba ofrecida ancestro de una diligencia/evento (sube 1–2 niveles). */
+function pruebaOfrecidaDeHijo(
+  item: ControlPruebaItem,
+  allItems: ControlPruebaItem[],
+): ControlPruebaItem | null {
+  let currentId: string | null =
+    item.vinculo?.parentItemId ?? item.diligencia?.pruebaVinculadaId ?? null;
+  for (let i = 0; i < 3 && currentId; i++) {
+    const padre = allItems.find((x) => x.id === currentId);
+    if (!padre) return null;
+    if (esPruebaOfrecida(padre)) return padre;
+    currentId = padre.vinculo?.parentItemId ?? padre.diligencia?.pruebaVinculadaId ?? null;
+  }
+  return null;
+}
+
+function etiquetaPruebaVinculada(padre: ControlPruebaItem): string {
+  const tipo = TIPO_LABELS[padre.tipo] ?? padre.tipo;
+  return `Prueba #${padre.orden} · ${tipo}`;
 }
 
 function placeholderObservaciones(categoria: ItemCategoria, compact: boolean): string {
@@ -450,6 +472,31 @@ export function ControlPruebaItemsTable({
                       Subtareas: {prog.completadas}/{prog.total}
                     </p>
                   )}
+                  {(categoria === 'diligencia' ||
+                    (categoria === 'audiencia' && !esPruebaOfrecida(item))) &&
+                    (() => {
+                      const padre = pruebaOfrecidaDeHijo(item, allItems);
+                      if (!padre) return null;
+                      const label = etiquetaPruebaVinculada(padre);
+                      if (onFocusItem) {
+                        return (
+                          <Button
+                            type="button"
+                            variant="link"
+                            className="h-auto p-0 text-[10px] text-violet-800 font-normal mt-0.5"
+                            onClick={() => onFocusItem(padre.id)}
+                            title={padre.descripcion}
+                          >
+                            {label} →
+                          </Button>
+                        );
+                      }
+                      return (
+                        <p className="text-[10px] text-violet-800 mt-0.5" title={padre.descripcion}>
+                          {label}
+                        </p>
+                      );
+                    })()}
                   {etiquetaResolucion && badgeResolucion && (
                     <div className="mt-1 flex flex-wrap items-center gap-1">
                       <Badge
@@ -476,7 +523,11 @@ export function ControlPruebaItemsTable({
                         ? 'Postergada — pedir intimación'
                         : item.estado === 'intimacion_ordenada'
                           ? 'Intimación ordenada · expandir para cédula'
-                          : 'Sin intimación — documental en poder de contraparte'}
+                          : item.estado === 'exhibicion_parcial'
+                            ? 'Exhibición parcial · nueva cédula por faltantes'
+                            : item.estado === 'apercibimiento_en_contra'
+                              ? 'Apercibimiento en contra — no acompañaron la documental'
+                              : 'Sin intimación — documental en poder de contraparte'}
                     </p>
                   )}
                   {usaFlujoAutenticidadDocumental(item) && item.estado === 'autenticidad_impugnada' && (
@@ -505,16 +556,6 @@ export function ControlPruebaItemsTable({
                   )}
                   {categoria === 'audiencia' && esEventoAudienciaPrueba(item) && (
                     <>
-                      {pruebaIdDeEventoAudiencia(item) && onFocusItem && (
-                        <Button
-                          type="button"
-                          variant="link"
-                          className="h-auto p-0 text-[10px] text-muted-foreground font-normal mt-0.5"
-                          onClick={() => onFocusItem(pruebaIdDeEventoAudiencia(item)!)}
-                        >
-                          Prueba vinculada →
-                        </Button>
-                      )}
                       <ControlPruebaCedulasAudienciaEnlaces
                         item={item}
                         allItems={allItems}
@@ -608,7 +649,11 @@ export function ControlPruebaItemsTable({
                       <>
                         {item.estado === 'postpuesta_juez' ? (
                           <p className="text-[10px] text-orange-700 leading-tight">Postergada — pedir intimación</p>
-                        ) : item.estado === 'intimacion_ordenada' ? (
+                        ) : item.estado === 'apercibimiento_en_contra' ? (
+                          <p className="text-[10px] text-rose-800 leading-tight">
+                            Apercibimiento en contra
+                          </p>
+                        ) : intimacionDocumentalActiva(String(item.estado)) ? (
                           <>
                             {expanded ? (
                               <p className="text-[10px] text-muted-foreground leading-tight">

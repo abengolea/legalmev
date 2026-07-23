@@ -3,7 +3,7 @@
 import { useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import type { CedulaNotifMedio, ControlPruebaItem, PruebaParte } from '@/types/control-prueba';
-import { patchDocumentalEnPoder } from '@/lib/control-prueba-documental-poder';
+import { patchDocumentalEnPoder, intimacionDocumentalActiva } from '@/lib/control-prueba-documental-poder';
 import { hijosDePadre } from '@/lib/control-prueba-subprocesos';
 import { getEstadoConfig, PARTE_LABELS, resolveCategoria } from '@/lib/control-prueba';
 import { evaluarAlertaItem, ALERTA_NIVEL_CONFIG } from '@/lib/control-prueba-alertas';
@@ -43,7 +43,9 @@ export function ControlPruebaDocumentalEnPoderBlock({
 }: Props) {
   const dep = item.documentalEnPoder ?? {};
   const postergada = item.estado === 'postpuesta_juez';
-  const intimacionOrdenada = item.estado === 'intimacion_ordenada';
+  const intimacionActiva = intimacionDocumentalActiva(String(item.estado));
+  const exhibicionParcial = item.estado === 'exhibicion_parcial';
+  const apercibimiento = item.estado === 'apercibimiento_en_contra';
 
   const cedulasVinculadas = useMemo(
     () =>
@@ -64,7 +66,15 @@ export function ControlPruebaDocumentalEnPoderBlock({
           <Badge variant="outline" className="text-[10px] border-orange-400 text-orange-800 bg-orange-50">
             Postergada
           </Badge>
-        ) : intimacionOrdenada ? (
+        ) : apercibimiento ? (
+          <Badge variant="outline" className="text-[10px] border-rose-400 text-rose-900 bg-rose-50">
+            Apercibimiento en contra
+          </Badge>
+        ) : exhibicionParcial ? (
+          <Badge variant="outline" className="text-[10px] border-fuchsia-400 text-fuchsia-900 bg-fuchsia-50">
+            Exhibición parcial
+          </Badge>
+        ) : intimacionActiva ? (
           <Badge variant="outline" className="text-[10px] border-violet-400 text-violet-900 bg-violet-50">
             Intimación ordenada
           </Badge>
@@ -76,8 +86,9 @@ export function ControlPruebaDocumentalEnPoderBlock({
       </div>
 
       <p className="text-[10px] text-muted-foreground">
-        La contraparte tiene la documentación. El trámite es simple: <strong>intimarla a que la presente</strong>{' '}
-        (cédula con plazo de exhibición).
+        La contraparte tiene la documentación. Intimarla a presentarla (cédula). Si responde en forma
+        incompleta → <strong>Exhibición parcial</strong> (nueva cédula por faltantes). Si no acompaña →{' '}
+        <strong>Apercibimiento en contra</strong>.
       </p>
 
       <div className="grid gap-2 sm:grid-cols-2">
@@ -137,7 +148,24 @@ export function ControlPruebaDocumentalEnPoderBlock({
         />
       </div>
 
-      {intimacionOrdenada && (
+      {exhibicionParcial && (
+        <div>
+          <Label className="text-[10px]">Documentación faltante (nueva intimación)</Label>
+          <Textarea
+            value={dep.documentosFaltantes ?? ''}
+            onChange={(e) =>
+              onUpdate({
+                documentalEnPoder: { ...dep, documentosFaltantes: e.target.value || null },
+              })
+            }
+            rows={2}
+            className="mt-1 text-xs min-h-[48px]"
+            placeholder="Qué falta acompañar tras la respuesta parcial..."
+          />
+        </div>
+      )}
+
+      {intimacionActiva && (
         <div>
           <Label className="text-[10px]">Plazo de exhibición</Label>
           <ControlPruebaDeferredInput
@@ -149,18 +177,26 @@ export function ControlPruebaDocumentalEnPoderBlock({
         </div>
       )}
 
-      {!intimacionOrdenada && !postergada && (
+      {!intimacionActiva && !postergada && !apercibimiento && (
         <p className="text-[10px] text-muted-foreground">
           Cuando el tribunal ordene la intimación, cambie el estado a <strong>Intimación ordenada</strong>.
         </p>
       )}
 
-      {intimacionOrdenada && (
+      {(intimacionActiva || apercibimiento) && (
         <div className="border-t border-violet-200/80 pt-3 space-y-2">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <Label className="text-xs font-medium">Cédula de intimación</Label>
-            {onAddCedula && (
-              <Button type="button" variant="outline" size="sm" className="h-7 text-[10px]" onClick={() => onAddCedula()}>
+            <Label className="text-xs font-medium">
+              {exhibicionParcial ? 'Cédulas de intimación (incl. faltantes)' : 'Cédula de intimación'}
+            </Label>
+            {onAddCedula && intimacionActiva && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 text-[10px]"
+                onClick={() => onAddCedula()}
+              >
                 Agregar cédula
               </Button>
             )}
@@ -168,7 +204,9 @@ export function ControlPruebaDocumentalEnPoderBlock({
 
           {cedulasVinculadas.length === 0 ? (
             <p className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
-              Al guardar con intimación ordenada se generará la cédula vinculada en Comunicaciones.
+              {exhibicionParcial
+                ? 'Al pasar a exhibición parcial se genera una cédula por la documental faltante.'
+                : 'Al guardar con intimación ordenada se generará la cédula vinculada en Comunicaciones.'}
             </p>
           ) : (
             <ul className="space-y-1.5">
@@ -179,34 +217,32 @@ export function ControlPruebaDocumentalEnPoderBlock({
                 return (
                   <li
                     key={hijo.id}
-                    className={cn(
-                      'flex items-center justify-between gap-2 rounded border bg-background px-2 py-1.5 text-xs',
-                      alerta?.nivel === 'rojo' && 'border-red-300 bg-red-50/40',
-                      alerta?.nivel === 'amarillo' && 'border-amber-300 bg-amber-50/40',
-                    )}
+                    className="flex flex-wrap items-center gap-2 rounded border bg-white/80 px-2 py-1.5 text-[10px]"
                   >
-                    <div className="min-w-0 flex-1">
-                      <p className="font-medium truncate">{hijo.vinculo?.vinculoLabel ?? hijo.descripcion}</p>
-                      <p className="text-[10px] text-muted-foreground">
-                        <span className={cn('inline-flex items-center gap-1 px-1 rounded border', cfg.badgeClass)}>
-                          {cfg.label}
-                        </span>
-                        {dias !== null && (
-                          <span className={cn('ml-1', alerta && ALERTA_NIVEL_CONFIG[alerta.nivel].textClass)}>
-                            · {etiquetaDiasHabiles(dias)}
-                          </span>
+                    <Badge variant="outline" className={cn('text-[9px]', cfg.badgeClass)}>
+                      {cfg.label}
+                    </Badge>
+                    <span className="flex-1 min-w-0 truncate">{hijo.descripcion}</span>
+                    {dias != null && (
+                      <span
+                        className={cn(
+                          'shrink-0',
+                          alerta ? ALERTA_NIVEL_CONFIG[alerta.nivel].textClass : 'text-muted-foreground',
                         )}
-                      </p>
-                    </div>
+                      >
+                        {etiquetaDiasHabiles(dias)}
+                      </span>
+                    )}
                     {onFocusSubproceso && (
                       <Button
                         type="button"
                         variant="ghost"
                         size="sm"
-                        className="h-7 text-[10px] shrink-0"
+                        className="h-6 px-1.5 text-[10px]"
                         onClick={() => onFocusSubproceso(hijo.id)}
                       >
-                        Ver <ChevronRight className="h-3 w-3 ml-0.5" />
+                        Ir
+                        <ChevronRight className="h-3 w-3 ml-0.5" />
                       </Button>
                     )}
                   </li>

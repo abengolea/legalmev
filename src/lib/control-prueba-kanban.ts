@@ -19,7 +19,15 @@ export const KANBAN_COLUMNAS: KanbanColumna[] = [
   {
     id: 'en_produccion',
     titulo: 'En producción',
-    estados: ['pendiente_produccion', 'postpuesta_juez', 'audiencia_fijada', 'intimacion_ordenada', 'autenticidad_impugnada'],
+    estados: [
+      'pendiente_produccion',
+      'postpuesta_juez',
+      'audiencia_fijada',
+      'intimacion_ordenada',
+      'exhibicion_parcial',
+      'apercibimiento_en_contra',
+      'autenticidad_impugnada',
+    ],
     colorClass: 'border-t-amber-500',
   },
   {

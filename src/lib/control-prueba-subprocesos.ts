@@ -25,6 +25,7 @@ import {
   labelParteConDocumentos,
   parteContrariaDefault,
   requiereFlujoDocumentalEnPoder,
+  intimacionDocumentalActiva,
 } from '@/lib/control-prueba-documental-poder';
 import { requiereFlujoAutenticidadDocumental } from '@/lib/control-prueba-documental-autenticidad';
 import type { CedulaNotifMedio } from '@/types/control-prueba';
@@ -321,6 +322,7 @@ export function buildCedulaIntimacionDocumental(
     fechaLibramiento?: string | null;
     fechaDiligenciamiento?: string | null;
     observaciones?: string | null;
+    porFaltantes?: boolean;
   },
 ): ControlPruebaItem {
   const dep = padre.documentalEnPoder ?? {};
@@ -330,6 +332,15 @@ export function buildCedulaIntimacionDocumental(
   const destinatario = opts.destinatario?.trim() || labelParteConDocumentos(parte);
   const tk = opts.triggerKey ?? triggerKeyIntimacionDocumental(padre.id, parte, plazo, medio);
   const tipoCedula = medio === 'electronica' ? 'cedula_electronica' : 'cedula';
+  const porFaltantes =
+    opts.porFaltantes || String(padre.estado) === 'exhibicion_parcial';
+  const objeto =
+    (porFaltantes ? dep.documentosFaltantes?.trim() : null) ||
+    dep.documentosDetalle ||
+    padre.descripcion;
+  const label = porFaltantes
+    ? `Cédula intimación (documental faltante) — ${destinatario}`
+    : `Cédula intimación documental — ${destinatario}`;
 
   const vinculo: SubprocesoVinculo = {
     parentItemId: padre.id,
@@ -337,7 +348,7 @@ export function buildCedulaIntimacionDocumental(
     parentCategoria: resolveCategoria(padre),
     rol: 'cedula_intimacion_documental',
     autoCreated: opts.autoCreated ?? false,
-    vinculoLabel: `Cédula intimación documental — ${destinatario}`,
+    vinculoLabel: label,
     triggerKey: tk,
   };
 
@@ -346,17 +357,19 @@ export function buildCedulaIntimacionDocumental(
     orden: opts.orden,
     categoria: 'diligencia',
     tipo: tipoCedula,
-    descripcion: `Cédula intimación documental — ${destinatario}`,
+    descripcion: label,
     ofrecidaPor: padre.ofrecidaPor ?? 'tribunal',
     estado: opts.estadoDiligencia ?? 'pendiente_realizacion',
     fechaLimite: plazo || null,
     fechaProduccion: null,
     actuacionUrl: null,
-    observaciones: opts.observaciones ?? null,
+    observaciones:
+      opts.observaciones ??
+      (porFaltantes ? 'Intimación por exhibición parcial — presentar documental faltante' : null),
     vinculo,
     diligencia: {
       destinatario,
-      objeto: dep.documentosDetalle ?? padre.descripcion,
+      objeto,
       medioNotificacion: medio,
       fechaPresentacion: null,
       fechaLibramiento: opts.fechaLibramiento ?? null,
@@ -398,18 +411,115 @@ export function oficiosAutenticidadDeDocumental(items: ControlPruebaItem[], pare
   return [...directos, ...porPruebaVinculada.filter((i) => !ids.has(i.id))];
 }
 
+function normDestinatarioAutenticidad(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/** Extrae el oficiado de observaciones sin arrastrar "para obtener…". */
+function destinatarioDesdeObservaciones(obs: string | null | undefined): string | null {
+  if (!obs) return null;
+  const m = obs.match(
+    /oficio\s+a\s+([^·.\n,]+?)(?=\s+para\b|\s+con\b|\s+a\s+efectos|\s+en\s+orden|\s+de\s+fecha|[·.\n,]|$)/i,
+  );
+  const raw = m?.[1]?.trim();
+  if (!raw) return null;
+  // Evitar capturas demasiado largas (frases enteras).
+  if (raw.split(/\s+/).length > 6) return raw.split(/\s+/).slice(0, 4).join(' ');
+  return raw;
+}
+
+/** True si dos destinatarios apuntan al mismo oficiado (casi iguales / uno contiene al otro). */
+function mismoDestinatarioAutenticidad(a: string, b: string): boolean {
+  const na = normDestinatarioAutenticidad(a);
+  const nb = normDestinatarioAutenticidad(b);
+  if (!na || !nb) return false;
+  if (na === nb) return true;
+  return na.startsWith(nb) || nb.startsWith(na);
+}
+
+function fusionarDestinatariosAutenticidad(candidatos: string[]): string[] {
+  const out: string[] = [];
+  for (const raw of candidatos) {
+    const d = raw.trim();
+    if (!d) continue;
+    const idx = out.findIndex((x) => mismoDestinatarioAutenticidad(x, d));
+    if (idx < 0) {
+      out.push(d);
+      continue;
+    }
+    // Preferir el más corto / canónico (p.ej. "Andreani" vs "Andreani para obtener original").
+    if (d.length < out[idx]!.length) out[idx] = d;
+  }
+  return out;
+}
+
 function destinatariosAutenticidadDocumental(padre: ControlPruebaItem): string[] {
   const doc = padre.documental ?? {};
-  const destinos = new Set<string>();
+  const candidatos: string[] = [];
   const principal = doc.destinatarioOficio?.trim();
-  if (principal) destinos.add(principal);
+  if (principal) candidatos.push(principal);
   for (const o of doc.oficiosAutenticidad ?? []) {
     const d = o.destinatarioOficio?.trim();
-    if (d) destinos.add(d);
+    if (d) candidatos.push(d);
   }
-  const fromObs = padre.observaciones?.match(/oficio\s+a\s+([^·.\n,]+)/i)?.[1]?.trim();
-  if (fromObs) destinos.add(fromObs);
-  return [...destinos];
+  const fromObs = destinatarioDesdeObservaciones(padre.observaciones);
+  if (fromObs) candidatos.push(fromObs);
+  return fusionarDestinatariosAutenticidad(candidatos);
+}
+
+/** Quita oficios auto-creados redundantes del mismo padre (destinatario casi igual). */
+function dedupeOficiosAutenticidadDocumental(
+  items: ControlPruebaItem[],
+  parentId: string,
+): ControlPruebaItem[] {
+  const oficios = oficiosAutenticidadDeDocumental(items, parentId);
+  if (oficios.length < 2) return items;
+
+  const keep = new Set<string>();
+  const drop = new Set<string>();
+  // Preferir manual/import sobre auto; entre iguales, el destinatario más corto.
+  const sorted = [...oficios].sort((a, b) => {
+    const aAuto = a.vinculo?.autoCreated ? 1 : 0;
+    const bAuto = b.vinculo?.autoCreated ? 1 : 0;
+    if (aAuto !== bAuto) return aAuto - bAuto;
+    const aLen = (a.diligencia?.destinatario ?? '').length;
+    const bLen = (b.diligencia?.destinatario ?? '').length;
+    return aLen - bLen;
+  });
+
+  for (const o of sorted) {
+    if (drop.has(o.id)) continue;
+    const dest = o.diligencia?.destinatario?.trim() ?? '';
+    const dup = sorted.find(
+      (other) =>
+        other.id !== o.id &&
+        !drop.has(other.id) &&
+        !keep.has(other.id) &&
+        mismoDestinatarioAutenticidad(dest, other.diligencia?.destinatario?.trim() ?? ''),
+    );
+    if (dup) {
+      // Conservar `o` (mejor ranking); marcar el resto de casi-iguales.
+      keep.add(o.id);
+      for (const other of sorted) {
+        if (other.id === o.id || keep.has(other.id) || drop.has(other.id)) continue;
+        if (mismoDestinatarioAutenticidad(dest, other.diligencia?.destinatario?.trim() ?? '')) {
+          // Solo auto-creados: no borrar oficios manuales distintos a propósito.
+          if (other.vinculo?.autoCreated) drop.add(other.id);
+          else keep.add(other.id);
+        }
+      }
+    } else {
+      keep.add(o.id);
+    }
+  }
+
+  if (drop.size === 0) return items;
+  return items.filter((i) => !drop.has(i.id));
 }
 
 function ensureVinculosAutenticidadDocumental(
@@ -418,7 +528,7 @@ function ensureVinculosAutenticidadDocumental(
 ): SubprocesoEvalResult {
   const alertas: string[] = [];
   const creados: ControlPruebaItem[] = [];
-  let working = [...items];
+  let working = dedupeOficiosAutenticidadDocumental([...items], parentId);
 
   const padreIdx = working.findIndex((i) => i.id === parentId);
   const padre = padreIdx >= 0 ? working[padreIdx] : undefined;
@@ -429,8 +539,8 @@ function ensureVinculosAutenticidadDocumental(
   const destinatarios = destinatariosAutenticidadDocumental(padre);
   for (const dest of destinatarios) {
     const tkOficio = triggerKeyOficioAutenticidadDocumental(padre.id, dest);
-    const yaExiste = oficiosAutenticidadDeDocumental(working, padre.id).some(
-      (o) => (o.diligencia?.destinatario?.trim() ?? '') === dest,
+    const yaExiste = oficiosAutenticidadDeDocumental(working, padre.id).some((o) =>
+      mismoDestinatarioAutenticidad(o.diligencia?.destinatario?.trim() ?? '', dest),
     );
     if (yaExiste || existeHijoConTrigger(working, tkOficio)) continue;
 
@@ -657,6 +767,33 @@ function evaluarSubProcesosDocumentalEnPoder(ctx: SubprocesoEvalContext): Subpro
     return { items, creados, alertas };
   }
 
+  // Exhibición parcial → siempre nueva cédula por documental faltante (aunque ya haya cédulas previas).
+  if (
+    String(nuevoEstado) === 'exhibicion_parcial' &&
+    String(estadoAnterior) !== 'exhibicion_parcial' &&
+    ctx.patch.estado !== undefined
+  ) {
+    const n = cedulasIntimacionDocumentalDePadre(items, padre.id).length + 1;
+    const tk = `cedula_intimacion_documental|${padre.id}|parcial|${n}`;
+    if (!existeHijoConTrigger(items, tk)) {
+      const cedula = buildCedulaIntimacionDocumental(padre, {
+        autoCreated: true,
+        triggerKey: tk,
+        orden: items.length + 1,
+        porFaltantes: true,
+      });
+      items = [...items, cedula];
+      creados.push(cedula);
+      alertas.push('Se creó cédula de intimación por documental faltante (exhibición parcial).');
+    }
+    return { items, creados, alertas };
+  }
+
+  // Apercibimiento: no crea cédula nueva; conserva historial.
+  if (String(nuevoEstado) === 'apercibimiento_en_contra') {
+    return { items, creados, alertas };
+  }
+
   if (padreConIntimacionOrdenada(padre)) {
     const dep = padre.documentalEnPoder ?? {};
     const parte = String(dep.parteConDocumentos ?? parteContrariaDefault(padre.ofrecidaPor));
@@ -680,18 +817,25 @@ function evaluarSubProcesosDocumentalEnPoder(ctx: SubprocesoEvalContext): Subpro
   return { items, creados, alertas };
 }
 
-function eliminarHijosAutenticidadAutoCreados(items: ControlPruebaItem[], parentId: string): ControlPruebaItem[] {
+/** Al salir de impugnada (cierre o revert): quita todos los oficios de autenticidad del padre. */
+function eliminarHijosAutenticidadDePadre(items: ControlPruebaItem[], parentId: string): ControlPruebaItem[] {
   return items.filter((i) => {
-    if (i.vinculo?.parentItemId === parentId && i.vinculo.autoCreated) return false;
-    if (
-      i.vinculo?.autoCreated &&
-      (i.vinculo.rol === 'oficio_autenticidad' || i.vinculo.rol === 'oficio_informativa') &&
-      i.diligencia?.pruebaVinculadaId === parentId
-    ) {
-      return false;
-    }
+    if (!esOficioAutenticidadItem(i)) return true;
+    if (i.vinculo?.parentItemId === parentId) return false;
+    if (i.diligencia?.pruebaVinculadaId === parentId) return false;
     return true;
   });
+}
+
+function limpiarMetaAutenticidadDocumental(item: ControlPruebaItem): ControlPruebaItem {
+  return {
+    ...item,
+    documental: {
+      ...item.documental,
+      autenticidadImpugnada: false,
+      oficiosAutenticidad: [],
+    },
+  };
 }
 
 function evaluarSubProcesosDocumentalAutenticidad(ctx: SubprocesoEvalContext): SubprocesoEvalResult {
@@ -707,21 +851,24 @@ function evaluarSubProcesosDocumentalAutenticidad(ctx: SubprocesoEvalContext): S
 
   const estadoAnterior = ctx.itemAnterior.estado;
   const nuevoEstado = padre.estado;
+  const ESTADOS_CIERRE_AUTH = new Set(['producida', 'valoracion_judicial', 'desistida', 'no_admitida']);
 
+  // Cualquier salida de impugnada: oficios hijos dejan de tener sentido.
   if (
-    (nuevoEstado === 'postpuesta_juez' || nuevoEstado === 'pendiente_produccion') &&
-    estadoAnterior === 'autenticidad_impugnada'
+    estadoAnterior === 'autenticidad_impugnada' &&
+    String(nuevoEstado) !== 'autenticidad_impugnada'
   ) {
-    items = eliminarHijosAutenticidadAutoCreados(items, padre.id);
-    items[padreIdx] = {
-      ...items[padreIdx]!,
-      documental: {
-        ...items[padreIdx]!.documental,
-        autenticidadImpugnada: false,
-        oficiosAutenticidad: [],
-      },
-    };
-    alertas.push('Oficios de autenticidad eliminados (impugnación revertida o postergada).');
+    const esCierre = ESTADOS_CIERRE_AUTH.has(String(nuevoEstado));
+    items = eliminarHijosAutenticidadDePadre(items, padre.id);
+    const idx = items.findIndex((i) => i.id === padre.id);
+    if (idx >= 0) {
+      items[idx] = limpiarMetaAutenticidadDocumental(items[idx]!);
+    }
+    alertas.push(
+      esCierre
+        ? 'Oficios de autenticidad eliminados (prueba cerrada).'
+        : 'Oficios de autenticidad eliminados (impugnación revertida o postergada).',
+    );
     return { items, creados, alertas };
   }
 
@@ -737,12 +884,24 @@ function evaluarSubProcesosDocumentalAutenticidad(ctx: SubprocesoEvalContext): S
   return { items, creados, alertas };
 }
 
-/** Al cargar expediente: asegura oficios vinculados para documentales impugnadas. */
+/** Al cargar expediente: asegura oficios vinculados para documentales impugnadas
+ *  y limpia oficios huérfanos si el documental ya no está impugnado. */
 export function hydrateAutenticidadDocumentalVinculos(items: ControlPruebaItem[]): ControlPruebaItem[] {
   let result = items;
   for (const item of items) {
-    if (item.tipo !== 'documental' || item.estado !== 'autenticidad_impugnada') continue;
-    result = ensureVinculosAutenticidadDocumental(result, item.id).items;
+    if (item.tipo !== 'documental') continue;
+    if (item.estado === 'autenticidad_impugnada') {
+      result = ensureVinculosAutenticidadDocumental(result, item.id).items;
+      continue;
+    }
+    // Padre ya no impugnado: oficios hijos no deben quedar en Comunicaciones.
+    const huerfanos = oficiosAutenticidadDeDocumental(result, item.id);
+    if (huerfanos.length === 0) continue;
+    result = eliminarHijosAutenticidadDePadre(result, item.id);
+    const idx = result.findIndex((i) => i.id === item.id);
+    if (idx >= 0) {
+      result[idx] = limpiarMetaAutenticidadDocumental(result[idx]!);
+    }
   }
   return result;
 }
@@ -782,8 +941,8 @@ export function crearOficioAutenticidadManual(
   const tkOficio = triggerKeyOficioAutenticidadDocumental(parentId, dest);
   if (
     existeHijoConTrigger(working, tkOficio) ||
-    oficiosAutenticidadDeDocumental(working, parentId).some(
-      (o) => (o.diligencia?.destinatario?.trim() ?? '') === dest,
+    oficiosAutenticidadDeDocumental(working, parentId).some((o) =>
+      mismoDestinatarioAutenticidad(o.diligencia?.destinatario?.trim() ?? '', dest),
     )
   ) {
     return { items: working, creado: null };
@@ -820,18 +979,26 @@ export function crearCedulaManualVinculada(
   const padre = items.find((i) => i.id === parentId);
   if (!padre) return { items, creado: null };
 
-  if (requiereFlujoDocumentalEnPoder(padre.tipo) && padre.estado === 'intimacion_ordenada') {
+  if (
+    requiereFlujoDocumentalEnPoder(padre.tipo) &&
+    intimacionDocumentalActiva(String(padre.estado))
+  ) {
     const dep = padre.documentalEnPoder ?? {};
     const parte = String(dep.parteConDocumentos ?? parteContrariaDefault(padre.ofrecidaPor));
     const plazo = dep.plazoPresentacion ?? padre.fechaLimite ?? '';
     const medio = String(dep.medioIntimacion ?? 'papel');
-    const tk = triggerKeyIntimacionDocumental(padre.id, parte, plazo, medio);
+    const porFaltantes = String(padre.estado) === 'exhibicion_parcial';
+    const n = cedulasIntimacionDocumentalDePadre(items, padre.id).length + 1;
+    const tk = porFaltantes
+      ? `cedula_intimacion_documental|${padre.id}|parcial|manual|${n}`
+      : triggerKeyIntimacionDocumental(padre.id, parte, plazo, medio);
     if (existeHijoConTrigger(items, tk)) return { items, creado: null };
     const creado = buildCedulaIntimacionDocumental(padre, {
       destinatario,
       autoCreated: false,
       triggerKey: tk,
       orden: items.length + 1,
+      porFaltantes,
     });
     return { items: [...items, creado], creado };
   }

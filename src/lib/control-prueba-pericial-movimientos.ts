@@ -196,10 +196,18 @@ export function estadoAgregadoPruebaChip(item: Pick<ControlPruebaItem, 'tipo' | 
   return estado;
 }
 
-/** Autenticidad impugnada sin cerrar → también visible en filtro Pend. producción. */
+/** Estados abiertos de la prueba ofrecida → también visibles en filtro Pend. producción. */
 function incluyeEnFiltroPendienteProduccion(item: ControlPruebaItem): boolean {
   if (esCierrePrueba(String(item.estado))) return false;
-  return String(item.estado) === 'autenticidad_impugnada';
+  const estado = String(item.estado);
+  return (
+    estado === 'autenticidad_impugnada' ||
+    estado === 'intimacion_ordenada' ||
+    estado === 'exhibicion_parcial' ||
+    estado === 'apercibimiento_en_contra' ||
+    estado === 'postpuesta_juez' ||
+    estado === 'audiencia_fijada'
+  );
 }
 
 export function itemVisibleConFiltroEstado(

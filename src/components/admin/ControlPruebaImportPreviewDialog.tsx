@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from 'react';
 import type { ImportPreviewPayload } from '@/lib/control-prueba-import-apply';
 import { collectOficiosAutenticidadFromItems } from '@/lib/control-prueba-documental-autenticidad-consolidate';
 import { PARTE_LABELS, TIPO_LABELS, getEstadoConfig } from '@/lib/control-prueba';
-import { resumenParaParteRepresentada } from '@/lib/control-prueba-resumen';
 import type { ControlPruebaItem, ItemCategoria, ParteRepresentadaPrueba, PruebaParte } from '@/types/control-prueba';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -66,32 +65,12 @@ export function ControlPruebaImportPreviewDialog({
     [preview],
   );
 
-  const resumenVisible = useMemo(() => {
-    if (!preview) return undefined;
-    return resumenParaParteRepresentada(
-      preview.items,
-      oficiosPreview,
-      parteRepresentada,
-      preview.resumenEjecutivo,
-      preview.actor,
-      preview.demandado,
-    );
-  }, [preview, parteRepresentada, oficiosPreview]);
-
   const updatePreviewItems = (items: ControlPruebaItem[]) => {
     if (!preview) return;
     const next: ImportPreviewPayload = {
       ...preview,
       items,
       parteRepresentada,
-      resumenEjecutivo: resumenParaParteRepresentada(
-        items,
-        collectOficiosAutenticidadFromItems(items),
-        parteRepresentada,
-        preview.resumenEjecutivo,
-        preview.actor,
-        preview.demandado,
-      ),
     };
     onPreviewChange(next);
     setSelected((prev) => {
@@ -116,14 +95,6 @@ export function ControlPruebaImportPreviewDialog({
     onPreviewChange({
       ...preview,
       parteRepresentada: parte,
-      resumenEjecutivo: resumenParaParteRepresentada(
-        preview.items,
-        oficiosPreview,
-        parte,
-        preview.resumenEjecutivo,
-        preview.actor,
-        preview.demandado,
-      ),
     });
   };
 
@@ -168,14 +139,14 @@ export function ControlPruebaImportPreviewDialog({
               <SelectValue placeholder="Seleccioná la parte…" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="_">Sin definir (resumen de ambas partes)</SelectItem>
+              <SelectItem value="_">Sin definir</SelectItem>
               <SelectItem value="actor">{actorLabel}</SelectItem>
               <SelectItem value="demandado">{demandadoLabel}</SelectItem>
             </SelectContent>
           </Select>
           {parteRepresentada && (
             <p className="text-[11px] text-muted-foreground">
-              El resumen ejecutivo mostrará solo la prueba de{' '}
+              En el control vas a filtrar primero la prueba de{' '}
               {parteRepresentada === 'actor' ? actorLabel : demandadoLabel}.
             </p>
           )}
@@ -183,12 +154,6 @@ export function ControlPruebaImportPreviewDialog({
 
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1 -mr-1">
           <div className="space-y-4 pb-2">
-            {(resumenVisible?.aLibrar?.length ||
-              resumenVisible?.pendiente?.length ||
-              resumenVisible?.producida?.length) && (
-              <ResumenBlock resumen={resumenVisible} nuestraParte={!!parteRepresentada} />
-            )}
-
             {oficiosPreview.length > 0 && (
               <Alert className="border-rose-300/80 bg-rose-50/90 text-rose-950">
                 <AlertTriangle className="h-4 w-4" />
@@ -329,60 +294,6 @@ function PreviewItemRow({
       >
         <Trash2 className="h-4 w-4" />
       </Button>
-    </div>
-  );
-}
-
-function ResumenBlock({
-  resumen,
-  nuestraParte,
-}: {
-  resumen: NonNullable<ImportPreviewPayload['resumenEjecutivo']>;
-  nuestraParte: boolean;
-}) {
-  return (
-    <div className="space-y-1">
-      {nuestraParte && (
-        <p className="text-[11px] font-medium text-primary">Resumen — nuestra prueba</p>
-      )}
-      <div className="grid gap-2 sm:grid-cols-3 text-xs">
-        {resumen.producida?.length ? (
-          <div className="rounded-lg border border-emerald-300/60 bg-emerald-50/80 p-2">
-            <p className="font-medium text-emerald-900 mb-1">Producida</p>
-            <ul className="text-emerald-900/90 space-y-0.5">
-              {resumen.producida.slice(0, 6).map((t, i) => (
-                <li key={i} className="line-clamp-2">
-                  {t}
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
-        {resumen.pendiente?.length ? (
-          <div className="rounded-lg border border-amber-300/60 bg-amber-50/80 p-2">
-            <p className="font-medium text-amber-900 mb-1">Pendiente</p>
-            <ul className="text-amber-900/90 space-y-0.5">
-              {resumen.pendiente.slice(0, 6).map((t, i) => (
-                <li key={i} className="line-clamp-2">
-                  {t}
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
-        {resumen.aLibrar?.length ? (
-          <div className="rounded-lg border border-rose-300/60 bg-rose-50/80 p-2">
-            <p className="font-medium text-rose-900 mb-1">A librar</p>
-            <ul className="text-rose-900/90 space-y-0.5">
-              {resumen.aLibrar.slice(0, 6).map((t, i) => (
-                <li key={i} className="line-clamp-2">
-                  {t}
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
-      </div>
     </div>
   );
 }

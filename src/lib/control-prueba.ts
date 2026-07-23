@@ -123,6 +123,18 @@ export const ESTADO_CONFIG: Record<PruebaEstado, EstadoStyle> = {
     rowClass: 'border-l-violet-500 bg-violet-50/40 dark:bg-violet-950/20',
     dotClass: 'bg-violet-500',
   },
+  exhibicion_parcial: {
+    label: 'Exhibición parcial',
+    badgeClass: 'bg-fuchsia-100 text-fuchsia-900 border-fuchsia-400 dark:bg-fuchsia-900/50 dark:text-fuchsia-200',
+    rowClass: 'border-l-fuchsia-500 bg-fuchsia-50/40 dark:bg-fuchsia-950/20',
+    dotClass: 'bg-fuchsia-500',
+  },
+  apercibimiento_en_contra: {
+    label: 'Apercibimiento en contra',
+    badgeClass: 'bg-rose-100 text-rose-900 border-rose-400 dark:bg-rose-900/50 dark:text-rose-200',
+    rowClass: 'border-l-rose-500 bg-rose-50/40 dark:bg-rose-950/20',
+    dotClass: 'bg-rose-500',
+  },
   autenticidad_impugnada: {
     label: 'Autenticidad impugnada',
     badgeClass: 'bg-fuchsia-100 text-fuchsia-900 border-fuchsia-400 dark:bg-fuchsia-900/50 dark:text-fuchsia-200',
@@ -354,26 +366,52 @@ export function esConfesional(item: Pick<ControlPruebaItem, 'tipo'>): boolean {
   return item.tipo === 'confesional';
 }
 
-/** Confesional y testimonial: audiencias con flujo de producción (pendiente → fijada → producida). */
-export function esAudienciaOfrecida(item: Pick<ControlPruebaItem, 'tipo'>): boolean {
-  return item.tipo === 'confesional' || item.tipo === 'testimonial';
+/** Confesional y testimonial ofrecidas (no el evento hijo de audiencia). */
+export function esAudienciaOfrecida(
+  item: Pick<ControlPruebaItem, 'tipo'> & Partial<Pick<ControlPruebaItem, 'vinculo'>>,
+): boolean {
+  if (item.tipo !== 'confesional' && item.tipo !== 'testimonial') return false;
+  // Evento / cédula / oficio hijo: instrumentalidad, no la prueba ofrecida
+  if (item.vinculo?.rol === 'audiencia_prueba') return false;
+  if (item.vinculo?.parentItemId) return false;
+  return true;
 }
 
 export function esPruebaConFlujoComplejo(item: Pick<ControlPruebaItem, 'tipo'>): boolean {
-  return esAudienciaOfrecida(item) || item.tipo === 'documental_en_poder' || item.tipo === 'documental';
+  return (
+    item.tipo === 'confesional' ||
+    item.tipo === 'testimonial' ||
+    item.tipo === 'documental_en_poder' ||
+    item.tipo === 'documental'
+  );
 }
 
-/** Confesional usa estados de producción (pendiente, audiencia fijada, producida…). */
-export function usaEstadosProduccionPrueba(item: ControlPruebaItem): boolean {
-  if (esAudienciaOfrecida(item)) return true;
+/**
+ * Prueba ofrecida (cuenta en chips / progreso).
+ * Cada testimonial o confesional es una prueba; sus hijos (cédulas, oficios, eventos)
+ * son instrumentalidad y no cuentan.
+ */
+export function esPruebaOfrecida(item: ControlPruebaItem): boolean {
+  if (item.vinculo?.parentItemId) return false;
+  if (item.vinculo?.rol === 'audiencia_prueba') return false;
+
+  const cat = resolveCategoria(item);
+  if (cat === 'diligencia' || cat === 'tramite' || cat === 'mejor_proveer') return false;
+
+  if (item.tipo === 'confesional' || item.tipo === 'testimonial') return true;
   if (item.tipo === 'documental_en_poder') return true;
-  if (resolveCategoria(item) === 'tramite') return false;
-  return resolveCategoria(item) === 'prueba';
+  if (cat === 'prueba') return true;
+  return false;
 }
 
-/** Prueba ofrecida con flujo pendiente → producida (incluye confesional/testimonial en audiencias). */
+/** Confesional/testimonial/documental usan estados de producción (pendiente → producida…). */
+export function usaEstadosProduccionPrueba(item: ControlPruebaItem): boolean {
+  return esPruebaOfrecida(item);
+}
+
+/** Solo pruebas ofrecidas (sin hijos/instrumentalidad). */
 export function itemsOfrecidasProduccion(items: ControlPruebaItem[]): ControlPruebaItem[] {
-  return items.filter(usaEstadosProduccionPrueba);
+  return items.filter(esPruebaOfrecida);
 }
 
 /** Comunicaciones / audiencias / mejor proveer aún abiertas (no cumplidas ni cerradas). */
@@ -403,6 +441,9 @@ const ESTADOS_PRUEBA_ABIERTOS_EN_PEND_PRODUCCION = new Set([
   'postpuesta_juez',
   'audiencia_fijada',
   'intimacion_ordenada',
+  'exhibicion_parcial',
+  'apercibimiento_en_contra',
+  'autenticidad_impugnada',
 ]);
 
 /** Filtro de estado del header: prueba ofrecida + comunicaciones/audiencias pendientes. */
@@ -428,6 +469,88 @@ export function pasaFiltroEstadoProduccion(item: ControlPruebaItem, filtro: stri
     return itemPendienteDeControl(item);
   }
   return false;
+}
+
+const FILTROS_ESTADO_CON_ARBOL = new Set([
+  'pendiente_produccion',
+  'postpuesta_juez',
+  'audiencia_fijada',
+  'intimacion_ordenada',
+  'exhibicion_parcial',
+  'apercibimiento_en_contra',
+  'autenticidad_impugnada',
+]);
+
+function padreIdDeItem(item: ControlPruebaItem): string | null {
+  return item.vinculo?.parentItemId ?? item.diligencia?.pruebaVinculadaId ?? null;
+}
+
+/**
+ * Completa el árbol del filtro: hijos de pruebas visibles + padres que también
+ * pasan el filtro. Nunca arrastra una prueba ya cerrada (producida, etc.) solo
+ * porque quedó una cédula/oficio pendiente.
+ */
+export function completarArbolFiltroEstado(
+  list: ControlPruebaItem[],
+  allItems: ControlPruebaItem[],
+  filtro: string,
+): ControlPruebaItem[] {
+  if (filtro === 'all' || !FILTROS_ESTADO_CON_ARBOL.has(filtro)) return list;
+
+  const byId = new Map(allItems.map((i) => [i.id, i]));
+
+  /** Prueba ofrecida ancestro (padre o abuelo) que define si el hijo entra en el filtro. */
+  function pruebaOfrecidaAncestro(item: ControlPruebaItem): ControlPruebaItem | null {
+    const padreId = padreIdDeItem(item);
+    if (!padreId) return null;
+    const padre = byId.get(padreId);
+    if (!padre) return null;
+    if (esPruebaOfrecida(padre)) return padre;
+    const abueloId = padreIdDeItem(padre);
+    if (!abueloId) return null;
+    const abuelo = byId.get(abueloId);
+    return abuelo && esPruebaOfrecida(abuelo) ? abuelo : null;
+  }
+
+  // Sacá hijos cuya prueba ofrecida ya no entra en este filtro (ej. cédula de una Producida).
+  let working = list.filter((item) => {
+    const prueba = pruebaOfrecidaAncestro(item);
+    if (!prueba) return true;
+    return pasaFiltroEstadoProduccion(prueba, filtro);
+  });
+
+  const ids = new Set(working.map((i) => i.id));
+  let changed = true;
+
+  while (changed) {
+    changed = false;
+
+    // Padres solo si ellos también pasan el filtro (nunca una Producida bajo Pend. producción).
+    for (const item of working) {
+      const padreId = padreIdDeItem(item);
+      if (!padreId || ids.has(padreId)) continue;
+      const padre = byId.get(padreId);
+      if (!padre) continue;
+      if (!pasaFiltroEstadoProduccion(padre, filtro)) continue;
+      working.push(padre);
+      ids.add(padre.id);
+      changed = true;
+    }
+
+    // Hijos/nietos de ítems ya visibles (instrumentalidad de esas pruebas).
+    for (const item of allItems) {
+      if (ids.has(item.id)) continue;
+      const padreId = padreIdDeItem(item);
+      if (!padreId || !ids.has(padreId)) continue;
+      const prueba = pruebaOfrecidaAncestro(item);
+      if (prueba && !pasaFiltroEstadoProduccion(prueba, filtro)) continue;
+      working.push(item);
+      ids.add(item.id);
+      changed = true;
+    }
+  }
+
+  return working;
 }
 
 export function estadosParaItem(item: ControlPruebaItem): readonly string[] {
@@ -750,6 +873,7 @@ function normalizeDocumentalEnPoder(raw: unknown): DocumentalEnPoderMeta | undef
   return {
     parteConDocumentos: d.parteConDocumentos || null,
     documentosDetalle: d.documentosDetalle?.trim() || null,
+    documentosFaltantes: d.documentosFaltantes?.trim() || null,
     plazoPresentacion: d.plazoPresentacion || null,
     medioIntimacion: d.medioIntimacion ?? 'papel',
     intimacionOrdenada: Boolean(d.intimacionOrdenada),
@@ -885,8 +1009,7 @@ export function normalizeItems(items: ControlPruebaItem[] | undefined): ControlP
 export function countByEstado(items: ControlPruebaItem[]): Record<PruebaEstado, number> {
   const counts = Object.fromEntries(PRUEBA_ESTADOS.map((e) => [e, 0])) as Record<PruebaEstado, number>;
   for (const item of items) {
-    if (resolveCategoria(item) === 'audiencia' && item.vinculo?.rol === 'audiencia_prueba') continue;
-    if (!usaEstadosProduccionPrueba(item)) continue;
+    if (!esPruebaOfrecida(item)) continue;
     for (const estado of PRUEBA_ESTADOS) {
       if (itemVisibleConFiltroEstado(item, estado)) counts[estado] += 1;
     }

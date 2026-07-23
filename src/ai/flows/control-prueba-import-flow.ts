@@ -36,6 +36,8 @@ const ControlItemSchema = z.object({
       'postpuesta_juez',
       'audiencia_fijada',
       'intimacion_ordenada',
+      'exhibicion_parcial',
+      'apercibimiento_en_contra',
       'autenticidad_impugnada',
       'valoracion_judicial',
       'producida',
@@ -44,7 +46,7 @@ const ControlItemSchema = z.object({
     ])
     .optional()
     .describe(
-      'Estado actual. documental YA acompañada sin impugnación de autenticidad → producida. documental con autenticidad impugnada → autenticidad_impugnada. documental_en_poder con intimación → intimacion_ordenada.',
+      'Estado actual. documental YA acompañada sin impugnación → producida. autenticidad impugnada → autenticidad_impugnada. documental_en_poder: intimación → intimacion_ordenada; respuesta incompleta → exhibicion_parcial; no acompañaron → apercibimiento_en_contra.',
     ),
   impugnacionAutenticidad: z
     .boolean()

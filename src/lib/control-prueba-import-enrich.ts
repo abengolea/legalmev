@@ -8,6 +8,8 @@ const ESTADOS_PRUEBA_IMPORT = new Set<string>([
   'postpuesta_juez',
   'audiencia_fijada',
   'intimacion_ordenada',
+  'exhibicion_parcial',
+  'apercibimiento_en_contra',
   'autenticidad_impugnada',
   'valoracion_judicial',
   'producida',

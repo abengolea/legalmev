@@ -107,7 +107,7 @@ export function coerceEstadoAudienciaItem(item: ControlPruebaItem): string {
   }
   if (esAudienciaOfrecidaItem(item)) {
     if ((ESTADOS_PRUEBA_AUDIENCIA_OFRECIDA as readonly string[]).includes(estado)) return estado;
-    if ((PRUEBA_ESTADOS as readonly string[]).includes(estado) && !['intimacion_ordenada', 'autenticidad_impugnada'].includes(estado)) {
+    if ((PRUEBA_ESTADOS as readonly string[]).includes(estado) && !['intimacion_ordenada', 'exhibicion_parcial', 'apercibimiento_en_contra', 'autenticidad_impugnada'].includes(estado)) {
       return estado;
     }
     return 'pendiente_produccion';

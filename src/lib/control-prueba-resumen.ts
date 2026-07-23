@@ -1,4 +1,4 @@
-import { esAudienciaOfrecida, TIPO_LABELS } from '@/lib/control-prueba';
+import { esPruebaOfrecida, TIPO_LABELS } from '@/lib/control-prueba';
 import { esEventoAudienciaPrueba } from '@/lib/control-prueba-audiencia-evento';
 import type {
   ControlPruebaItem,
@@ -15,10 +15,9 @@ const ESTADOS_PENDIENTE = new Set([
   'postpuesta_juez',
   'audiencia_fijada',
   'intimacion_ordenada',
+  'exhibicion_parcial',
+  'apercibimiento_en_contra',
   'autenticidad_impugnada',
-  // Eventos de audiencia abiertos (categoria audiencia)
-  'programada',
-  'reprogramada',
 ]);
 const ESTADOS_EVENTO_CERRADO = new Set(['realizada', 'cancelada']);
 
@@ -63,28 +62,16 @@ function bucketEstado(item: ControlPruebaItem): keyof ResumenEjecutivoImport | n
   return 'pendiente';
 }
 
-function padreIdDeItem(item: ControlPruebaItem): string | null {
-  return item.vinculo?.parentItemId ?? item.diligencia?.pruebaVinculadaId ?? null;
-}
-
-function esAudienciaOEvento(item: ControlPruebaItem): boolean {
-  return esEventoAudienciaPrueba(item) || esAudienciaOfrecida(item);
-}
-
-/** Arma resumen ejecutivo solo con la prueba de la parte que representamos. */
-export function buildResumenNuestraParte(
+/** Arma resumen ejecutivo desde los ítems actuales (opcionalmente filtrado por parte). */
+export function buildResumenDesdeItems(
   items: ControlPruebaItem[],
   oficios: OficioAutenticidadPendiente[],
-  parte: ParteRepresentada | '' | undefined,
+  parte?: ParteRepresentada | '' | null,
 ): ResumenEjecutivoImport | undefined {
-  if (!parte) return undefined;
-
-  const nuestra = items.filter((i) => {
-    if (!itemEsNuestraParte(i, parte, items)) return false;
-    // Eventos cerrados: la prueba padre ya refleja el resultado
-    if (esEventoAudienciaPrueba(i) && ESTADOS_EVENTO_CERRADO.has(String(i.estado))) return false;
-    return true;
-  });
+  const nuestra =
+    parte === 'actor' || parte === 'demandado'
+      ? items.filter((i) => itemEsNuestraParte(i, parte, items))
+      : items;
   if (nuestra.length === 0 && oficios.length === 0) return undefined;
 
   const out: ResumenEjecutivoImport = {
@@ -97,49 +84,41 @@ export function buildResumenNuestraParte(
   const lineasProducida = new Set<string>();
 
   for (const item of nuestra) {
-    // Evitar duplicar evento si el confesional/testimonial padre ya figura en pendiente
-    if (esEventoAudienciaPrueba(item)) {
-      const padre = items.find((i) => i.id === item.vinculo?.parentItemId);
-      if (padre && ESTADOS_PENDIENTE.has(String(padre.estado))) continue;
-    }
-
+    if (!esPruebaOfrecida(item)) continue;
     const bucket = bucketEstado(item);
-    if (!bucket || bucket === 'recomendaciones') continue;
+    if (bucket !== 'pendiente' && bucket !== 'producida') continue;
     const linea = lineaItem(item);
     if (bucket === 'pendiente') {
       if (lineasPendiente.has(linea)) continue;
       lineasPendiente.add(linea);
       out.pendiente!.push(linea);
-    } else if (bucket === 'producida') {
+    } else {
       if (lineasProducida.has(linea)) continue;
       lineasProducida.add(linea);
       out.producida!.push(linea);
-    } else {
-      out.aLibrar!.push(linea);
     }
   }
 
-  // Cédulas/oficios de audiencia: si el padre no quedó en pendiente (p. ej. marcado producida),
-  // igual mostrar la audiencia en Pend. producción.
   for (const item of nuestra) {
-    if (bucketEstado(item) !== 'aLibrar') continue;
-    const padreId = padreIdDeItem(item);
-    if (!padreId) continue;
-    const padre = items.find((i) => i.id === padreId);
-    if (!padre || !esAudienciaOEvento(padre)) continue;
-    if (ESTADOS_EVENTO_CERRADO.has(String(padre.estado))) continue;
-    const linea = lineaItem(padre);
-    if (lineasPendiente.has(linea)) continue;
-    lineasPendiente.add(linea);
-    out.pendiente!.push(linea);
+    if (esPruebaOfrecida(item)) continue;
+    if (esEventoAudienciaPrueba(item)) continue;
+    if (ESTADOS_EVENTO_CERRADO.has(String(item.estado))) continue;
+    const cat = item.categoria ?? '';
+    const esComunicacion =
+      cat === 'diligencia' ||
+      item.tipo === 'oficio' ||
+      item.tipo === 'cedula' ||
+      item.tipo === 'oficio_electronico' ||
+      item.tipo === 'cedula_electronica';
+    if (!esComunicacion && bucketEstado(item) !== 'aLibrar') continue;
+    out.aLibrar!.push(lineaItem(item));
   }
 
-  const idsNuestra = new Set(
-    nuestra.filter((i) => i.tipo === 'documental').map((i) => i.id),
-  );
+  const idsDoc = new Set(nuestra.filter((i) => i.tipo === 'documental').map((i) => i.id));
   for (const o of oficios) {
     if (o.estado !== 'a_librar') continue;
-    if (o.itemPruebaId && !idsNuestra.has(o.itemPruebaId)) continue;
+    if (o.itemPruebaId && idsDoc.size > 0 && !idsDoc.has(o.itemPruebaId)) continue;
+    if (parte && o.itemPruebaId && !idsDoc.has(o.itemPruebaId)) continue;
     const ref = o.referencia ? `${o.referencia} — ` : '';
     out.aLibrar!.push(`Oficio autenticidad: ${ref}${o.destinatarioOficio}`);
   }
@@ -149,6 +128,16 @@ export function buildResumenNuestraParte(
   if (!out.aLibrar?.length) delete out.aLibrar;
 
   return Object.keys(out).length ? out : undefined;
+}
+
+/** @deprecated usar buildResumenDesdeItems */
+export function buildResumenNuestraParte(
+  items: ControlPruebaItem[],
+  oficios: OficioAutenticidadPendiente[],
+  parte: ParteRepresentada | '' | undefined,
+): ResumenEjecutivoImport | undefined {
+  if (!parte) return undefined;
+  return buildResumenDesdeItems(items, oficios, parte);
 }
 
 /** Filtra un resumen importado por IA dejando líneas que mencionan nuestra parte. */
@@ -200,10 +189,19 @@ export function resumenParaParteRepresentada(
   actor?: string,
   demandado?: string,
 ): ResumenEjecutivoImport | undefined {
-  if (!parte) return resumenImport;
+  // Con parte representada: siempre desde ítems actuales (se actualiza solo).
+  if (parte === 'actor' || parte === 'demandado') {
+    const desdeItems = buildResumenDesdeItems(items, oficios, parte);
+    if (desdeItems) {
+      return {
+        ...desdeItems,
+        // Conservá recomendaciones del import (la IA); el resto refleja el control.
+        recomendaciones: resumenImport?.recomendaciones,
+      };
+    }
+    return filtrarResumenImportPorParte(resumenImport, parte, actor, demandado);
+  }
 
-  const desdeItems = buildResumenNuestraParte(items, oficios, parte);
-  if (desdeItems) return desdeItems;
-
-  return filtrarResumenImportPorParte(resumenImport, parte, actor, demandado);
+  // Sin parte: snapshot del import (o el último “Actualizar”) hasta que regeneren.
+  return resumenImport;
 }

@@ -9,7 +9,15 @@ import { esCierrePrueba } from '@/lib/control-prueba-cierre';
 
 export const TIPO_DOCUMENTAL_EN_PODER = 'documental_en_poder' as const;
 
-const ESTADOS_SOLO_INTIMACION = new Set(['intimacion_ordenada']);
+/** Estados exclusivos del flujo documental en poder (no aplican a otras pruebas). */
+export const ESTADOS_SOLO_DOCUMENTAL_EN_PODER = new Set([
+  'intimacion_ordenada',
+  'exhibicion_parcial',
+  'apercibimiento_en_contra',
+]);
+
+/** Estados que mantienen intimación activa (plazo + cédulas). */
+export const ESTADOS_INTIMACION_ACTIVA = new Set(['intimacion_ordenada', 'exhibicion_parcial']);
 
 export function requiereFlujoDocumentalEnPoder(tipo: string): boolean {
   return tipo === TIPO_DOCUMENTAL_EN_PODER;
@@ -31,7 +39,13 @@ export function estadosPruebaParaItemDocumental(
   if (requiereFlujoDocumentalEnPoder(item.tipo)) {
     return todos.filter((e) => e !== 'audiencia_fijada' && e !== 'autenticidad_impugnada');
   }
-  return todos.filter((e) => !ESTADOS_SOLO_INTIMACION.has(e) && e !== 'intimacion_ordenada');
+  return todos.filter(
+    (e) => !ESTADOS_SOLO_DOCUMENTAL_EN_PODER.has(e) && e !== 'intimacion_ordenada',
+  );
+}
+
+export function intimacionDocumentalActiva(estado: string): boolean {
+  return ESTADOS_INTIMACION_ACTIVA.has(String(estado));
 }
 
 export function ensureDocumentalEnPoderMeta(item: ControlPruebaItem): ControlPruebaItem {
@@ -39,13 +53,14 @@ export function ensureDocumentalEnPoderMeta(item: ControlPruebaItem): ControlPru
   const prev = item.documentalEnPoder ?? {};
   const estado =
     item.estado === 'autenticidad_impugnada' ? 'intimacion_ordenada' : item.estado;
-  const intimacionOrdenada = estado === 'intimacion_ordenada';
+  const intimacionOrdenada = intimacionDocumentalActiva(String(estado));
   return {
     ...item,
     estado,
     documentalEnPoder: {
       parteConDocumentos: prev.parteConDocumentos ?? parteContrariaDefault(item.ofrecidaPor),
       documentosDetalle: prev.documentosDetalle ?? null,
+      documentosFaltantes: prev.documentosFaltantes ?? null,
       plazoPresentacion: prev.plazoPresentacion ?? item.fechaLimite ?? null,
       medioIntimacion: (prev.medioIntimacion as CedulaNotifMedio) ?? 'papel',
       intimacionOrdenada,
@@ -56,10 +71,10 @@ export function ensureDocumentalEnPoderMeta(item: ControlPruebaItem): ControlPru
 export function syncFechaLimiteDocumentalEnPoder(item: ControlPruebaItem): ControlPruebaItem {
   if (!requiereFlujoDocumentalEnPoder(item.tipo)) return item;
   const plazo = item.documentalEnPoder?.plazoPresentacion;
-  if (item.estado === 'intimacion_ordenada' && plazo) {
+  if (intimacionDocumentalActiva(String(item.estado)) && plazo) {
     return { ...item, fechaLimite: plazo };
   }
-  if (item.estado !== 'intimacion_ordenada') {
+  if (!intimacionDocumentalActiva(String(item.estado))) {
     return { ...item, fechaLimite: null };
   }
   return item;
@@ -85,9 +100,9 @@ export function patchEstadoDocumentalEnPoder(
   if (!requiereFlujoDocumentalEnPoder(item.tipo)) return patch;
 
   const estadoFinal = String(estado);
+  const prev = item.documentalEnPoder ?? {};
 
-  if (estadoFinal === 'intimacion_ordenada') {
-    const prev = item.documentalEnPoder ?? {};
+  if (estadoFinal === 'intimacion_ordenada' || estadoFinal === 'exhibicion_parcial') {
     const plazo = prev.plazoPresentacion ?? item.fechaLimite ?? null;
     patch.documentalEnPoder = {
       ...prev,
@@ -95,16 +110,32 @@ export function patchEstadoDocumentalEnPoder(
       parteConDocumentos: prev.parteConDocumentos ?? parteContrariaDefault(item.ofrecidaPor),
       plazoPresentacion: plazo,
       medioIntimacion: prev.medioIntimacion ?? 'papel',
+      documentosFaltantes:
+        estadoFinal === 'exhibicion_parcial'
+          ? prev.documentosFaltantes ?? prev.documentosDetalle ?? null
+          : prev.documentosFaltantes ?? null,
     };
     patch.fechaLimite = plazo;
     return patch;
   }
 
-  if (estadoFinal === 'postpuesta_juez' || estadoFinal === 'pendiente_produccion') {
+  if (estadoFinal === 'apercibimiento_en_contra') {
+    // Conserva historial de cédulas; cierra el plazo de exhibición.
     patch.documentalEnPoder = {
-      ...item.documentalEnPoder,
+      ...prev,
       intimacionOrdenada: false,
       plazoPresentacion: null,
+    };
+    patch.fechaLimite = null;
+    return patch;
+  }
+
+  if (estadoFinal === 'postpuesta_juez' || estadoFinal === 'pendiente_produccion') {
+    patch.documentalEnPoder = {
+      ...prev,
+      intimacionOrdenada: false,
+      plazoPresentacion: null,
+      documentosFaltantes: null,
     };
     patch.fechaLimite = null;
     return patch;
@@ -112,7 +143,7 @@ export function patchEstadoDocumentalEnPoder(
 
   if (esCierrePrueba(estadoFinal) && estadoFinal !== 'producida') {
     patch.documentalEnPoder = {
-      ...item.documentalEnPoder,
+      ...prev,
       intimacionOrdenada: false,
       plazoPresentacion: null,
     };
@@ -120,9 +151,12 @@ export function patchEstadoDocumentalEnPoder(
     return patch;
   }
 
-  if (estadoFinal !== 'producida' && item.estado === 'intimacion_ordenada') {
+  if (
+    estadoFinal !== 'producida' &&
+    intimacionDocumentalActiva(String(item.estado))
+  ) {
     patch.documentalEnPoder = {
-      ...item.documentalEnPoder,
+      ...prev,
       intimacionOrdenada: false,
     };
   }
@@ -253,7 +287,8 @@ export function consolidarDocumentalEnPoderItems(items: ControlPruebaItem[]): Co
       return `${n + 1}. ${desc}`;
     });
     const intimacion = grupo.some(
-      (g) => g.estado === 'intimacion_ordenada' || g.documentalEnPoder?.intimacionOrdenada,
+      (g) =>
+        intimacionDocumentalActiva(String(g.estado)) || g.documentalEnPoder?.intimacionOrdenada,
     );
     const plazo =
       grupo.map((g) => g.fechaLimite || g.documentalEnPoder?.plazoPresentacion || null).find(Boolean) ??
@@ -272,6 +307,7 @@ export function consolidarDocumentalEnPoderItems(items: ControlPruebaItem[]): Co
       documentalEnPoder: {
         parteConDocumentos: parte,
         documentosDetalle: lineas.join('\n'),
+        documentosFaltantes: base.documentalEnPoder?.documentosFaltantes ?? null,
         plazoPresentacion: plazo,
         medioIntimacion: base.documentalEnPoder?.medioIntimacion ?? 'papel',
         intimacionOrdenada: intimacion,

@@ -19,9 +19,21 @@ export function estadosPruebaParaItemDocumentalAutenticidad(
   todos: readonly string[],
 ): string[] {
   if (requiereFlujoAutenticidadDocumental(item.tipo)) {
-    return todos.filter((e) => e !== 'audiencia_fijada' && e !== 'intimacion_ordenada');
+    return todos.filter(
+      (e) =>
+        e !== 'audiencia_fijada' &&
+        e !== 'intimacion_ordenada' &&
+        e !== 'exhibicion_parcial' &&
+        e !== 'apercibimiento_en_contra',
+    );
   }
-  return todos.filter((e) => !ESTADOS_SOLO_AUTENTICIDAD.has(e) && e !== 'intimacion_ordenada');
+  return todos.filter(
+    (e) =>
+      !ESTADOS_SOLO_AUTENTICIDAD.has(e) &&
+      e !== 'intimacion_ordenada' &&
+      e !== 'exhibicion_parcial' &&
+      e !== 'apercibimiento_en_contra',
+  );
 }
 
 export function ensureDocumentalMeta(item: ControlPruebaItem): ControlPruebaItem {
@@ -118,22 +130,25 @@ export function patchEstadoDocumentalAutenticidad(
       ...item.documental,
       autenticidadImpugnada: false,
       fechaImpugnacion: null,
+      oficiosAutenticidad: [],
     };
     return patch;
   }
 
-  if (esCierrePrueba(estadoFinal) && estadoFinal !== 'producida') {
+  if (esCierrePrueba(estadoFinal)) {
     patch.documental = {
       ...item.documental,
       autenticidadImpugnada: false,
+      oficiosAutenticidad: [],
     };
     return patch;
   }
 
-  if (estadoFinal !== 'producida' && item.estado === 'autenticidad_impugnada') {
+  if (item.estado === 'autenticidad_impugnada') {
     patch.documental = {
       ...item.documental,
       autenticidadImpugnada: false,
+      oficiosAutenticidad: [],
     };
   }
 

@@ -3,6 +3,8 @@ export const PRUEBA_ESTADOS = [
   'postpuesta_juez',
   'audiencia_fijada',
   'intimacion_ordenada',
+  'exhibicion_parcial',
+  'apercibimiento_en_contra',
   'autenticidad_impugnada',
   'valoracion_judicial',
   'producida',
@@ -300,6 +302,8 @@ export type DocumentalEnPoderMeta = {
   /** Parte que detenta la documentación */
   parteConDocumentos?: PruebaParte | string | null;
   documentosDetalle?: string | null;
+  /** Documentación aún faltante tras una exhibición parcial */
+  documentosFaltantes?: string | null;
   plazoPresentacion?: string | null;
   medioIntimacion?: CedulaNotifMedio | string | null;
   intimacionOrdenada?: boolean;
