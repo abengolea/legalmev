@@ -28,6 +28,16 @@ env:
   - variable: MERCADOPAGO_HUB_EMIT_FACTURA
     value: "true"
 
+  # Integración Notificas (descuento colegio 50% / registrado LegalMev 20%)
+  - variable: NOTIFICAS_LEGALMEV_SHARED_SECRET
+    secret: NOTIFICAS_LEGALMEV_SHARED_SECRET
+  - variable: NOTIFICAS_PROMO_DISCOUNT_PERCENT
+    value: "50"
+  - variable: NOTIFICAS_PROMO_REGISTERED_DISCOUNT_PERCENT
+    value: "20"
+  - variable: NOTIFICAS_PROMO_FREE_SHIPMENTS
+    value: "3"
+
   # Resend (emails de verificación con botón)
   - variable: RESEND_API_KEY
     secret: RESEND_API_KEY
