@@ -62,9 +62,7 @@ export async function GET(request: NextRequest) {
   const adminDb = getAdminDb();
   const userSnap = await adminDb.collection("users").doc(uid).get();
   const userData = userSnap.exists ? userSnap.data() : undefined;
-  if (userData?.[DISMISS_FIELD] === true) {
-    return NextResponse.json({ ok: true, show: false, reason: "dismissed" });
-  }
+  const dismissed = userData?.[DISMISS_FIELD] === true;
 
   const status = String(userData?.status ?? "activo").trim().toLowerCase();
   const profileOk =
@@ -82,7 +80,8 @@ export async function GET(request: NextRequest) {
   if (hasConvenio && hit) {
     return NextResponse.json({
       ok: true,
-      show: true,
+      show: !dismissed,
+      dismissed,
       tier: "convenio",
       userName,
       colegioId: hit.colegioId,
@@ -101,7 +100,8 @@ export async function GET(request: NextRequest) {
   if (profileOk) {
     return NextResponse.json({
       ok: true,
-      show: true,
+      show: !dismissed,
+      dismissed,
       tier: "legalmev",
       userName,
       colegioId: null,

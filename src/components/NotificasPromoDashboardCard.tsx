@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { auth } from "@/lib/firebase";
 import {
   Card,
@@ -11,21 +12,16 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ExternalLink, Megaphone } from "lucide-react";
-
-type PromoCardState = {
-  tier: "convenio" | "legalmev";
-  discountPercent: number;
-  freeShipments: number;
-  colegioName?: string;
-  notificasLoginUrl: string;
-};
+import {
+  fetchNotificasPromoInfo,
+  type NotificasPromoInfo,
+} from "@/lib/notificas-promo-client";
 
 /**
- * Invitación persistente a Notificas en el panel (complementa el modal).
+ * Invitación persistente a Notificas en el panel (complementa el modal y el ítem del sidebar).
  */
 export function NotificasPromoDashboardCard() {
-  const [promo, setPromo] = useState<PromoCardState | null>(null);
-  const [hidden, setHidden] = useState(false);
+  const [promo, setPromo] = useState<NotificasPromoInfo | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -35,37 +31,8 @@ export function NotificasPromoDashboardCard() {
         return;
       }
       try {
-        const token = await user.getIdToken();
-        const meRes = await fetch("/api/user/me", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const meJson = await meRes.json().catch(() => ({}));
-        if (meJson?.ok && meJson.user?.isColegioAdmin && !meJson.user?.isPlatformAdmin) {
-          if (!cancelled) setPromo(null);
-          return;
-        }
-
-        const res = await fetch("/api/user/notificas-promo", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const data = await res.json().catch(() => ({}));
-        if (cancelled) return;
-        if (!res.ok || !data.show || typeof data.notificasLoginUrl !== "string") {
-          setPromo(null);
-          return;
-        }
-        setPromo({
-          tier: data.tier === "convenio" ? "convenio" : "legalmev",
-          discountPercent:
-            typeof data.discountPercent === "number"
-              ? data.discountPercent
-              : data.tier === "convenio"
-                ? 50
-                : 20,
-          freeShipments: typeof data.freeShipments === "number" ? data.freeShipments : 0,
-          colegioName: typeof data.colegioName === "string" ? data.colegioName : undefined,
-          notificasLoginUrl: data.notificasLoginUrl,
-        });
+        const info = await fetchNotificasPromoInfo();
+        if (!cancelled) setPromo(info);
       } catch {
         if (!cancelled) setPromo(null);
       }
@@ -76,47 +43,53 @@ export function NotificasPromoDashboardCard() {
     };
   }, []);
 
-  if (hidden || !promo) return null;
-
-  const isConvenio = promo.tier === "convenio";
-  const pct = promo.discountPercent;
+  // Fallback visible aunque la API falle: siempre invitamos a conocer Notificas.
+  const pct = promo?.discountPercent ?? 20;
+  const isConvenio = promo?.tier === "convenio";
+  const loginUrl =
+    promo?.notificasLoginUrl ?? "https://notificas.com.ar/login?ref=legalmev&tier=legalmev&discount=20";
 
   return (
     <Card className="border-primary/40 bg-primary/5 shadow-sm">
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-2 text-lg">
           <Megaphone className="h-5 w-5 text-primary" />
-          Probá Notificas
+          Notificas — beneficio LegalMev
         </CardTitle>
-        <CardDescription className="text-sm text-foreground/80 space-y-1">
-          {isConvenio ? (
-            <span>
+        <CardDescription className="space-y-2 text-sm text-foreground/80">
+          {isConvenio && promo ? (
+            <p>
               Por tu matrícula en <strong>{promo.colegioName ?? "tu colegio"}</strong>:{" "}
               <strong className="text-primary">{pct}% de descuento</strong>
               {promo.freeShipments > 0
                 ? ` y ${promo.freeShipments} envío${promo.freeShipments === 1 ? "" : "s"} gratis`
                 : ""}{" "}
-              en notificaciones digitales certificadas.
-            </span>
+              en notificaciones digitales certificadas (email y WhatsApp).
+            </p>
           ) : (
-            <span>
+            <p>
               Por estar registrado en LegalMev:{" "}
-              <strong className="text-primary">{pct}% de descuento</strong> en Notificas
-              (notificaciones certificadas por email y WhatsApp).
-            </span>
+              <strong className="text-primary">{pct}% de descuento</strong> en Notificas —
+              notificaciones certificadas por email y WhatsApp, con constancia PDF para el
+              expediente.
+            </p>
           )}
+          <p className="text-muted-foreground">
+            Entrá con el mismo correo de LegalMev para que el descuento se active solo al comprar
+            envíos.
+          </p>
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-wrap gap-2">
         <Button
           type="button"
-          onClick={() => window.open(promo.notificasLoginUrl, "_blank", "noopener,noreferrer")}
+          onClick={() => window.open(loginUrl, "_blank", "noopener,noreferrer")}
         >
-          Ir a Notificas
+          Aprovechar descuento
           <ExternalLink className="ml-2 h-4 w-4 opacity-70" aria-hidden />
         </Button>
-        <Button type="button" variant="ghost" size="sm" onClick={() => setHidden(true)}>
-          Ocultar
+        <Button type="button" variant="outline" asChild>
+          <Link href="/dashboard/notificas">Ver cómo funciona</Link>
         </Button>
       </CardContent>
     </Card>

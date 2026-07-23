@@ -24,7 +24,7 @@ import {
 import { Separator } from './ui/separator';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Button } from './ui/button';
-import { LayoutDashboard, LogOut, Shield, Users, Building2, BarChart3, CreditCard, Settings, Landmark, Receipt, Gavel, FileSearch } from 'lucide-react';
+import { LayoutDashboard, LogOut, Shield, Users, Building2, BarChart3, CreditCard, Settings, Landmark, Receipt, Gavel, FileSearch, BellRing } from 'lucide-react';
 import { Logo } from './Logo';
 import { useSidebar } from '@/components/ui/sidebar';
 
@@ -189,6 +189,16 @@ export function DashboardNav() {
               tooltip={{ children: 'Pagos y facturas' }}
             >
               <Link href="/dashboard/pagos">Pagos y facturas</Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              asChild
+              isActive={isActive('/dashboard/notificas')}
+              icon={<BellRing />}
+              tooltip={{ children: 'Notificas' }}
+            >
+              <Link href="/dashboard/notificas">Notificas</Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
           {isColegioAdmin && (
