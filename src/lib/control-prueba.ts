@@ -23,10 +23,12 @@ import {
   normalizeOficiosAutenticidad,
   normalizeResumenEjecutivo,
 } from '@/lib/control-prueba-import-meta';
+import { normalizePartesRepresentadas } from '@/lib/control-prueba-partes-representadas';
 import { repairSpanishTextEncoding } from '@/lib/text-encoding-repair';
 import {
   PRUEBA_ESTADOS,
   DILIGENCIA_ESTADOS,
+  INFORMATIVA_ESTADOS,
   AUDIENCIA_ESTADOS,
   ITEM_CATEGORIAS,
   TIPOS_PRUEBA,
@@ -84,6 +86,7 @@ import type { ControlPruebaImportOutput } from '@/ai/flows/control-prueba-import
 export {
   PRUEBA_ESTADOS,
   DILIGENCIA_ESTADOS,
+  INFORMATIVA_ESTADOS,
   AUDIENCIA_ESTADOS,
   ITEM_CATEGORIAS,
   PRUEBA_PARTES,
@@ -172,7 +175,7 @@ export const TIPO_LABELS: Record<string, string> = {
   documental_en_poder: 'Documental en poder de contraparte',
   testimonial: 'Testimonial',
   pericial: 'Pericial',
-  informativa: 'Informativa (oficio)',
+  informativa: 'Informativa',
   confesional: 'Confesional',
   inspeccion: 'Inspección',
   otra: 'Otra',
@@ -209,7 +212,7 @@ export const CATEGORIA_CONFIG: Record<
 > = {
   prueba: {
     titulo: 'Prueba ofrecida',
-    descripcion: 'Documental, pericial, oficios… por parte',
+    descripcion: 'Documental, pericial, informativa… por parte',
     accent: 'border-l-[#2A6A78]',
   },
   diligencia: {
@@ -252,9 +255,27 @@ export const ESTADOS_POR_CATEGORIA: Record<ItemCategoria, readonly string[]> = {
 
 const DILIGENCIA_ESTADO_STYLE: Record<string, EstadoStyle> = {
   pendiente: { label: 'Pendiente', badgeClass: 'bg-amber-100 text-amber-900 border-amber-300', rowClass: 'border-l-amber-500', dotClass: 'bg-amber-500' },
+  presentado: {
+    label: 'Presentado',
+    badgeClass: 'bg-violet-100 text-violet-800 border-violet-300',
+    rowClass: 'border-l-violet-500',
+    dotClass: 'bg-violet-500',
+  },
+  // Legacy: «enviado» → presentado
+  enviado: {
+    label: 'Presentado',
+    badgeClass: 'bg-violet-100 text-violet-800 border-violet-300',
+    rowClass: 'border-l-violet-500',
+    dotClass: 'bg-violet-500',
+  },
+  observado: {
+    label: 'Observado',
+    badgeClass: 'bg-orange-100 text-orange-800 border-orange-300',
+    rowClass: 'border-l-orange-500',
+    dotClass: 'bg-orange-500',
+  },
   librado: { label: 'Librado', badgeClass: 'bg-sky-100 text-sky-800 border-sky-300', rowClass: 'border-l-sky-500', dotClass: 'bg-sky-500' },
   diligenciado: { label: 'Diligenciado', badgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-300', rowClass: 'border-l-emerald-500 bg-emerald-50/50', dotClass: 'bg-emerald-500' },
-  enviado: { label: 'Enviado', badgeClass: 'bg-sky-100 text-sky-800 border-sky-300', rowClass: 'border-l-sky-500', dotClass: 'bg-sky-500' },
   contestado: { label: 'Contestado', badgeClass: 'bg-violet-100 text-violet-800 border-violet-300', rowClass: 'border-l-violet-500', dotClass: 'bg-violet-500' },
   contestacion_parcial: {
     label: 'Cumpl. parcial',
@@ -336,6 +357,17 @@ export function getEstadoConfig(categoria: ItemCategoria, estado: string, item?:
   }
   if (categoria === 'diligencia' && estado in DILIGENCIA_ESTADO_STYLE) {
     return DILIGENCIA_ESTADO_STYLE[estado];
+  }
+  if (item?.tipo === 'informativa') {
+    if (estado === 'valoracion_judicial') {
+      return ESTADO_CONFIG.valoracion_judicial;
+    }
+    if (estado === 'producida' || estado === 'cumplido') {
+      return ESTADO_CONFIG.producida;
+    }
+    if (estado in DILIGENCIA_ESTADO_STYLE) {
+      return DILIGENCIA_ESTADO_STYLE[estado];
+    }
   }
   if (categoria === 'audiencia' && estado in AUDIENCIA_ESTADO_STYLE) {
     return AUDIENCIA_ESTADO_STYLE[estado];
@@ -516,6 +548,13 @@ export function completarArbolFiltroEstado(
   let working = list.filter((item) => {
     const prueba = pruebaOfrecidaAncestro(item);
     if (!prueba) return true;
+    if (
+      ['producida', 'valoracion_judicial', 'cumplido', 'desistida', 'no_admitida'].includes(
+        String(prueba.estado),
+      )
+    ) {
+      return false;
+    }
     return pasaFiltroEstadoProduccion(prueba, filtro);
   });
 
@@ -542,8 +581,25 @@ export function completarArbolFiltroEstado(
       if (ids.has(item.id)) continue;
       const padreId = padreIdDeItem(item);
       if (!padreId || !ids.has(padreId)) continue;
+      const padre = byId.get(padreId);
+      if (
+        padre &&
+        ['producida', 'valoracion_judicial', 'cumplido', 'desistida', 'no_admitida'].includes(
+          String(padre.estado),
+        )
+      ) {
+        continue;
+      }
       const prueba = pruebaOfrecidaAncestro(item);
       if (prueba && !pasaFiltroEstadoProduccion(prueba, filtro)) continue;
+      if (
+        prueba &&
+        ['producida', 'valoracion_judicial', 'cumplido', 'desistida', 'no_admitida'].includes(
+          String(prueba.estado),
+        )
+      ) {
+        continue;
+      }
       working.push(item);
       ids.add(item.id);
       changed = true;
@@ -558,6 +614,7 @@ export function estadosParaItem(item: ControlPruebaItem): readonly string[] {
     return AUDIENCIA_ESTADOS;
   }
   if (esAudienciaOfrecida(item)) return PRUEBA_ESTADOS;
+  if (item.tipo === 'informativa' && resolveCategoria(item) === 'prueba') return INFORMATIVA_ESTADOS;
   if (item.tipo === 'pericial' && resolveCategoria(item) === 'prueba') return estadosPericialPadre();
   if (esMovimientoPericial(item)) return estadosParaMovimientoPericial(item);
   if (usaEstadosComunicacionEspeciales(item)) return estadosComunicacion(item);
@@ -590,6 +647,7 @@ export function defaultEstadoForItem(categoria: ItemCategoria, tipo?: string): C
   if (tipo === 'confesional' || tipo === 'testimonial') return 'pendiente_produccion';
   if (tipo === 'pericial') return 'pendiente_produccion';
   if (tipo === 'documental_en_poder') return 'pendiente_produccion';
+  if (tipo === 'informativa') return 'pendiente';
   if (tipo === 'impugnacion_informe') return 'presentada';
   if (tipo && usaEstadosComunicacionEspeciales({ categoria: 'diligencia', tipo })) {
     return 'pendiente_realizacion';
@@ -649,6 +707,9 @@ export function isValidEstadoForItem(
 ): boolean {
   if (esAudienciaOfrecida(item)) {
     return (PRUEBA_ESTADOS as readonly string[]).includes(String(item.estado));
+  }
+  if (item.tipo === 'informativa') {
+    return (INFORMATIVA_ESTADOS as readonly string[]).includes(String(item.estado));
   }
   if (item.tipo === 'pericial') {
     return (estadosPericialPadre() as readonly string[]).includes(String(item.estado));
@@ -728,6 +789,7 @@ const ESTADOS_DILIGENCIA_LEGACY: Record<string, string> = {
   negativo: 'vencido',
   nulo: 'pendiente',
   sin_efecto: 'pendiente',
+  enviado: 'presentado',
 };
 
 function migrateEstadoDiligenciaGenerica(
@@ -962,7 +1024,10 @@ export function normalizeItems(items: ControlPruebaItem[] | undefined): ControlP
         testigos: normalizeTestigos(item.testigos),
         historial: normalizeHistorial(item.historial),
         adjuntos: normalizeAdjuntos(item.adjuntos),
-        diligencia: categoria === 'diligencia' ? normalizeDiligencia(item.diligencia) : undefined,
+        diligencia:
+          categoria === 'diligencia' || tipo === 'informativa'
+            ? normalizeDiligencia(item.diligencia)
+            : undefined,
         pericial: normalizePericial(item.pericial),
         audiencia: normalizeAudiencia(item.audiencia),
         audienciaPrueba: normalizeAudienciaPrueba(item.audienciaPrueba),
@@ -1035,7 +1100,9 @@ export function countProximasAudiencias(items: ControlPruebaItem[]): number {
 export function countDiligenciasPendientes(items: ControlPruebaItem[]): number {
   const pendientes = new Set([
     'pendiente',
+    'presentado',
     'enviado',
+    'observado',
     'pendiente_realizacion',
     'presentada',
     'contestacion_parcial',
@@ -1218,7 +1285,30 @@ export function serializeControlPruebaDoc(
     terceros: Array.isArray(data.terceros)
       ? (data.terceros as string[]).map((t) => String(t).trim()).filter(Boolean)
       : undefined,
-    parteRepresentada: data.parteRepresentada === 'demandado' ? 'demandado' : data.parteRepresentada === 'actor' ? 'actor' : '',
+    parteRepresentada:
+      data.parteRepresentada === 'demandado'
+        ? 'demandado'
+        : data.parteRepresentada === 'actor'
+          ? 'actor'
+          : data.parteRepresentada === 'tercero'
+            ? 'tercero'
+            : '',
+    partesRepresentadas: (() => {
+      const fromDoc = Array.isArray(data.partesRepresentadas)
+        ? (data.partesRepresentadas as string[]).filter(
+            (p): p is 'actor' | 'demandado' | 'tercero' =>
+              p === 'actor' || p === 'demandado' || p === 'tercero',
+          )
+        : [];
+      return normalizePartesRepresentadas(
+        fromDoc,
+        data.parteRepresentada === 'demandado' ||
+          data.parteRepresentada === 'actor' ||
+          data.parteRepresentada === 'tercero'
+          ? data.parteRepresentada
+          : '',
+      );
+    })(),
     items: consolidarAutenticidadDocumentalExpediente(
       normalizeItems(data.items),
       normalizeOficiosAutenticidad(data.oficiosAutenticidadPendientes as OficioAutenticidadPendiente[] | undefined),

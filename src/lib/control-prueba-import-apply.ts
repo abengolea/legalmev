@@ -20,6 +20,10 @@ import {
 } from '@/lib/control-prueba-import-meta';
 import { collectOficiosAutenticidadFromItems } from '@/lib/control-prueba-documental-autenticidad-consolidate';
 import { resumenParaParteRepresentada } from '@/lib/control-prueba-resumen';
+import {
+  normalizePartesRepresentadas,
+  payloadPartesRepresentadas,
+} from '@/lib/control-prueba-partes-representadas';
 import type { ParteRepresentadaPrueba } from '@/types/control-prueba';
 import {
   normalizeTokenUsage,
@@ -40,6 +44,7 @@ export type ImportPreviewPayload = {
   actor: string;
   demandado: string;
   parteRepresentada?: ParteRepresentadaPrueba | '';
+  partesRepresentadas?: ParteRepresentadaPrueba[];
   resumenCaso?: string;
   autoAperturaPrueba?: string;
   items: ControlPruebaItem[];
@@ -61,6 +66,7 @@ export type RunImportAnalysisInput = {
   expedienteUrl?: string;
   pdfFileName?: string;
   parteRepresentada?: ParteRepresentadaPrueba | '';
+  partesRepresentadas?: ParteRepresentadaPrueba[];
 };
 
 export async function runImportAnalysis(input: RunImportAnalysisInput) {
@@ -120,12 +126,15 @@ export async function runImportAnalysis(input: RunImportAnalysisInput) {
 
   const preview = buildPreviewPayload(analysis, importResult, input);
   preview.tokenUsage = normalizeTokenUsage(usage);
-  if (input.parteRepresentada) {
-    preview.parteRepresentada = input.parteRepresentada;
+  const partes = normalizePartesRepresentadas(input.partesRepresentadas, input.parteRepresentada);
+  if (partes.length > 0) {
+    const payload = payloadPartesRepresentadas(partes);
+    preview.partesRepresentadas = payload.partesRepresentadas;
+    preview.parteRepresentada = payload.parteRepresentada;
     preview.resumenEjecutivo = resumenParaParteRepresentada(
       preview.items,
       preview.oficiosAutenticidadPendientes,
-      input.parteRepresentada,
+      partes,
       preview.resumenEjecutivo,
       preview.actor,
       preview.demandado,
@@ -170,7 +179,9 @@ function buildPreviewPayload(
     notas: repairSpanishTextEncoding(resumenNotas),
     actor: repairSpanishTextEncoding(analysis.actor?.trim() ?? ''),
     demandado: repairSpanishTextEncoding(analysis.demandado?.trim() ?? ''),
-    parteRepresentada: input.parteRepresentada ?? '',
+    ...payloadPartesRepresentadas(
+      normalizePartesRepresentadas(input.partesRepresentadas, input.parteRepresentada),
+    ),
     resumenCaso: analysis.resumenCaso?.trim(),
     autoAperturaPrueba: analysis.autoAperturaPrueba?.trim(),
     items: importResult.items,
@@ -238,18 +249,21 @@ export async function applyImportToFirestore(input: ApplyImportInput) {
 
   const oficiosImport = collectOficiosAutenticidadFromItems(mergedItems);
 
+  const partes = normalizePartesRepresentadas(preview.partesRepresentadas, preview.parteRepresentada);
+  const partesPayload = payloadPartesRepresentadas(partes);
+
   const importMeta = {
     pdfFileName: input.pdfFileName?.trim() || '',
     pdfImportedAt: nowIso,
     actor: preview.actor,
     demandado: preview.demandado,
-    parteRepresentada: preview.parteRepresentada ?? '',
+    ...partesPayload,
     oficiosAutenticidadPendientes: [],
     resumenEjecutivo: normalizeResumenEjecutivo(
       resumenParaParteRepresentada(
         mergedItems,
         oficiosImport,
-        preview.parteRepresentada,
+        partes,
         preview.resumenEjecutivo,
         preview.actor,
         preview.demandado,
@@ -282,7 +296,13 @@ export async function applyImportToFirestore(input: ApplyImportInput) {
     if (preview.fuero && !prev.fuero) update.fuero = preview.fuero;
     if (preview.notas && !prev.notas) update.notas = preview.notas;
     if (preview.expedienteUrl && !prev.expedienteUrl) update.expedienteUrl = preview.expedienteUrl;
-    if (preview.parteRepresentada) update.parteRepresentada = preview.parteRepresentada;
+    if (preview.parteRepresentada || (preview.partesRepresentadas?.length ?? 0) > 0) {
+      const p = payloadPartesRepresentadas(
+        normalizePartesRepresentadas(preview.partesRepresentadas, preview.parteRepresentada),
+      );
+      update.parteRepresentada = p.parteRepresentada;
+      update.partesRepresentadas = p.partesRepresentadas;
+    }
     if (tokenUsageMeta) {
       update.tokenUsage = {
         ...sumTokenUsage(normalizeTokenUsage(prev.tokenUsage), tokenUsageMeta),

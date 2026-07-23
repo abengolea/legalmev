@@ -203,9 +203,8 @@ function clasificarItem(
 
   if (tipoNorm === 'informativa') {
     return {
-      categoria: 'diligencia',
-      tipo: 'oficio',
-      motivoReclasificacion: 'Informativa unificada con oficio en Comunicaciones',
+      categoria: 'prueba',
+      tipo: 'informativa',
     };
   }
 

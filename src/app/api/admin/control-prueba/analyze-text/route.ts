@@ -32,8 +32,9 @@ type AnalyzeBody = {
   confirmImport?: boolean;
   preview?: ImportPreviewPayload;
   selectedItemIds?: string[];
-  /** Parte que representamos — filtra resumen a nuestra prueba. */
-  parteRepresentada?: 'actor' | 'demandado' | '';
+  /** Parte(s) que representamos — filtra resumen a nuestra prueba. */
+  parteRepresentada?: 'actor' | 'demandado' | 'tercero' | '';
+  partesRepresentadas?: ('actor' | 'demandado' | 'tercero')[];
 };
 
 function countByCategoria(items: ControlPruebaItem[]): Record<string, number> {
@@ -166,6 +167,7 @@ export async function POST(request: NextRequest) {
       expedienteUrl: body.expedienteUrl,
       pdfFileName: body.pdfFileName,
       parteRepresentada: body.parteRepresentada,
+      partesRepresentadas: body.partesRepresentadas,
     });
 
     if (!result.ok) {

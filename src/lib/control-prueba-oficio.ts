@@ -4,21 +4,36 @@ export function esOficio(item: Pick<ControlPruebaItem, 'categoria' | 'tipo'>): b
   return item.categoria === 'diligencia' && (item.tipo === 'oficio' || item.tipo === 'oficio_electronico');
 }
 
+/** Prueba informativa originaria (apartado Prueba) con ciclo de oficio. */
+export function esPruebaInformativa(item: Pick<ControlPruebaItem, 'categoria' | 'tipo'>): boolean {
+  return item.tipo === 'informativa' && (item.categoria === 'prueba' || !item.categoria);
+}
+
+/** Oficio en Comunicaciones o informativa en Prueba — mismo tracking. */
+export function usaFlujoOficio(item: Pick<ControlPruebaItem, 'categoria' | 'tipo'>): boolean {
+  return esOficio(item) || esPruebaInformativa(item);
+}
+
 function estadoInicialOficio(tipo: string): string {
   return tipo === 'oficio_electronico' ? 'pendiente_realizacion' : 'pendiente';
 }
 
-/** Crea oficio de aclaración vinculado al oficio con contestación parcial. */
+function tipoOficioHijo(padre: Pick<ControlPruebaItem, 'tipo'>): string {
+  if (padre.tipo === 'oficio_electronico') return 'oficio_electronico';
+  return 'oficio';
+}
+
+/** Crea oficio de aclaración vinculado al oficio/informativa con contestación parcial. */
 export function crearOficioAclaracion(
   items: ControlPruebaItem[],
   parentId: string,
 ): { items: ControlPruebaItem[]; creado: ControlPruebaItem | null } {
   const padre = items.find((i) => i.id === parentId);
-  if (!padre || !esOficio(padre)) return { items, creado: null };
+  if (!padre || !usaFlujoOficio(padre)) return { items, creado: null };
   if (String(padre.estado) !== 'contestacion_parcial') return { items, creado: null };
   if (padre.diligencia?.oficioSucesorId) return { items, creado: null };
 
-  const tipo = padre.tipo === 'oficio_electronico' ? 'oficio_electronico' : 'oficio';
+  const tipo = tipoOficioHijo(padre);
   const objetoBase = padre.diligencia?.objeto?.trim() || padre.descripcion.trim();
   const creado: ControlPruebaItem = {
     id: crypto.randomUUID(),
@@ -38,7 +53,9 @@ export function crearOficioAclaracion(
       destinatario: padre.diligencia?.destinatario,
       objeto: objetoBase ? `${objetoBase} (aclaraciones)` : undefined,
       oficioOrigenId: padre.id,
-      pruebaVinculadaId: padre.diligencia?.pruebaVinculadaId ?? null,
+      pruebaVinculadaId: esPruebaInformativa(padre)
+        ? padre.id
+        : (padre.diligencia?.pruebaVinculadaId ?? null),
     },
   };
 
@@ -51,17 +68,17 @@ export function crearOficioAclaracion(
   return { items: [...itemsActualizados, creado], creado };
 }
 
-/** Crea oficio de reiteración cuando el oficio anterior quedó sin respuesta (vencido). */
+/** Crea oficio de reiteración cuando el oficio/informativa anterior quedó sin respuesta (vencido). */
 export function crearOficioReiteracion(
   items: ControlPruebaItem[],
   parentId: string,
 ): { items: ControlPruebaItem[]; creado: ControlPruebaItem | null } {
   const padre = items.find((i) => i.id === parentId);
-  if (!padre || !esOficio(padre)) return { items, creado: null };
+  if (!padre || !usaFlujoOficio(padre)) return { items, creado: null };
   if (String(padre.estado) !== 'vencido') return { items, creado: null };
   if (padre.diligencia?.oficioSucesorId) return { items, creado: null };
 
-  const tipo = padre.tipo === 'oficio_electronico' ? 'oficio_electronico' : 'oficio';
+  const tipo = tipoOficioHijo(padre);
   const objetoBase = padre.diligencia?.objeto?.trim() || padre.descripcion.trim();
   const creado: ControlPruebaItem = {
     id: crypto.randomUUID(),
@@ -81,7 +98,9 @@ export function crearOficioReiteracion(
       destinatario: padre.diligencia?.destinatario,
       objeto: objetoBase ? `${objetoBase} (reiteración)` : undefined,
       oficioOrigenId: padre.id,
-      pruebaVinculadaId: padre.diligencia?.pruebaVinculadaId ?? null,
+      pruebaVinculadaId: esPruebaInformativa(padre)
+        ? padre.id
+        : (padre.diligencia?.pruebaVinculadaId ?? null),
     },
   };
 
@@ -108,7 +127,7 @@ export function evaluarOficioAclaracionAutomatico(
   if (patch.estado !== 'contestacion_parcial') return { items, creado: null };
   if (itemAnterior.estado === 'contestacion_parcial') return { items, creado: null };
   const padre = items.find((i) => i.id === itemId);
-  if (!padre || !esOficio(padre)) return { items, creado: null };
+  if (!padre || !usaFlujoOficio(padre)) return { items, creado: null };
   return crearOficioAclaracion(items, itemId);
 }
 
@@ -122,6 +141,6 @@ export function evaluarOficioReiteracionAutomatico(
   if (patch.estado !== 'vencido') return { items, creado: null };
   if (itemAnterior.estado === 'vencido') return { items, creado: null };
   const padre = items.find((i) => i.id === itemId);
-  if (!padre || !esOficio(padre)) return { items, creado: null };
+  if (!padre || !usaFlujoOficio(padre)) return { items, creado: null };
   return crearOficioReiteracion(items, itemId);
 }

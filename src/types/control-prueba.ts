@@ -29,13 +29,30 @@ export type PericialEstado = (typeof PERICIAL_ESTADOS)[number];
 
 export const DILIGENCIA_ESTADOS = [
   'pendiente',
+  'presentado',
+  'observado',
   'librado',
   'diligenciado',
-  'enviado',
   'contestado',
   'contestacion_parcial',
   'cumplido',
   'vencido',
+] as const;
+
+/**
+ * Ciclo de prueba informativa (madre): sin «contestado» (se confunde con producida)
+ * y cierre exitoso como «producida» (no «cumplido»).
+ */
+export const INFORMATIVA_ESTADOS = [
+  'pendiente',
+  'presentado',
+  'observado',
+  'librado',
+  'diligenciado',
+  'contestacion_parcial',
+  'producida',
+  'vencido',
+  'valoracion_judicial',
 ] as const;
 
 /** Medio de la cédula de notificación de audiencia */
@@ -46,8 +63,8 @@ export type CedulaNotifMedio = (typeof CEDULA_NOTIF_MEDIOS)[number];
 export const CEDULA_NOTIF_ESTADOS_PAPEL = [
   'pendiente_realizacion',
   'presentada',
-  'librada',
   'observada',
+  'librada',
   'retirada',
   'pendiente_diligenciamiento',
   'notificada',
@@ -57,6 +74,7 @@ export const CEDULA_NOTIF_ESTADOS_PAPEL = [
 /** Estados — cédula de notificación de audiencia electrónica */
 export const CEDULA_NOTIF_ESTADOS_ELECTRONICA = [
   'pendiente_realizacion',
+  'presentada',
   'observada',
   'librada_notificada',
 ] as const;
@@ -64,6 +82,7 @@ export const CEDULA_NOTIF_ESTADOS_ELECTRONICA = [
 /** Estados — oficio electrónico (incluye contestación parcial → nuevo oficio) */
 export const OFICIO_ELECTRONICO_ESTADOS = [
   'pendiente_realizacion',
+  'presentada',
   'observada',
   'contestacion_parcial',
   'librada_notificada',
@@ -134,6 +153,7 @@ export const TIPOS_PRUEBA = [
   'documental',
   'documental_en_poder',
   'pericial',
+  'informativa',
   'inspeccion',
   'otra',
 ] as const;
@@ -360,8 +380,8 @@ export type ResumenEjecutivoImport = {
   recomendaciones?: string[];
 };
 
-/** Parte procesal que representamos (actor o demandado). */
-export type ParteRepresentadaPrueba = 'actor' | 'demandado';
+/** Parte procesal que representamos (puede haber varias a la vez). */
+export type ParteRepresentadaPrueba = 'actor' | 'demandado' | 'tercero';
 
 export type ControlPruebaItem = {
   id: string;
@@ -410,7 +430,12 @@ export type ControlPruebaExpediente = {
   demandado?: string;
   /** Nombres de terceros intervinientes (p. ej. co-demandados, garantes). */
   terceros?: string[];
-  /** Parte que representamos — filtra el resumen ejecutivo a nuestra prueba. */
+  /**
+   * Partes que representamos — el badge de pendientes, el resumen y el PDF
+   * suman la prueba de todas las marcadas.
+   */
+  partesRepresentadas?: ParteRepresentadaPrueba[];
+  /** @deprecated preferí `partesRepresentadas`; se mantiene por compatibilidad. */
   parteRepresentada?: ParteRepresentadaPrueba | '';
   items: ControlPruebaItem[];
   hitos?: ExpedienteHito[];
@@ -437,6 +462,8 @@ export type ControlPruebaExpedienteInput = {
   expedienteUrl: string;
   sistema?: PruebaSistema;
   notas?: string;
+  partesRepresentadas?: ParteRepresentadaPrueba[];
+  /** @deprecated preferí `partesRepresentadas`. */
   parteRepresentada?: ParteRepresentadaPrueba | '';
   terceros?: string[];
   items?: ControlPruebaItem[];

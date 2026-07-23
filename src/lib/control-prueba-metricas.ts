@@ -3,6 +3,8 @@ import { itemsOfrecidasProduccion } from '@/lib/control-prueba';
 import { cuentaComoProducidaEnProgreso } from '@/lib/control-prueba-cierre';
 import { estadoAgregadoPruebaChip } from '@/lib/control-prueba-pericial-movimientos';
 import { evaluarAlertaItem } from '@/lib/control-prueba-alertas';
+import { itemEsDeAlgunaParteRepresentada } from '@/lib/control-prueba-resumen';
+import type { ParteRepresentada } from '@/lib/control-prueba-resumen';
 
 export type MetricasExpediente = {
   pctProducida: number;
@@ -68,7 +70,14 @@ export function calcularMetricas(items: ControlPruebaItem[]): MetricasExpediente
   };
 }
 
-export function progresoExpedienteHeader(items: ControlPruebaItem[]): number {
+export function progresoExpedienteHeader(
+  items: ControlPruebaItem[],
+  partes?: ParteRepresentada[] | null,
+): number {
+  if (partes && partes.length > 0) {
+    const subset = items.filter((i) => itemEsDeAlgunaParteRepresentada(i, partes, items));
+    return calcularMetricas(subset).pctProducida;
+  }
   return calcularMetricas(items).pctProducida;
 }
 

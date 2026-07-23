@@ -43,6 +43,7 @@ import {
   coerceEstadoAudienciaItem,
 } from '@/lib/control-prueba-audiencia-prueba';
 import { patchEstadoPruebaOfrecida } from '@/lib/control-prueba-cierre';
+import { defaultEstadoForItem } from '@/lib/control-prueba';
 import {
   patchDocumentalEnPoder,
   usaFlujoDocumentalEnPoder,
@@ -86,9 +87,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
-import { ControlPruebaResultadosDialog } from '@/components/admin/ControlPruebaResultadosDialog';
-import { tieneResultadoCargado } from '@/lib/control-prueba-parameter-catalog';
-import { ChevronDown, ChevronRight, ClipboardCheck, ExternalLink, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, ExternalLink, Trash2 } from 'lucide-react';
 
 export type ControlItemsTableProps = {
   items: ControlPruebaItem[];
@@ -244,7 +243,6 @@ export function ControlPruebaItemsTable({
 }: ControlItemsTableProps) {
   const allItems = expediente.items ?? items;
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
-  const [resultadosItem, setResultadosItem] = useState<ControlPruebaItem | null>(null);
   const tipos = TIPOS_POR_CATEGORIA[categoria];
   const opcionesTipo = categoria === 'prueba' ? opcionesTipoPrueba(tipos) : tipos.map((t) => ({ value: t, label: TIPO_LABELS[t] ?? t }));
   const opcionesDiligencia = categoria === 'diligencia' ? opcionesTipoDiligencia(tipos) : [];
@@ -328,7 +326,38 @@ export function ControlPruebaItemsTable({
                       value={tipoPruebaSelectValue(item)}
                       onValueChange={(v) => {
                         const parsed = parseTipoPruebaSelectValue(v, item.pericial);
-                        onUpdate(item.id, { ...parsed, categoria });
+                        const patch: Partial<ControlPruebaItem> = { ...parsed, categoria };
+                        if (parsed.tipo === 'informativa') {
+                          if (
+                            !(
+                              [
+                                'pendiente',
+                                'presentado',
+                                'enviado',
+                                'observado',
+                                'librado',
+                                'diligenciado',
+                                'contestacion_parcial',
+                                'producida',
+                                'cumplido',
+                                'vencido',
+                                'valoracion_judicial',
+                              ] as string[]
+                            ).includes(String(item.estado))
+                          ) {
+                            patch.estado = defaultEstadoForItem('prueba', 'informativa');
+                          }
+                          patch.diligencia = {
+                            ...(item.diligencia ?? {}),
+                            objeto: item.diligencia?.objeto ?? item.descripcion,
+                            plazoContestacion:
+                              item.diligencia?.plazoContestacion ?? item.fechaLimite ?? null,
+                          };
+                        } else if (item.tipo === 'informativa') {
+                          patch.estado = defaultEstadoForItem('prueba', parsed.tipo);
+                          patch.diligencia = undefined;
+                        }
+                        onUpdate(item.id, patch);
                       }}
                     >
                       <SelectTrigger
@@ -764,20 +793,6 @@ export function ControlPruebaItemsTable({
                     <Button
                       variant="ghost"
                       size="icon"
-                      className={cn(
-                        'h-7 w-7',
-                        tieneResultadoCargado(item)
-                          ? 'text-primary hover:text-primary'
-                          : 'text-muted-foreground hover:text-primary',
-                      )}
-                      title="Cargar resultado"
-                      onClick={() => setResultadosItem(item)}
-                    >
-                      <ClipboardCheck className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
                       className="h-7 w-7 text-muted-foreground hover:text-destructive"
                       onClick={() => onRemove(item.id)}
                     >
@@ -818,15 +833,6 @@ export function ControlPruebaItemsTable({
         })}
       </TableBody>
     </Table>
-
-    <ControlPruebaResultadosDialog
-      open={resultadosItem != null}
-      item={resultadosItem}
-      onOpenChange={(open) => {
-        if (!open) setResultadosItem(null);
-      }}
-      onSave={(id, patch) => onUpdate(id, patch)}
-    />
     </>
   );
 }

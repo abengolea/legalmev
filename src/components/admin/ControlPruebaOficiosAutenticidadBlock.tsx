@@ -88,7 +88,7 @@ export function ControlPruebaOficiosAutenticidadBlock({ oficios, onChange }: Pro
             )}
           </CardTitle>
           <CardDescription className="text-xs mt-1">
-            Documental negada → informativa + oficio. Seguimiento manual del abogado.
+            Documental negada → oficios de autenticidad. Seguimiento manual del abogado.
           </CardDescription>
         </div>
         <Button variant="outline" size="sm" onClick={add}>

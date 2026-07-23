@@ -85,6 +85,9 @@ export function fechaHoraAudienciaParaCedula(item: ControlPruebaItem): {
 }
 
 export function estadosPruebaParaItem(item: ControlPruebaItem, todos: readonly string[]): string[] {
+  if (item.tipo === 'informativa') {
+    return [...todos];
+  }
   if (requiereIntimacionDocumental(item.tipo)) {
     return estadosPruebaParaItemDocumental(item, todos);
   }

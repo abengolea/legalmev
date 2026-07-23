@@ -112,14 +112,30 @@ export function resolveEstadoImport(
   return undefined;
 }
 
-/** Vincula diligencias (oficios) con destinatario según campo IA `oficioVinculadoA`. */
+/** Vincula diligencias (oficios) con destinatario según campo IA `oficioVinculadoA`.
+ *  También completa destinatario en prueba informativa originaria. */
 export function vincularDiligenciasImport(
   items: ControlPruebaItem[],
   rawItems: ControlPruebaImportOutput['items'],
 ): ControlPruebaItem[] {
   return items.map((item, idx): ControlPruebaItem => {
-    if ((item.categoria ?? 'prueba') !== 'diligencia') return item;
     const raw = rawItems[idx];
+    const destRaw = raw?.destinatarioOficio?.trim();
+
+    if (item.tipo === 'informativa' && (item.categoria ?? 'prueba') === 'prueba') {
+      if (!destRaw && !item.diligencia) return item;
+      return {
+        ...item,
+        diligencia: {
+          ...(item.diligencia ?? {}),
+          destinatario: destRaw || item.diligencia?.destinatario,
+          objeto: item.diligencia?.objeto ?? item.descripcion,
+          plazoContestacion: item.diligencia?.plazoContestacion ?? item.fechaLimite ?? null,
+        },
+      };
+    }
+
+    if ((item.categoria ?? 'prueba') !== 'diligencia') return item;
     const ref = raw?.oficioVinculadoA?.trim();
     const baseDiligencia = item.diligencia ?? {
       objeto: item.descripcion,
@@ -130,7 +146,7 @@ export function vincularDiligenciasImport(
     };
 
     if (!ref) {
-      const dest = raw?.destinatarioOficio?.trim();
+      const dest = destRaw;
       if (dest) {
         return {
           ...item,
@@ -154,7 +170,7 @@ export function vincularDiligenciasImport(
     }
 
     if (!mejor) {
-      const dest = raw?.destinatarioOficio?.trim();
+      const dest = destRaw;
       if (dest) {
         return {
           ...item,
@@ -168,7 +184,7 @@ export function vincularDiligenciasImport(
       ...item,
       diligencia: {
         ...baseDiligencia,
-        destinatario: raw?.destinatarioOficio?.trim() || baseDiligencia.destinatario,
+        destinatario: destRaw || baseDiligencia.destinatario,
         objeto: baseDiligencia.objeto ?? ref,
         pruebaVinculadaId: mejor.id,
       },
@@ -178,7 +194,7 @@ export function vincularDiligenciasImport(
         parentCategoria: 'prueba',
         rol: 'oficio_autenticidad',
         autoCreated: false,
-        vinculoLabel: `Oficio — ${raw?.destinatarioOficio?.trim() || ref.slice(0, 40)}`,
+        vinculoLabel: `Oficio — ${destRaw || ref.slice(0, 40)}`,
         triggerKey: `import_oficio|${item.id}|${mejor.id}`,
       },
     };

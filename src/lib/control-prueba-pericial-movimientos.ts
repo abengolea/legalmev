@@ -179,7 +179,7 @@ export const PERICIAL_FASES_EN_TRAMITE = [
   'en_discusion',
 ] as const;
 
-/** Mapea estado pericial → chip/filtro de PRUEBA_ESTADOS. */
+/** Mapea estado pericial / informativa → chip/filtro de PRUEBA_ESTADOS. */
 export function estadoAgregadoPruebaChip(item: Pick<ControlPruebaItem, 'tipo' | 'estado'>): string {
   const estado = String(item.estado);
   if (item.tipo === 'pericial') {
@@ -191,6 +191,19 @@ export function estadoAgregadoPruebaChip(item: Pick<ControlPruebaItem, 'tipo' | 
     ) {
       return estado;
     }
+    return 'pendiente_produccion';
+  }
+  if (item.tipo === 'informativa') {
+    if (estado === 'valoracion_judicial') return 'valoracion_judicial';
+    if (
+      estado === 'producida' ||
+      estado === 'cumplido' ||
+      estado === 'diligenciado' ||
+      estado === 'contestado'
+    ) {
+      return 'producida';
+    }
+    if (estado === 'vencido') return 'desistida';
     return 'pendiente_produccion';
   }
   return estado;

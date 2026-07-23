@@ -25,6 +25,8 @@ export function esCierrePrueba(estado: string): estado is EstadoCierrePrueba {
   return (ESTADOS_CIERRE_PRUEBA as readonly string[]).includes(estado);
 }
 
+export { madreEstaCerrada, esHijoDeMadreCerrada } from '@/lib/control-prueba-visibilidad';
+
 /** Cuenta en el progreso «producida» del expediente (sin confundirse con producida real). */
 export function cuentaComoProducidaEnProgreso(estado: string): boolean {
   return estado === 'producida' || estado === 'valoracion_judicial';

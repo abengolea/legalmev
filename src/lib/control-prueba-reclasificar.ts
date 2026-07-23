@@ -84,7 +84,14 @@ export function patchReclasificarAPrueba(
     categoria: 'prueba',
     tipo,
     estado,
-    diligencia: undefined,
+    diligencia:
+      tipo === 'informativa'
+        ? {
+            ...(item.diligencia ?? {}),
+            objeto: item.diligencia?.objeto ?? item.descripcion,
+            plazoContestacion: item.diligencia?.plazoContestacion ?? item.fechaLimite ?? null,
+          }
+        : undefined,
     vinculo: undefined,
     ...(ofrecidaPor ? { ofrecidaPor } : {}),
   };

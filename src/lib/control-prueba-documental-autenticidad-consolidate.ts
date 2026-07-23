@@ -4,6 +4,7 @@ import type {
   OficioAutenticidadPendiente,
 } from '@/types/control-prueba';
 import { normalizeOficiosAutenticidad } from '@/lib/control-prueba-import-meta';
+import { esHijoDeMadreCerrada } from '@/lib/control-prueba-visibilidad';
 
 function normKey(s: string): string {
   return s
@@ -136,5 +137,8 @@ export function consolidarInformativasAutenticidadImport(items: ControlPruebaIte
 }
 
 export function itemsVisiblesControlExpediente(items: ControlPruebaItem[]): ControlPruebaItem[] {
-  return items.filter((item) => !esItemOcultoAutenticidadDocumental(item, items));
+  return items.filter(
+    (item) =>
+      !esItemOcultoAutenticidadDocumental(item, items) && !esHijoDeMadreCerrada(item, items),
+  );
 }

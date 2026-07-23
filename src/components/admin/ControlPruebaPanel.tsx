@@ -6,9 +6,17 @@ import { auth } from '@/lib/firebase';
 import { cn, safeResJson } from '@/lib/utils';
 import { ControlPruebaItemsTable } from '@/components/admin/ControlPruebaItemsTable';
 import { ControlPruebaImportPreviewDialog } from '@/components/admin/ControlPruebaImportPreviewDialog';
+import { ControlPruebaPartesRepresentadasPicker } from '@/components/admin/ControlPruebaPartesRepresentadasPicker';
 import { downloadBlob, exportControlPruebaExcel, exportControlPruebaJson, exportControlPruebaPdf, exportControlPruebaRevisionText, exportFilename } from '@/lib/control-prueba-export';
 import { patchItemConHistorial } from '@/lib/control-prueba-item-utils';
 import { progresoExpedienteHeader } from '@/lib/control-prueba-metricas';
+import {
+  contarPendientesProduccion,
+  labelPartesRepresentadas,
+  normalizePartesRepresentadas,
+  payloadPartesRepresentadas,
+  partesDesdeExpediente,
+} from '@/lib/control-prueba-partes-representadas';
 import { ensureSubtareas } from '@/lib/control-prueba-subtareas';
 import { ensurePericialMeta } from '@/lib/control-prueba-pericial';
 import {
@@ -181,7 +189,9 @@ function persistSnapshotFrom(
     fuero: header.fuero ?? '',
     expedienteUrl: header.expedienteUrl ?? '',
     notas: header.notas ?? '',
-    parteRepresentada: header.parteRepresentada ?? '',
+    ...payloadPartesRepresentadas(
+      normalizePartesRepresentadas(header.partesRepresentadas, header.parteRepresentada),
+    ),
     actor: header.actor ?? '',
     demandado: header.demandado ?? '',
     terceros: header.terceros ?? [],
@@ -200,7 +210,7 @@ function syncDraftFromExpediente(exp: ControlPruebaExpediente) {
     fuero: exp.fuero,
     expedienteUrl: exp.expedienteUrl,
     notas: exp.notas,
-    parteRepresentada: exp.parteRepresentada ?? '',
+    ...payloadPartesRepresentadas(partesDesdeExpediente(exp)),
     actor: exp.actor ?? '',
     demandado: exp.demandado ?? '',
     terceros: exp.terceros ?? [],
@@ -314,7 +324,7 @@ function resetImportWizard() {
     importJuzgado: '',
     importExpedienteUrl: '',
     importMergeMode: 'replace' as 'append' | 'replace' | 'reconcile',
-    importParteRepresentada: '' as ParteRepresentadaPrueba | '',
+    importPartesRepresentadas: [] as ParteRepresentadaPrueba[],
     importStep: '',
     extracting: false,
     analyzing: false,
@@ -354,7 +364,9 @@ export function ControlPruebaPanel() {
   const [importFuero, setImportFuero] = useState('');
   const [importJuzgado, setImportJuzgado] = useState('');
   const [importMergeMode, setImportMergeMode] = useState<'append' | 'replace' | 'reconcile'>('reconcile');
-  const [importParteRepresentada, setImportParteRepresentada] = useState<ParteRepresentadaPrueba | ''>('');
+  const [importPartesRepresentadas, setImportPartesRepresentadas] = useState<ParteRepresentadaPrueba[]>(
+    [],
+  );
   const [importExpedienteUrl, setImportExpedienteUrl] = useState('');
   const [extracting, setExtracting] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
@@ -518,8 +530,9 @@ export function ControlPruebaPanel() {
     setHeaderDraft(synced.header);
     setHitosDraft(synced.hitos);
     setResumenDraft(synced.resumen);
-    const parteIni = (synced.header.parteRepresentada || '') as ParteTabId | '';
-    setParteTab(parteIni === 'demandado' ? 'demandado' : 'actor');
+    const partesIni = partesDesdeExpediente(synced.header as ControlPruebaExpediente);
+    const parteIni = partesIni[0];
+    setParteTab(parteIni === 'demandado' ? 'demandado' : parteIni === 'tercero' ? 'otros' : 'actor');
     lastSavedSnapshotRef.current = synced.snapshot;
     setSaveStatus('idle');
   }, [selectedId]);
@@ -541,7 +554,6 @@ export function ControlPruebaPanel() {
 
   const handleFocusItem = useCallback(
     (itemId: string) => {
-      setEstadoFilter('all');
       setHighlightItemId(itemId);
       const item = draftItems.find((i) => i.id === itemId);
       if (item) setParteTab(tabDeItem(item, draftItems));
@@ -706,7 +718,14 @@ export function ControlPruebaPanel() {
     };
   }, [draftItems]);
 
-  const progresoPct = useMemo(() => progresoExpedienteHeader(draftItems), [draftItems]);
+  const progresoPct = useMemo(
+    () =>
+      progresoExpedienteHeader(
+        draftItems,
+        normalizePartesRepresentadas(headerDraft.partesRepresentadas, headerDraft.parteRepresentada),
+      ),
+    [draftItems, headerDraft.partesRepresentadas, headerDraft.parteRepresentada],
+  );
 
   const labelParteActiva = useMemo(() => {
     if (parteTab === 'actor') {
@@ -721,9 +740,18 @@ export function ControlPruebaPanel() {
     return 'Mejor proveer';
   }, [parteTab, headerDraft.actor, headerDraft.demandado, selected?.actor, selected?.demandado]);
 
-  const parteRepresentada = (headerDraft.parteRepresentada ?? selected?.parteRepresentada ?? '') as
-    | ParteRepresentadaPrueba
-    | '';
+  const partesRepresentadas = useMemo(
+    () => normalizePartesRepresentadas(headerDraft.partesRepresentadas, headerDraft.parteRepresentada),
+    [headerDraft.partesRepresentadas, headerDraft.parteRepresentada],
+  );
+
+  const setPartesRepresentadas = useCallback((partes: ParteRepresentadaPrueba[]) => {
+    const payload = payloadPartesRepresentadas(partes);
+    setHeaderDraft((h) => ({ ...h, ...payload }));
+    const first = payload.partesRepresentadas[0];
+    if (first === 'actor' || first === 'demandado') setParteTab(first);
+    else if (first === 'tercero') setParteTab('otros');
+  }, []);
 
   const expedienteDraft = useMemo(
     (): ControlPruebaExpediente => ({
@@ -735,13 +763,13 @@ export function ControlPruebaPanel() {
       expedienteUrl: headerDraft.expedienteUrl ?? selected?.expedienteUrl ?? '',
       actor: headerDraft.actor ?? selected?.actor,
       demandado: headerDraft.demandado ?? selected?.demandado,
-      parteRepresentada: headerDraft.parteRepresentada ?? selected?.parteRepresentada ?? '',
+      ...payloadPartesRepresentadas(partesRepresentadas),
       resumenEjecutivo: resumenDraft,
       oficiosAutenticidadPendientes: [],
       items: draftItems,
       hitos: hitosDraft,
     }),
-    [selected, headerDraft, draftItems, hitosDraft, resumenDraft],
+    [selected, headerDraft, draftItems, hitosDraft, resumenDraft, partesRepresentadas],
   );
 
   const handleExport = useCallback(
@@ -825,7 +853,7 @@ export function ControlPruebaPanel() {
             hitos: hitosDraft,
             oficiosAutenticidadPendientes: [],
             resumenEjecutivo: resumenDraft ?? null,
-            parteRepresentada: headerDraft.parteRepresentada ?? '',
+            ...payloadPartesRepresentadas(partesRepresentadas),
           }),
         });
         const json = await safeResJson<{ ok?: boolean; expediente?: ControlPruebaExpediente; error?: string }>(res);
@@ -866,7 +894,7 @@ export function ControlPruebaPanel() {
         }
       }
     },
-    [selected, headerDraft, draftItems, hitosDraft, oficiosDraft, resumenDraft, toast],
+    [selected, headerDraft, draftItems, hitosDraft, oficiosDraft, resumenDraft, partesRepresentadas, toast],
   );
 
   const handleSaveRef = useRef(handleSave);
@@ -919,7 +947,7 @@ export function ControlPruebaPanel() {
     setImportJuzgado(reset.importJuzgado);
     setImportExpedienteUrl(reset.importExpedienteUrl);
     setImportMergeMode(reset.importMergeMode);
-    setImportParteRepresentada(reset.importParteRepresentada);
+    setImportPartesRepresentadas(reset.importPartesRepresentadas);
     setImportStep(reset.importStep);
     setExtracting(reset.extracting);
     setAnalyzing(reset.analyzing);
@@ -1071,7 +1099,7 @@ export function ControlPruebaPanel() {
           expedienteUrl: importExpedienteUrl,
           pdfFileName: importExtract.pdfFileName,
           previewOnly: true,
-          parteRepresentada: importParteRepresentada,
+          ...payloadPartesRepresentadas(importPartesRepresentadas),
         }),
       });
       const json = await safeResJson<{
@@ -1089,9 +1117,17 @@ export function ControlPruebaPanel() {
       }>(res);
 
       if (json.ok && json.preview) {
+        const partesPayload = payloadPartesRepresentadas(
+          normalizePartesRepresentadas(
+            importPartesRepresentadas.length
+              ? importPartesRepresentadas
+              : json.preview.partesRepresentadas,
+            json.preview.parteRepresentada,
+          ),
+        );
         const preview: ImportPreviewPayload = {
           ...json.preview,
-          parteRepresentada: importParteRepresentada || json.preview.parteRepresentada || '',
+          ...partesPayload,
           tokenUsage: json.preview.tokenUsage ?? json.import?.tokenUsage,
         };
         setImportPreview(preview);
@@ -1131,7 +1167,14 @@ export function ControlPruebaPanel() {
     if (!importPreview || !importExtract) return;
     const previewToSave: ImportPreviewPayload = {
       ...importPreview,
-      parteRepresentada: importParteRepresentada || importPreview.parteRepresentada || '',
+      ...payloadPartesRepresentadas(
+        normalizePartesRepresentadas(
+          importPartesRepresentadas.length
+            ? importPartesRepresentadas
+            : importPreview.partesRepresentadas,
+          importPreview.parteRepresentada,
+        ),
+      ),
     };
     setConfirmingImport(true);
     try {
@@ -1483,16 +1526,41 @@ export function ControlPruebaPanel() {
   } = {}) => {
     const categoria = opts.categoria ?? 'prueba';
     const parte = opts.parte ?? (categoria === 'prueba' ? 'actor' : 'tribunal');
-    setDraftItems((prev) => [
-      ...prev,
-      newItem(prev.length + 1, {
-        categoria,
-        parte,
-        terceroNombre: parte === 'tercero' ? opts.terceroNombre ?? null : null,
-      }),
-    ]);
+    const item = newItem(1, {
+      categoria,
+      parte,
+      terceroNombre: parte === 'tercero' ? opts.terceroNombre ?? null : null,
+    });
+
+    // Arriba del listado + visible aunque haya filtros activos.
+    setDraftItems((prev) =>
+      [item, ...prev].map((it, index) => ({ ...it, orden: index + 1 })),
+    );
+    setEstadoFilter('all');
+    setBusquedaItem('');
+    setFiltroTipo('all');
+    setFiltroParte('all');
+
     if (categoria === 'mejor_proveer') setParteTab('mejor_proveer');
-    else if (parte === 'tercero') setParteTab('otros');
+    else if (parte === 'tercero' || parte === 'tribunal') setParteTab('otros');
+    else if (parte === 'actor' || parte === 'demandado') setParteTab(parte);
+
+    setHighlightItemId(item.id);
+
+    const titulo =
+      categoria === 'prueba'
+        ? 'Prueba agregada'
+        : categoria === 'diligencia'
+          ? 'Comunicación agregada'
+          : categoria === 'audiencia'
+            ? 'Audiencia agregada'
+            : categoria === 'mejor_proveer'
+              ? 'Medida agregada'
+              : 'Ítem agregado';
+    toast({
+      title: titulo,
+      description: 'Quedó arriba del listado — completá tipo y descripción.',
+    });
   };
 
   const filteredExpedientes = useMemo(() => {
@@ -1854,11 +1922,7 @@ export function ControlPruebaPanel() {
   );
 
   const pendientesDeExpediente = (exp: ControlPruebaExpediente) =>
-    itemsOfrecidasProduccion(exp.items).filter((i) =>
-      (['pendiente_produccion', 'postpuesta_juez', 'audiencia_fijada'] as const).some((f) =>
-        itemVisibleConFiltroEstado(i, f),
-      ),
-    ).length;
+    contarPendientesProduccion(exp.items, partesDesdeExpediente(exp));
 
   return (
     <div className="space-y-6">
@@ -1998,11 +2062,25 @@ export function ControlPruebaPanel() {
               <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0">
                 {sistemaLabel(selected.sistema)}
               </Badge>
-              {pendientesDeExpediente(selected) > 0 && (
-                <Badge className="bg-amber-100 text-amber-900 border-amber-300 text-[10px] px-1.5 py-0 shrink-0">
-                  {pendientesDeExpediente(selected)} pend.
-                </Badge>
-              )}
+              {(() => {
+                const pend = contarPendientesProduccion(draftItems, partesRepresentadas);
+                if (pend <= 0) return null;
+                const label =
+                  partesRepresentadas.length > 0
+                    ? labelPartesRepresentadas(partesRepresentadas, {
+                        actor: headerDraft.actor ?? selected.actor,
+                        demandado: headerDraft.demandado ?? selected.demandado,
+                      })
+                    : '';
+                return (
+                  <Badge
+                    className="bg-amber-100 text-amber-900 border-amber-300 text-[10px] px-1.5 py-0 shrink-0"
+                    title={label ? `Pendientes de: ${label}` : 'Pendientes de producción (todas las partes)'}
+                  >
+                    {pend} pend.
+                  </Badge>
+                );
+              })()}
             </div>
           )}
         </CardContent>
@@ -2093,35 +2171,19 @@ export function ControlPruebaPanel() {
                           )}
                         </div>
                       </div>
-                      <div>
-                        <Label>Representamos a</Label>
-                        <Select
-                          value={parteRepresentada || '_'}
-                          onValueChange={(v) => {
-                            const parte = v === '_' ? '' : (v as ParteRepresentadaPrueba);
-                            setHeaderDraft((h) => ({ ...h, parteRepresentada: parte }));
-                            if (parte === 'actor' || parte === 'demandado') {
-                              setParteTab(parte);
-                            }
-                          }}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Seleccioná la parte…" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="_">Sin definir</SelectItem>
-                            <SelectItem value="actor">
-                              {headerDraft.actor?.trim() || selected?.actor?.trim() || 'Actor'}
-                            </SelectItem>
-                            <SelectItem value="demandado">
-                              {headerDraft.demandado?.trim() || selected?.demandado?.trim() || 'Demandada'}
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <p className="text-[11px] text-muted-foreground mt-1">
-                          El resumen ejecutivo y el informe PDF muestran solo la prueba de tu cliente.
-                        </p>
-                      </div>
+                      <ControlPruebaPartesRepresentadasPicker
+                        value={partesRepresentadas}
+                        onChange={setPartesRepresentadas}
+                        actorLabel={headerDraft.actor?.trim() || selected?.actor?.trim() || 'Actor'}
+                        demandadoLabel={
+                          headerDraft.demandado?.trim() || selected?.demandado?.trim() || 'Demandada'
+                        }
+                        terceroLabel={
+                          (headerDraft.terceros ?? selected?.terceros ?? []).filter(Boolean).join(', ') ||
+                          'Terceros'
+                        }
+                        showTercero={(headerDraft.terceros ?? selected?.terceros ?? []).length > 0}
+                      />
                     </div>
                     <div className="flex shrink-0 flex-wrap gap-2">
                       <Button
@@ -2250,7 +2312,7 @@ export function ControlPruebaPanel() {
                   }}
                   className="space-y-4"
                 >
-                  <TabsList className="h-auto w-full flex-wrap justify-start gap-1 bg-muted/40 p-1">
+                  <TabsList className="h-auto w-full flex-wrap justify-start gap-1.5 rounded-lg border border-border/80 bg-muted/70 p-1.5 shadow-sm">
                     {GRUPOS_PRUEBA.map((grupo) => {
                       const nombreParte =
                         grupo.id === 'actor'
@@ -2258,19 +2320,29 @@ export function ControlPruebaPanel() {
                           : (headerDraft.demandado || selected?.demandado || '').trim();
                       const total = conteoTotalPorParteTab[grupo.id];
                       const visibles = conteoPorParteTab[grupo.id];
+                      const isActor = grupo.id === 'actor';
                       return (
                         <TabsTrigger
                           key={grupo.id}
                           value={grupo.id}
-                          className="gap-1.5 data-[state=active]:shadow-sm"
+                          className={cn(
+                            'group gap-1.5 border border-transparent bg-background/80 px-3 py-2 font-semibold text-foreground/85 shadow-sm',
+                            'hover:bg-background hover:text-foreground',
+                            isActor
+                              ? 'data-[state=active]:border-primary/40 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md'
+                              : 'data-[state=active]:border-[#54A6A8]/50 data-[state=active]:bg-[#54A6A8] data-[state=active]:text-white data-[state=active]:shadow-md',
+                          )}
                         >
-                          {grupo.id === 'actor' ? 'Actor' : 'Demandada'}
+                          {isActor ? 'Actor' : 'Demandada'}
                           {nombreParte ? (
-                            <span className="hidden max-w-[8rem] truncate text-muted-foreground sm:inline">
+                            <span className="hidden max-w-[8rem] truncate opacity-65 group-data-[state=active]:opacity-90 sm:inline">
                               ({nombreParte})
                             </span>
                           ) : null}
-                          <Badge variant="secondary" className="h-5 min-w-5 px-1.5 text-[10px]">
+                          <Badge
+                            variant="secondary"
+                            className="h-5 min-w-5 border-0 bg-black/10 px-1.5 text-[10px] text-foreground group-data-[state=active]:bg-white/25 group-data-[state=active]:text-inherit"
+                          >
                             {estadoFilter !== 'all' && visibles !== total
                               ? `${visibles}/${total}`
                               : total}
@@ -2278,18 +2350,38 @@ export function ControlPruebaPanel() {
                         </TabsTrigger>
                       );
                     })}
-                    <TabsTrigger value="otros" className="gap-1.5 data-[state=active]:shadow-sm">
+                    <TabsTrigger
+                      value="otros"
+                      className={cn(
+                        'group gap-1.5 border border-transparent bg-background/80 px-3 py-2 font-semibold text-foreground/85 shadow-sm',
+                        'hover:bg-background hover:text-foreground',
+                        'data-[state=active]:border-slate-400/50 data-[state=active]:bg-slate-700 data-[state=active]:text-white data-[state=active]:shadow-md',
+                      )}
+                    >
                       Tercero
-                      <Badge variant="secondary" className="h-5 min-w-5 px-1.5 text-[10px]">
+                      <Badge
+                        variant="secondary"
+                        className="h-5 min-w-5 border-0 bg-black/10 px-1.5 text-[10px] text-foreground group-data-[state=active]:bg-white/25 group-data-[state=active]:text-inherit"
+                      >
                         {estadoFilter !== 'all' &&
                         conteoPorParteTab.otros !== conteoTotalPorParteTab.otros
                           ? `${conteoPorParteTab.otros}/${conteoTotalPorParteTab.otros}`
                           : conteoTotalPorParteTab.otros}
                       </Badge>
                     </TabsTrigger>
-                    <TabsTrigger value="mejor_proveer" className="gap-1.5 data-[state=active]:shadow-sm">
+                    <TabsTrigger
+                      value="mejor_proveer"
+                      className={cn(
+                        'group gap-1.5 border border-transparent bg-background/80 px-3 py-2 font-semibold text-foreground/85 shadow-sm',
+                        'hover:bg-background hover:text-foreground',
+                        'data-[state=active]:border-orange-400/50 data-[state=active]:bg-orange-600 data-[state=active]:text-white data-[state=active]:shadow-md',
+                      )}
+                    >
                       Mejor proveer
-                      <Badge variant="secondary" className="h-5 min-w-5 px-1.5 text-[10px]">
+                      <Badge
+                        variant="secondary"
+                        className="h-5 min-w-5 border-0 bg-black/10 px-1.5 text-[10px] text-foreground group-data-[state=active]:bg-white/25 group-data-[state=active]:text-inherit"
+                      >
                         {conteoTotalPorParteTab.mejor_proveer}
                       </Badge>
                     </TabsTrigger>
@@ -2651,32 +2743,25 @@ export function ControlPruebaPanel() {
                   </div>
                 )}
 
-                <div>
-                  <Label>Representamos a (opcional, recomendado)</Label>
-                  <Select
-                    value={importParteRepresentada || '_'}
-                    onValueChange={(v) =>
-                      setImportParteRepresentada(v === '_' ? '' : (v as ParteRepresentadaPrueba))
-                    }
-                    disabled={importBusy}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleccioná antes del análisis IA…" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="_">Sin definir aún</SelectItem>
-                      <SelectItem value="actor">
-                        {importPreview?.actor?.trim() || headerDraft.actor?.trim() || selected?.actor?.trim() || 'Actor'}
-                      </SelectItem>
-                      <SelectItem value="demandado">
-                        {importPreview?.demandado?.trim() || headerDraft.demandado?.trim() || selected?.demandado?.trim() || 'Demandada'}
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <p className="text-[11px] text-muted-foreground mt-1">
-                    El resumen del import mostrará solo la prueba de tu cliente. Podés cambiarlo en la revisión previa.
-                  </p>
-                </div>
+                <ControlPruebaPartesRepresentadasPicker
+                  value={importPartesRepresentadas}
+                  onChange={setImportPartesRepresentadas}
+                  actorLabel={
+                    importPreview?.actor?.trim() ||
+                    headerDraft.actor?.trim() ||
+                    selected?.actor?.trim() ||
+                    'Actor'
+                  }
+                  demandadoLabel={
+                    importPreview?.demandado?.trim() ||
+                    headerDraft.demandado?.trim() ||
+                    selected?.demandado?.trim() ||
+                    'Demandada'
+                  }
+                  showTercero={false}
+                  disabled={importBusy}
+                  hint="El resumen del import mostrará solo la prueba de tu(s) cliente(s). Podés cambiarlo en la revisión previa."
+                />
               </>
             )}
 
@@ -2727,8 +2812,8 @@ export function ControlPruebaPanel() {
         onOpenChange={setPreviewOpen}
         onConfirm={(ids) => void handleConfirmImport(ids)}
         onPreviewChange={setImportPreview}
-        parteRepresentada={importParteRepresentada}
-        onParteRepresentadaChange={setImportParteRepresentada}
+        partesRepresentadas={importPartesRepresentadas}
+        onPartesRepresentadasChange={setImportPartesRepresentadas}
       />
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>

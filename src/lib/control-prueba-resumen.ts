@@ -7,7 +7,7 @@ import type {
   ResumenEjecutivoImport,
 } from '@/types/control-prueba';
 
-export type ParteRepresentada = 'actor' | 'demandado';
+export type ParteRepresentada = 'actor' | 'demandado' | 'tercero';
 
 const ESTADOS_PRODUCIDA = new Set(['producida', 'valoracion_judicial', 'desistida', 'no_admitida']);
 const ESTADOS_PENDIENTE = new Set([
@@ -41,19 +41,49 @@ export function itemEsNuestraParte(
   items: ControlPruebaItem[],
 ): boolean {
   const ofrecida = (item.ofrecidaPor ?? 'actor') as PruebaParte;
-  if (ofrecida === parte) return true;
+  if (parte === 'tercero') {
+    if (ofrecida === 'tercero') return true;
+  } else if (ofrecida === parte) {
+    return true;
+  }
 
   const padreId = item.vinculo?.parentItemId ?? item.diligencia?.pruebaVinculadaId ?? null;
   if (padreId) {
     const padre = items.find((i) => i.id === padreId);
-    if (padre && (padre.ofrecidaPor ?? 'actor') === parte) return true;
+    if (!padre) return false;
+    const padreOfrecida = (padre.ofrecidaPor ?? 'actor') as PruebaParte;
+    if (parte === 'tercero') return padreOfrecida === 'tercero';
+    return padreOfrecida === parte;
   }
 
   return false;
 }
 
+/** True si el ítem pertenece a alguna de las partes representadas. */
+export function itemEsDeAlgunaParteRepresentada(
+  item: ControlPruebaItem,
+  partes: ParteRepresentada[],
+  items: ControlPruebaItem[],
+): boolean {
+  if (partes.length === 0) return true;
+  return partes.some((p) => itemEsNuestraParte(item, p, items));
+}
+
 function bucketEstado(item: ControlPruebaItem): keyof ResumenEjecutivoImport | null {
   const estado = String(item.estado);
+  if (item.tipo === 'informativa') {
+    if (estado === 'valoracion_judicial') return 'producida';
+    if (
+      estado === 'producida' ||
+      estado === 'cumplido' ||
+      estado === 'diligenciado' ||
+      estado === 'contestado'
+    ) {
+      return 'producida';
+    }
+    if (estado === 'vencido') return 'producida'; // cerrada sin éxito — no la dejamos en pendiente
+    return 'pendiente';
+  }
   if (ESTADOS_PRODUCIDA.has(estado)) return 'producida';
   if (ESTADOS_PENDIENTE.has(estado)) return 'pendiente';
   if (item.categoria === 'diligencia' || item.tipo === 'oficio' || item.tipo === 'cedula') {
@@ -62,15 +92,20 @@ function bucketEstado(item: ControlPruebaItem): keyof ResumenEjecutivoImport | n
   return 'pendiente';
 }
 
-/** Arma resumen ejecutivo desde los ítems actuales (opcionalmente filtrado por parte). */
+/** Arma resumen ejecutivo desde los ítems actuales (opcionalmente filtrado por parte/s). */
 export function buildResumenDesdeItems(
   items: ControlPruebaItem[],
   oficios: OficioAutenticidadPendiente[],
-  parte?: ParteRepresentada | '' | null,
+  parte?: ParteRepresentada | ParteRepresentada[] | '' | null,
 ): ResumenEjecutivoImport | undefined {
+  const partes: ParteRepresentada[] = Array.isArray(parte)
+    ? parte.filter((p) => p === 'actor' || p === 'demandado' || p === 'tercero')
+    : parte === 'actor' || parte === 'demandado' || parte === 'tercero'
+      ? [parte]
+      : [];
   const nuestra =
-    parte === 'actor' || parte === 'demandado'
-      ? items.filter((i) => itemEsNuestraParte(i, parte, items))
+    partes.length > 0
+      ? items.filter((i) => itemEsDeAlgunaParteRepresentada(i, partes, items))
       : items;
   if (nuestra.length === 0 && oficios.length === 0) return undefined;
 
@@ -118,7 +153,7 @@ export function buildResumenDesdeItems(
   for (const o of oficios) {
     if (o.estado !== 'a_librar') continue;
     if (o.itemPruebaId && idsDoc.size > 0 && !idsDoc.has(o.itemPruebaId)) continue;
-    if (parte && o.itemPruebaId && !idsDoc.has(o.itemPruebaId)) continue;
+    if (partes.length > 0 && o.itemPruebaId && !idsDoc.has(o.itemPruebaId)) continue;
     const ref = o.referencia ? `${o.referencia} — ` : '';
     out.aLibrar!.push(`Oficio autenticidad: ${ref}${o.destinatarioOficio}`);
   }
@@ -148,16 +183,20 @@ export function filtrarResumenImportPorParte(
   demandado?: string,
 ): ResumenEjecutivoImport | undefined {
   if (!resumen) return undefined;
+  if (parte === 'tercero') {
+    // Sin hints fiables de nombre: no filtramos el texto de IA; preferí buildResumenDesdeItems.
+    return resumen;
+  }
 
   const hintsNuestra: string[] =
     parte === 'actor'
-      ? ['actor', 'actora', 'demandante', actor?.split(/\s+/)[0]?.toLowerCase()].filter(Boolean) as string[]
-      : ['demandado', 'demandada', demandado?.split(/\s+/)[0]?.toLowerCase()].filter(Boolean) as string[];
+      ? (['actor', 'actora', 'demandante', actor?.split(/\s+/)[0]?.toLowerCase()].filter(Boolean) as string[])
+      : (['demandado', 'demandada', demandado?.split(/\s+/)[0]?.toLowerCase()].filter(Boolean) as string[]);
 
   const hintsContraria =
     parte === 'actor'
-      ? ['demandado', 'demandada', demandado?.split(/\s+/)[0]?.toLowerCase()].filter(Boolean) as string[]
-      : ['actor', 'actora', 'demandante', actor?.split(/\s+/)[0]?.toLowerCase()].filter(Boolean) as string[];
+      ? (['demandado', 'demandada', demandado?.split(/\s+/)[0]?.toLowerCase()].filter(Boolean) as string[])
+      : (['actor', 'actora', 'demandante', actor?.split(/\s+/)[0]?.toLowerCase()].filter(Boolean) as string[]);
 
   const filtrarLineas = (lineas?: string[]) =>
     lineas?.filter((linea) => {
@@ -184,14 +223,20 @@ export function filtrarResumenImportPorParte(
 export function resumenParaParteRepresentada(
   items: ControlPruebaItem[],
   oficios: OficioAutenticidadPendiente[],
-  parte: ParteRepresentada | '' | undefined,
+  parte: ParteRepresentada | ParteRepresentada[] | '' | undefined,
   resumenImport?: ResumenEjecutivoImport,
   actor?: string,
   demandado?: string,
 ): ResumenEjecutivoImport | undefined {
-  // Con parte representada: siempre desde ítems actuales (se actualiza solo).
-  if (parte === 'actor' || parte === 'demandado') {
-    const desdeItems = buildResumenDesdeItems(items, oficios, parte);
+  const partes: ParteRepresentada[] = Array.isArray(parte)
+    ? parte.filter((p) => p === 'actor' || p === 'demandado' || p === 'tercero')
+    : parte === 'actor' || parte === 'demandado' || parte === 'tercero'
+      ? [parte]
+      : [];
+
+  // Con parte(s) representada(s): siempre desde ítems actuales (se actualiza solo).
+  if (partes.length > 0) {
+    const desdeItems = buildResumenDesdeItems(items, oficios, partes);
     if (desdeItems) {
       return {
         ...desdeItems,
@@ -199,7 +244,10 @@ export function resumenParaParteRepresentada(
         recomendaciones: resumenImport?.recomendaciones,
       };
     }
-    return filtrarResumenImportPorParte(resumenImport, parte, actor, demandado);
+    if (partes.length === 1 && partes[0] !== 'tercero') {
+      return filtrarResumenImportPorParte(resumenImport, partes[0], actor, demandado);
+    }
+    return resumenImport;
   }
 
   // Sin parte: snapshot del import (o el último “Actualizar”) hasta que regeneren.

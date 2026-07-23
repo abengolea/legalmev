@@ -1,13 +1,29 @@
 import type { ControlPruebaItem } from '@/types/control-prueba';
+import { INFORMATIVA_ESTADOS } from '@/types/control-prueba';
 import { resolveCategoria } from '@/lib/control-prueba';
 
-const ESTADO_PRUEBA_A_DILIGENCIA: Record<string, string> = {
+const ESTADO_DILIGENCIA_A_INFORMATIVA: Record<string, string> = {
+  pendiente: 'pendiente',
+  pendiente_realizacion: 'pendiente',
+  librado: 'librado',
+  librada: 'librado',
+  librada_notificada: 'producida',
+  diligenciado: 'diligenciado',
+  enviado: 'presentado',
+  presentada: 'presentado',
+  observado: 'observado',
+  contestado: 'producida',
+  observada: 'observado',
+  contestacion_parcial: 'contestacion_parcial',
+  cumplido: 'producida',
+  vencido: 'vencido',
+  notificada: 'producida',
+  resultado_negativo: 'vencido',
+  valoracion_judicial: 'valoracion_judicial',
+  // Legacy prueba
   pendiente_produccion: 'pendiente',
   postpuesta_juez: 'pendiente',
-  autenticidad_impugnada: 'pendiente',
-  intimacion_ordenada: 'pendiente',
-  audiencia_fijada: 'pendiente',
-  producida: 'cumplido',
+  producida: 'producida',
   desistida: 'vencido',
   no_admitida: 'vencido',
 };
@@ -29,36 +45,58 @@ function esOficioAutenticidadVinculado(item: ControlPruebaItem): boolean {
   );
 }
 
-/** Convierte prueba informativa admitida → diligencia oficio con flujo estándar. */
-export function migratePruebaInformativaToOficio(item: ControlPruebaItem): ControlPruebaItem {
-  if (item.categoria !== 'prueba' || item.tipo !== 'informativa' || esPuenteInformativaAutenticidad(item)) {
-    return item;
+/** Oficio suelto (sin padre) ofrecido por una parte → era informativa originaria migrada. */
+export function esOficioSueltoInformativa(item: ControlPruebaItem): boolean {
+  if (resolveCategoria(item) !== 'diligencia') return false;
+  if (item.tipo !== 'oficio' && item.tipo !== 'oficio_electronico') return false;
+  if (item.vinculo?.parentItemId) return false;
+  if (item.vinculo?.rol === 'oficio_autenticidad' || item.vinculo?.rol === 'oficio_informativa') {
+    return false;
   }
+  // Aclaración / reiteración de otro oficio: queda en Comunicaciones
+  if (item.diligencia?.oficioOrigenId) return false;
+  const parte = item.ofrecidaPor ?? 'tribunal';
+  return parte === 'actor' || parte === 'demandado' || parte === 'tercero';
+}
 
-  const estado = ESTADO_PRUEBA_A_DILIGENCIA[String(item.estado)] ?? 'pendiente';
-  const baseDiligencia = item.diligencia ?? {
-    objeto: item.descripcion,
-    fechaPresentacion: null,
-    fechaLibramiento: null,
-    fechaDiligenciamiento: null,
-    plazoContestacion: item.fechaLimite ?? null,
-  };
+function coerceEstadoInformativa(estado: string): string {
+  const mapped = ESTADO_DILIGENCIA_A_INFORMATIVA[estado] ?? estado;
+  if ((INFORMATIVA_ESTADOS as readonly string[]).includes(mapped)) return mapped;
+  return 'pendiente';
+}
 
-  const { vinculo, ...resto } = item;
-  const conservarVinculo = vinculo?.rol === 'oficio_informativa' || vinculo?.rol === 'oficio_autenticidad';
+/** Convierte oficio suelto (informativa migrada) → prueba informativa con tracking de oficio. */
+export function migrateOficioSueltoAInformativa(item: ControlPruebaItem): ControlPruebaItem {
+  if (!esOficioSueltoInformativa(item)) return item;
 
+  const { vinculo: _v, ...resto } = item;
   return {
     ...resto,
-    categoria: 'diligencia',
-    tipo: 'oficio',
-    estado,
+    categoria: 'prueba',
+    tipo: 'informativa',
+    estado: coerceEstadoInformativa(String(item.estado)),
     ofrecidaPor: item.ofrecidaPor ?? 'actor',
     diligencia: {
-      ...baseDiligencia,
-      objeto: baseDiligencia.objeto ?? item.descripcion,
-      plazoContestacion: baseDiligencia.plazoContestacion ?? item.fechaLimite ?? null,
+      ...(item.diligencia ?? {}),
+      objeto: item.diligencia?.objeto ?? item.descripcion,
+      plazoContestacion: item.diligencia?.plazoContestacion ?? item.fechaLimite ?? null,
     },
-    ...(conservarVinculo ? { vinculo } : {}),
+  };
+}
+
+/** Asegura que una prueba informativa tenga estados del ciclo oficio. */
+export function normalizePruebaInformativa(item: ControlPruebaItem): ControlPruebaItem {
+  if (item.categoria !== 'prueba' || item.tipo !== 'informativa') return item;
+  if (item.vinculo?.parentItemId) return item; // puente legacy (se filtra aparte)
+
+  return {
+    ...item,
+    estado: coerceEstadoInformativa(String(item.estado)),
+    diligencia: {
+      ...(item.diligencia ?? {}),
+      objeto: item.diligencia?.objeto ?? item.descripcion,
+      plazoContestacion: item.diligencia?.plazoContestacion ?? item.fechaLimite ?? null,
+    },
   };
 }
 
@@ -128,8 +166,10 @@ function reparentOficioAutenticidad(
 }
 
 /**
- * Elimina ítems puente informativa y convierte prueba informativa → oficio.
- * Idempotente: puede ejecutarse en cada normalizeItems.
+ * - Elimina puentes legacy informativa_autenticidad.
+ * - Reparenta oficios de autenticidad al documental.
+ * - Sube oficios sueltos (informativa migrada) a prueba informativa.
+ * - Conserva prueba informativa originaria (no la baja a Comunicaciones).
  */
 export function migrateExpedienteInformativaAOficio(items: ControlPruebaItem[]): ControlPruebaItem[] {
   const informativaIds = new Set(
@@ -141,6 +181,6 @@ export function migrateExpedienteInformativaAOficio(items: ControlPruebaItem[]):
   const reparented = sinPuentes.map((item) => reparentOficioAutenticidad(item, items, informativaIds));
 
   return reparented
-    .map((item) => migratePruebaInformativaToOficio(item))
-    .filter((item) => !(item.categoria === 'prueba' && item.tipo === 'informativa'));
+    .map((item) => migrateOficioSueltoAInformativa(item))
+    .map((item) => normalizePruebaInformativa(item));
 }

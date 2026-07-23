@@ -3,8 +3,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ImportPreviewPayload } from '@/lib/control-prueba-import-apply';
 import { collectOficiosAutenticidadFromItems } from '@/lib/control-prueba-documental-autenticidad-consolidate';
+import {
+  normalizePartesRepresentadas,
+  payloadPartesRepresentadas,
+} from '@/lib/control-prueba-partes-representadas';
 import { PARTE_LABELS, TIPO_LABELS, getEstadoConfig } from '@/lib/control-prueba';
 import type { ControlPruebaItem, ItemCategoria, ParteRepresentadaPrueba, PruebaParte } from '@/types/control-prueba';
+import { ControlPruebaPartesRepresentadasPicker } from '@/components/admin/ControlPruebaPartesRepresentadasPicker';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -36,8 +41,8 @@ type Props = {
   onOpenChange: (open: boolean) => void;
   onConfirm: (selectedIds: string[]) => void;
   onPreviewChange: (preview: ImportPreviewPayload) => void;
-  parteRepresentada: ParteRepresentadaPrueba | '';
-  onParteRepresentadaChange: (parte: ParteRepresentadaPrueba | '') => void;
+  partesRepresentadas: ParteRepresentadaPrueba[];
+  onPartesRepresentadasChange: (partes: ParteRepresentadaPrueba[]) => void;
 };
 
 export function ControlPruebaImportPreviewDialog({
@@ -47,8 +52,8 @@ export function ControlPruebaImportPreviewDialog({
   onOpenChange,
   onConfirm,
   onPreviewChange,
-  parteRepresentada,
-  onParteRepresentadaChange,
+  partesRepresentadas,
+  onPartesRepresentadasChange,
 }: Props) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
@@ -70,7 +75,7 @@ export function ControlPruebaImportPreviewDialog({
     const next: ImportPreviewPayload = {
       ...preview,
       items,
-      parteRepresentada,
+      ...payloadPartesRepresentadas(partesRepresentadas),
     };
     onPreviewChange(next);
     setSelected((prev) => {
@@ -89,12 +94,12 @@ export function ControlPruebaImportPreviewDialog({
     updatePreviewItems(preview.items.filter((i) => i.id !== id));
   };
 
-  const handleParteChange = (parte: ParteRepresentadaPrueba | '') => {
-    onParteRepresentadaChange(parte);
+  const handlePartesChange = (partes: ParteRepresentadaPrueba[]) => {
+    onPartesRepresentadasChange(partes);
     if (!preview) return;
     onPreviewChange({
       ...preview,
-      parteRepresentada: parte,
+      ...payloadPartesRepresentadas(partes),
     });
   };
 
@@ -116,6 +121,7 @@ export function ControlPruebaImportPreviewDialog({
   const allSelected = selected.size === preview.items.length && preview.items.length > 0;
   const actorLabel = preview.actor?.trim() || 'Actor';
   const demandadoLabel = preview.demandado?.trim() || 'Demandada';
+  const partesNorm = normalizePartesRepresentadas(partesRepresentadas, preview.parteRepresentada);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -123,33 +129,19 @@ export function ControlPruebaImportPreviewDialog({
         <DialogHeader className="shrink-0 space-y-1.5 pr-6">
           <DialogTitle>Revisá el import antes de guardar</DialogTitle>
           <DialogDescription>
-            Indicá a quién representás, editá o eliminá ítems incorrectos y confirmá qué entra al control.
+            Indicá a quién representás (podés marcar varias), editá o eliminá ítems incorrectos y confirmá qué entra al control.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="shrink-0 rounded-lg border border-primary/20 bg-primary/5 p-3 space-y-2">
-          <Label className="text-xs font-medium text-primary">Representamos a</Label>
-          <Select
-            value={parteRepresentada || '_'}
-            onValueChange={(v) =>
-              handleParteChange(v === '_' ? '' : (v as ParteRepresentadaPrueba))
-            }
-          >
-            <SelectTrigger className="h-9 bg-background">
-              <SelectValue placeholder="Seleccioná la parte…" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="_">Sin definir</SelectItem>
-              <SelectItem value="actor">{actorLabel}</SelectItem>
-              <SelectItem value="demandado">{demandadoLabel}</SelectItem>
-            </SelectContent>
-          </Select>
-          {parteRepresentada && (
-            <p className="text-[11px] text-muted-foreground">
-              En el control vas a filtrar primero la prueba de{' '}
-              {parteRepresentada === 'actor' ? actorLabel : demandadoLabel}.
-            </p>
-          )}
+        <div className="shrink-0 rounded-lg border border-primary/20 bg-primary/5 p-3">
+          <ControlPruebaPartesRepresentadasPicker
+            value={partesNorm}
+            onChange={handlePartesChange}
+            actorLabel={actorLabel}
+            demandadoLabel={demandadoLabel}
+            showTercero={false}
+            hint="En el control vas a priorizar la prueba de las partes marcadas; el badge de pendientes suma todas ellas."
+          />
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1 -mr-1">

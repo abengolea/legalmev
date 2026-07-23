@@ -75,6 +75,10 @@ export const CEDULA_NOTIF_ESTADO_STYLE: Record<string, EstadoStyle> = {
 /** Etiquetas en masculino (oficio electrónico) — mismos estilos que cédula */
 export const OFICIO_ELECTRONICO_ESTADO_STYLE: Record<string, EstadoStyle> = {
   pendiente_realizacion: CEDULA_NOTIF_ESTADO_STYLE.pendiente_realizacion,
+  presentada: {
+    ...CEDULA_NOTIF_ESTADO_STYLE.presentada,
+    label: 'Presentado',
+  },
   observada: {
     ...CEDULA_NOTIF_ESTADO_STYLE.observada,
     label: 'Observado',
@@ -179,6 +183,8 @@ export const estadosTerminalesCedulaNotificacion = estadosTerminalesComunicacion
 const LEGACY_A_COMUNICACION: Record<string, string> = {
   pendiente: 'pendiente_realizacion',
   enviado: 'presentada',
+  presentado: 'presentada',
+  observado: 'observada',
   librado: 'librada',
   librada: 'librada',
   diligenciado: 'notificada',
@@ -195,9 +201,9 @@ const LEGACY_A_COMUNICACION: Record<string, string> = {
 
 const COMUNICACION_A_GENERICO: Record<string, string> = {
   pendiente_realizacion: 'pendiente',
-  presentada: 'enviado',
+  presentada: 'presentado',
   librada: 'librado',
-  observada: 'contestado',
+  observada: 'observado',
   contestacion_parcial: 'contestacion_parcial',
   retirada: 'pendiente',
   pendiente_diligenciamiento: 'pendiente',

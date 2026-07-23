@@ -1,6 +1,5 @@
 'use client';
 
-import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import type { ControlPruebaItem, ControlPruebaExpediente } from '@/types/control-prueba';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -10,11 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { progresoSubtareas } from '@/lib/control-prueba-subtareas';
-import {
-  generarPlantillaDiligencia,
-  inferirFueroPlantilla,
-  checklistInicialAudiencia,
-} from '@/lib/control-prueba-plantillas';
+import { checklistInicialAudiencia } from '@/lib/control-prueba-plantillas';
 import { resolveCategoria, esAudienciaOfrecida } from '@/lib/control-prueba';
 import {
   esCedulaNotificacionAudiencia,
@@ -22,15 +17,14 @@ import {
   getMedioCedulaNotificacion,
   patchMedioCedulaNotificacion,
 } from '@/lib/control-prueba-cedula-notif';
-import { esOficio, oficioRelacionadoLabel } from '@/lib/control-prueba-oficio';
+import { esPruebaInformativa, usaFlujoOficio, oficioRelacionadoLabel } from '@/lib/control-prueba-oficio';
 import { requiereFlujoDocumentalEnPoder, esOficioInformativaAutenticidad } from '@/lib/control-prueba-documental-poder';
 import type { CedulaNotifMedio } from '@/types/control-prueba';
 import { ControlPruebaAudienciaPruebaBlock, muestraBloqueAudienciaPrueba } from '@/components/admin/ControlPruebaAudienciaPruebaBlock';
 import { ControlPruebaDocumentalEnPoderBlock } from '@/components/admin/ControlPruebaDocumentalEnPoderBlock';
 import { ControlPruebaPericialMovimientosBlock } from '@/components/admin/ControlPruebaPericialMovimientosBlock';
-import { ControlPruebaResultadosForm } from '@/components/admin/ControlPruebaResultadosDialog';
 import type { TipoTramitePericial } from '@/types/control-prueba';
-import { ExternalLink, FileText, History, Link2, Plus, Trash2, ClipboardCheck } from 'lucide-react';
+import { ExternalLink, FileText, History, Link2, Plus, Trash2 } from 'lucide-react';
 
 type Props = {
   item: ControlPruebaItem;
@@ -73,7 +67,6 @@ export function ControlPruebaItemDetail({
 }: Props) {
   const cat = resolveCategoria(item);
   const prog = progresoSubtareas(item);
-  const [showResultadosForm, setShowResultadosForm] = useState(false);
 
   const updateSubtarea = (subId: string, patch: { completada?: boolean; observaciones?: string | null }) => {
     const subs = (item.subtareas ?? []).map((s) => (s.id === subId ? { ...s, ...patch } : s));
@@ -98,20 +91,6 @@ export function ControlPruebaItemDetail({
     onUpdate({ adjuntos: (item.adjuntos ?? []).filter((a) => a.id !== adjId) });
   };
 
-  const generarPlantilla = () => {
-    const fuero = inferirFueroPlantilla(expediente.fuero);
-    const texto = generarPlantillaDiligencia(item.tipo, fuero, {
-      juzgado: expediente.juzgado,
-      numeroExpediente: expediente.numeroExpediente,
-      caratula: expediente.caratula,
-      destinatario: item.diligencia?.destinatario,
-      objeto: item.diligencia?.objeto ?? item.descripcion,
-    });
-    onUpdate({
-      diligencia: { ...item.diligencia, plantillaTexto: texto },
-    });
-  };
-
   const ensureChecklist = () => {
     if (item.audiencia?.checklist?.length) return;
     onUpdate({
@@ -133,40 +112,6 @@ export function ControlPruebaItemDetail({
           />
         </div>
       )}
-
-      <div>
-        <div className="flex items-center justify-between mb-2">
-          <Label className="text-xs font-medium flex items-center gap-1.5">
-            <ClipboardCheck className="h-3.5 w-3.5" />
-            Resultado
-          </Label>
-          {!showResultadosForm && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-7 text-[10px]"
-              onClick={() => setShowResultadosForm(true)}
-            >
-              Cargar resultado
-            </Button>
-          )}
-        </div>
-        {showResultadosForm ? (
-          <ControlPruebaResultadosForm
-            item={item}
-            onSave={(patch) => {
-              onUpdate(patch);
-              setShowResultadosForm(false);
-            }}
-            onCancel={() => setShowResultadosForm(false)}
-          />
-        ) : (
-          <p className="text-[10px] text-muted-foreground">
-            Usá el formulario para registrar contestación de oficios, acta de audiencia, dictamen pericial, etc.
-          </p>
-        )}
-      </div>
 
       {(cat === 'prueba' || esAudienciaOfrecida(item)) &&
         (item.subtareas?.length ?? 0) > 0 &&
@@ -335,8 +280,23 @@ export function ControlPruebaItemDetail({
         />
       )}
 
-      {cat === 'diligencia' && (
+      {(cat === 'diligencia' || esPruebaInformativa(item)) && (
         <div className="grid gap-3 sm:grid-cols-2">
+          {esPruebaInformativa(item) && (
+            <div className="sm:col-span-2 rounded-lg border border-sky-200 bg-sky-50/50 p-3 space-y-1">
+              <Label className="text-xs font-medium flex items-center gap-1.5">
+                <Link2 className="h-3.5 w-3.5" />
+                Prueba informativa
+              </Label>
+              <p className="text-[10px] text-muted-foreground">
+                Medio probatorio originario (apartado Prueba). Ciclo: pendiente → presentado → librado →
+                producida. Si no se librará el oficio (p. ej. destinatario en el exterior), usá{' '}
+                <strong>A valoración judicial</strong> y esperá la valoración del juez. Aclaraciones o
+                reiteraciones generan oficios hijos en Comunicaciones (se ocultan cuando la madre queda
+                producida o a valoración).
+              </p>
+            </div>
+          )}
           {esCedulaNotificacionAudiencia(item) && item.tipo === 'cedula' && (
             <div className="sm:col-span-2 rounded-lg border border-violet-200 bg-violet-50/50 p-3 space-y-2">
               <Label className="text-xs font-medium flex items-center gap-1.5">
@@ -359,8 +319,8 @@ export function ControlPruebaItemDetail({
               </div>
               <p className="text-[10px] text-muted-foreground">
                 {getMedioCedulaNotificacion(item) === 'papel'
-                  ? 'Flujo completo: presentación, libramiento, retiro, diligenciamiento y resultado.'
-                  : 'Flujo reducido: pendiente → observada → librada y notificada.'}
+                  ? 'Flujo: pendiente → presentada → observada → librada → diligenciamiento / resultado.'
+                  : 'Flujo: pendiente → presentada → observada → librada y notificada.'}
               </p>
               {item.vinculo?.vinculoLabel && (
                 <p className="text-[10px] text-muted-foreground">Vinculada a: {item.vinculo.vinculoLabel}</p>
@@ -403,18 +363,18 @@ export function ControlPruebaItemDetail({
               <p className="text-[10px] text-sky-900">
                 {item.tipo === 'oficio_electronico' ? (
                   <>
-                    <strong>Oficio electrónico:</strong> Pendiente de realización → Observado → Cumpl. parcial →
+                    <strong>Oficio electrónico:</strong> Pendiente → Presentado → Observado → Cumpl. parcial →
                     Librado y notificado / Cumplido
                   </>
                 ) : (
                   <>
-                    <strong>Flujo electrónico:</strong> Pendiente de realización → Observada → Librada y notificada
+                    <strong>Flujo electrónico:</strong> Pendiente → Presentada → Observada → Librada y notificada
                   </>
                 )}
               </p>
             </div>
           )}
-          {esOficio(item) && (
+          {usaFlujoOficio(item) && (
             <div className="sm:col-span-2 space-y-2">
               {item.diligencia?.oficioOrigenId && (
                 <p className="text-[10px] text-muted-foreground">
@@ -516,7 +476,8 @@ export function ControlPruebaItemDetail({
           {item.tipo === 'cedula' && !esCedulaNotificacionAudiencia(item) && (
             <div className="sm:col-span-2 rounded-lg border border-amber-200 bg-amber-50/40 px-3 py-2">
               <p className="text-[10px] text-amber-900">
-                <strong>Cédula papel:</strong> flujo completo (presentada, librada, retirada, diligenciamiento, etc.)
+                <strong>Cédula papel:</strong> pendiente → presentada → observada (vicios formales) → librada →
+                diligenciamiento / resultado.
               </p>
             </div>
           )}
@@ -608,31 +569,6 @@ export function ControlPruebaItemDetail({
               className="h-8 text-xs mt-0.5"
             />
           </div>
-          <div className="sm:col-span-2">
-            <Label className="text-xs">Resultado</Label>
-            <Input
-              value={item.diligencia?.resultado ?? ''}
-              onChange={(e) => onUpdate({ diligencia: { ...item.diligencia, resultado: e.target.value } })}
-              className="h-8 text-xs mt-0.5"
-            />
-          </div>
-          <div className="sm:col-span-2 flex gap-2">
-            <Button type="button" variant="outline" size="sm" onClick={generarPlantilla}>
-              Generar plantilla
-            </Button>
-          </div>
-          {item.diligencia?.plantillaTexto && (
-            <div className="sm:col-span-2">
-              <Textarea
-                value={item.diligencia.plantillaTexto}
-                onChange={(e) =>
-                  onUpdate({ diligencia: { ...item.diligencia, plantillaTexto: e.target.value } })
-                }
-                rows={6}
-                className="text-xs font-mono"
-              />
-            </div>
-          )}
         </div>
       )}
 
@@ -698,14 +634,6 @@ export function ControlPruebaItemDetail({
               />
               Cédula librada y notificada antes de la audiencia
             </label>
-          </div>
-          <div className="sm:col-span-3">
-            <Label className="text-xs">Resultado</Label>
-            <Input
-              value={item.audiencia?.resultado ?? ''}
-              onChange={(e) => onUpdate({ audiencia: { ...item.audiencia, resultado: e.target.value } })}
-              className="h-8 text-xs mt-0.5"
-            />
           </div>
           <div className="sm:col-span-3">
             <div className="flex items-center justify-between mb-1">

@@ -89,9 +89,23 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     if (body.resumenEjecutivo !== undefined) {
       update.resumenEjecutivo = body.resumenEjecutivo;
     }
-    if (body.parteRepresentada !== undefined) {
-      update.parteRepresentada =
-        body.parteRepresentada === 'demandado' ? 'demandado' : body.parteRepresentada === 'actor' ? 'actor' : '';
+    if (body.parteRepresentada !== undefined || body.partesRepresentadas !== undefined) {
+      const fromArray = Array.isArray(body.partesRepresentadas)
+        ? (body.partesRepresentadas as string[]).filter(
+            (p): p is 'actor' | 'demandado' | 'tercero' =>
+              p === 'actor' || p === 'demandado' || p === 'tercero',
+          )
+        : [];
+      const legacy =
+        body.parteRepresentada === 'demandado' ||
+        body.parteRepresentada === 'actor' ||
+        body.parteRepresentada === 'tercero'
+          ? (body.parteRepresentada as 'actor' | 'demandado' | 'tercero')
+          : '';
+      const partes =
+        fromArray.length > 0 ? [...new Set(fromArray)] : legacy ? [legacy] : [];
+      update.partesRepresentadas = partes;
+      update.parteRepresentada = partes[0] ?? '';
     }
     if (body.terceros !== undefined && Array.isArray(body.terceros)) {
       update.terceros = body.terceros.map((t) => String(t).trim()).filter(Boolean);
