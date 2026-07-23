@@ -7,6 +7,7 @@ import {
   TIPOS_DILIGENCIA,
   TIPOS_PRUEBA,
 } from '@/lib/control-prueba';
+import { TIPOS_MEJOR_PROVEER } from '@/types/control-prueba';
 import { inferirEspecialidadPericial } from '@/lib/control-prueba-pericial';
 import {
   aplicarSubprocesosPostImport,
@@ -107,6 +108,10 @@ const ES_PRODUCCION_PERICIAL: RegExp[] = [
 const TIPOS_PRUEBA_SET = new Set<string>(TIPOS_PRUEBA);
 const TIPOS_DILIGENCIA_SET = new Set<string>(TIPOS_DILIGENCIA);
 const TIPOS_AUDIENCIA_SET = new Set<string>(TIPOS_AUDIENCIA);
+/** Confesional/testimonial ofrecidas viven en prueba (Modelo B). */
+const TIPOS_PRUEBA_CON_AUDIENCIA = new Set(['confesional', 'testimonial']);
+const TIPOS_PRUEBA_IMPORT = new Set<string>([...TIPOS_PRUEBA, ...TIPOS_PRUEBA_CON_AUDIENCIA]);
+const TIPOS_MEJOR_PROVEER_SET = new Set<string>(TIPOS_MEJOR_PROVEER);
 
 export type ImportFilterResult = {
   items: ControlPruebaItem[];
@@ -135,11 +140,20 @@ function normalizarTipoDiligencia(descripcion: string, tipoRaw: string): string 
   return 'oficio';
 }
 
-function debeExcluir(descripcion: string, categoria: ItemCategoria, ofrecidaPor?: string): string | null {
+function debeExcluir(
+  descripcion: string,
+  categoria: ItemCategoria,
+  ofrecidaPor?: string,
+  tipo?: string,
+): string | null {
   if (ES_PRODUCCION_PERICIAL.some((re) => re.test(descripcion))) {
     return 'Producción pericial (dictamen presentado), no prueba ofrecida';
   }
   if (categoria === 'prueba' && ofrecidaPor === 'tribunal') {
+    // Pericia de oficio / experticia ordenada por el tribunal sí es prueba.
+    if (tipo === 'pericial' || esPruebaPericial(descripcion, tipo ?? '')) return null;
+    // Informativa mal etiquetada como tribunal: no descartar (se corrige ofrecidaPor al mapear).
+    if (tipo === 'informativa') return null;
     return 'El tribunal no ofrece prueba';
   }
   if (categoria === 'prueba' && ofrecidaPor === 'tercero') {
@@ -153,6 +167,7 @@ function debeExcluir(descripcion: string, categoria: ItemCategoria, ofrecidaPor?
   for (const re of EXCLUIR_DESCRIPCION) {
     if (re.test(descripcion)) {
       if (esComunicacionProcesal(descripcion)) return null;
+      if (categoria === 'mejor_proveer') return null;
       return 'Acto procesal / orden judicial (no es prueba ofrecida)';
     }
   }
@@ -166,8 +181,13 @@ function clasificarItem(
   let categoria = (raw.categoria ?? 'prueba') as ItemCategoria;
   const tipoNorm = raw.tipo.toLowerCase();
 
+  // Modelo B: confesional/testimonial = prueba ofrecida (no categoría audiencia).
   if (tipoNorm === 'confesional' || /\bprueba confesional\b/i.test(desc) || /\bconfesional de la parte\b/i.test(desc)) {
-    return { categoria: 'audiencia', tipo: 'confesional' };
+    return {
+      categoria: 'prueba',
+      tipo: 'confesional',
+      ...(categoria === 'audiencia' && { motivoReclasificacion: 'Modelo B: confesional → prueba' }),
+    };
   }
 
   if (
@@ -176,7 +196,19 @@ function clasificarItem(
     /\bprueba testimonial\b/i.test(desc) ||
     /\baudiencia testimonial\b/i.test(desc)
   ) {
-    return { categoria: 'audiencia', tipo: 'testimonial' };
+    return {
+      categoria: 'prueba',
+      tipo: 'testimonial',
+      ...(categoria === 'audiencia' && { motivoReclasificacion: 'Modelo B: testimonial → prueba' }),
+    };
+  }
+
+  if (
+    categoria === 'mejor_proveer' ||
+    (TIPOS_MEJOR_PROVEER_SET.has(tipoNorm) && /\bmejor\s+proveer\b/i.test(desc))
+  ) {
+    const tipoMp = TIPOS_MEJOR_PROVEER_SET.has(tipoNorm) ? tipoNorm : 'otra';
+    return { categoria: 'mejor_proveer', tipo: tipoMp };
   }
 
   if (esDocumentalYaAcompanada(desc)) {
@@ -285,7 +317,7 @@ export function filtrarItemsImportados(
       });
     }
 
-    const exclusion = debeExcluir(descripcion, categoria, raw.ofrecidaPor);
+    const exclusion = debeExcluir(descripcion, categoria, raw.ofrecidaPor, tipo);
     if (exclusion) {
       descartados.push({ descripcion, motivo: exclusion });
       continue;
@@ -303,11 +335,13 @@ export function filtrarItemsImportados(
     const tipoFinal =
       catFinal === 'diligencia'
         ? normalizarTipoDiligencia(descripcion, tipo)
-        : catFinal === 'audiencia' && TIPOS_AUDIENCIA_SET.has(tipo)
+        : catFinal === 'audiencia' && TIPOS_AUDIENCIA_SET.has(tipo) && !TIPOS_PRUEBA_CON_AUDIENCIA.has(tipo)
           ? tipo
-          : TIPOS_PRUEBA_SET.has(tipo)
+          : catFinal === 'mejor_proveer' && TIPOS_MEJOR_PROVEER_SET.has(tipo)
             ? tipo
-            : defaultTipoForCategoria(catFinal);
+            : TIPOS_PRUEBA_IMPORT.has(tipo)
+              ? tipo
+              : defaultTipoForCategoria(catFinal);
 
     if (
       catFinal === 'prueba' &&
@@ -324,20 +358,28 @@ export function filtrarItemsImportados(
     const estadoResuelto =
       resolveEstadoImport(raw, catFinal, tipoFinal) ?? defaultEstadoForItem(catFinal, tipoFinal);
 
+    const intimacionActiva =
+      estadoResuelto === 'intimacion_ordenada' || estadoResuelto === 'exhibicion_parcial';
+
+    // Informativa la ofrece la parte; si la IA puso tribunal, corregir (no descartar).
+    let ofrecidaPor =
+      raw.ofrecidaPor ??
+      (catFinal === 'prueba'
+        ? 'actor'
+        : catFinal === 'diligencia' || catFinal === 'mejor_proveer' || catFinal === 'audiencia'
+          ? 'tribunal'
+          : 'tribunal');
+    if (catFinal === 'prueba' && tipoFinal === 'informativa' && ofrecidaPor === 'tribunal') {
+      ofrecidaPor = 'actor';
+    }
+
     const item: ControlPruebaItem = {
       id: crypto.randomUUID(),
       orden: orden++,
       categoria: catFinal,
       tipo: tipoFinal,
       descripcion,
-      ofrecidaPor:
-        raw.ofrecidaPor ??
-        (catFinal === 'prueba' ||
-        (catFinal === 'audiencia' && (tipoFinal === 'confesional' || tipoFinal === 'testimonial'))
-          ? 'actor'
-          : catFinal === 'diligencia'
-            ? 'tribunal'
-            : 'tribunal'),
+      ofrecidaPor,
       estado: estadoResuelto,
       fechaLimite: raw.fechaLimite ?? null,
       fechaProduccion: null,
@@ -368,7 +410,7 @@ export function filtrarItemsImportados(
             documentosDetalle: descripcion,
             plazoPresentacion: raw.fechaLimite ?? null,
             medioIntimacion: 'papel' as const,
-            intimacionOrdenada: estadoResuelto === 'intimacion_ordenada',
+            intimacionOrdenada: intimacionActiva,
           },
         }),
       ...(catFinal === 'prueba' &&
@@ -379,7 +421,15 @@ export function filtrarItemsImportados(
             destinatarioOficio: raw.destinatarioOficio?.trim() || null,
           },
         }),
-      ...(catFinal === 'audiencia' &&
+      ...(catFinal === 'prueba' &&
+        (tipoFinal === 'confesional' || tipoFinal === 'testimonial') &&
+        estadoResuelto === 'audiencia_fijada' && {
+          audienciaPrueba: {
+            audienciaFijada: true,
+            fechaAudiencia: raw.fechaLimite ?? null,
+          },
+        }),
+      ...(catFinal === 'prueba' &&
         tipoFinal === 'testimonial' &&
         raw.testigos?.length && {
           testigos: raw.testigos

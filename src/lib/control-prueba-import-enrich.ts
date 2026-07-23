@@ -1,21 +1,30 @@
 import type { ControlPruebaImportOutput } from '@/ai/flows/control-prueba-import-flow';
 import type { ControlItemEstado, ControlPruebaItem } from '@/types/control-prueba';
+import {
+  AUDIENCIA_ESTADOS,
+  DILIGENCIA_ESTADOS,
+  INFORMATIVA_ESTADOS,
+  MEJOR_PROVEER_ESTADOS,
+  OFICIO_ELECTRONICO_ESTADOS,
+  PERICIAL_ESTADOS,
+  PRUEBA_ESTADOS,
+  CEDULA_NOTIF_ESTADOS_ELECTRONICA,
+  CEDULA_NOTIF_ESTADOS_PAPEL,
+} from '@/types/control-prueba';
 import { evaluarSubProcesosAutomaticos } from '@/lib/control-prueba-subprocesos';
 import { constaDesistimientoPrueba } from '@/lib/control-prueba-cierre';
 
-const ESTADOS_PRUEBA_IMPORT = new Set<string>([
-  'pendiente_produccion',
-  'postpuesta_juez',
-  'audiencia_fijada',
-  'intimacion_ordenada',
-  'exhibicion_parcial',
-  'apercibimiento_en_contra',
-  'autenticidad_impugnada',
-  'valoracion_judicial',
-  'producida',
-  'desistida',
-  'no_admitida',
+const ESTADOS_PRUEBA_IMPORT = new Set<string>(PRUEBA_ESTADOS);
+const ESTADOS_PERICIAL_IMPORT = new Set<string>(PERICIAL_ESTADOS);
+const ESTADOS_INFORMATIVA_IMPORT = new Set<string>(INFORMATIVA_ESTADOS);
+const ESTADOS_DILIGENCIA_IMPORT = new Set<string>([
+  ...DILIGENCIA_ESTADOS,
+  ...CEDULA_NOTIF_ESTADOS_PAPEL,
+  ...CEDULA_NOTIF_ESTADOS_ELECTRONICA,
+  ...OFICIO_ELECTRONICO_ESTADOS,
 ]);
+const ESTADOS_AUDIENCIA_IMPORT = new Set<string>(AUDIENCIA_ESTADOS);
+const ESTADOS_MEJOR_PROVEER_IMPORT = new Set<string>(MEJOR_PROVEER_ESTADOS);
 
 /** Negación / impugnación de autenticidad sobre documental acompañada. */
 export function constaImpugnacionAutenticidad(desc: string, obs?: string | null): boolean {
@@ -39,6 +48,43 @@ export function constaIntimacionDocumental(desc: string, obs?: string | null): b
     /\bintim(a|e|ación|ar|ado).{0,60}(exhib|acompañ|present|aport).{0,40}(document|docum)/i.test(t) ||
     /\borden(a|ar).{0,40}intimaci[oó]n.{0,50}(document|exhib)/i.test(t) ||
     /\bplazo.{0,30}(exhib|acompañ|present).{0,30}(document|docum)/i.test(t)
+  );
+}
+
+/** Exhibición parcial de documental intimada. */
+export function constaExhibicionParcial(desc: string, obs?: string | null): boolean {
+  const t = `${desc} ${obs ?? ''}`;
+  return (
+    /\bexhibici[oó]n\s+parcial\b/i.test(t) ||
+    /\bacompa[nñ](a|ó|aron).{0,50}parcial\b/i.test(t) ||
+    /\b(falta|faltan|faltantes?).{0,40}(document|pieza|instrumento)/i.test(t) ||
+    /\bparcialmente\s+(acompa[nñ]|exhib|present)/i.test(t)
+  );
+}
+
+/** Apercibimiento / no acompañaron documental intimada. */
+export function constaApercibimientoDocumental(desc: string, obs?: string | null): boolean {
+  const t = `${desc} ${obs ?? ''}`;
+  return (
+    /\bapercibimiento\b/i.test(t) ||
+    /\bno\s+acompa[nñ](a|ó|aron).{0,50}(document|plazo|intim)/i.test(t) ||
+    /\bincumpl(i[oó]|imiento).{0,40}(intimaci|exhib|acompa[nñ])/i.test(t) ||
+    /\bsin\s+acompa[nñ]ar\b/i.test(t)
+  );
+}
+
+/** Audiencia de prueba ya fijada (confesional/testimonial). */
+export function constaAudienciaFijada(desc: string, obs?: string | null, fechaLimite?: string | null): boolean {
+  if (fechaLimite?.trim()) {
+    const t = `${desc} ${obs ?? ''}`;
+    if (/\b(fij|design|se[nñ]al|convoc).{0,40}(audiencia|confesional|testimonial)/i.test(t)) return true;
+    if (/\baudiencia\b/i.test(t)) return true;
+  }
+  const t = `${desc} ${obs ?? ''}`;
+  return (
+    /\baudiencia\s+(fijada|designada|se[nñ]alada|convocada)\b/i.test(t) ||
+    /\b(fij|design|se[nñ]al).{0,30}audiencia\b/i.test(t) ||
+    /\bpara\s+el\s+\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}.{0,40}audiencia\b/i.test(t)
   );
 }
 
@@ -72,12 +118,20 @@ function similitudDescripcion(a: string, b: string): number {
   return inter / Math.max(wa.size, wb.size);
 }
 
+function sugerenciaEnSet(sug: string | undefined, set: Set<string>): ControlItemEstado | undefined {
+  if (sug && set.has(sug)) return sug as ControlItemEstado;
+  return undefined;
+}
+
 export function resolveEstadoImport(
   raw: ControlPruebaImportOutput['items'][number],
   categoria: string,
   tipo: string,
 ): ControlItemEstado | undefined {
   const sug = raw.estadoSugerido;
+  // Compat: informativa vieja usaba contestado/cumplido → producida
+  const sugNorm =
+    tipo === 'informativa' && (sug === 'contestado' || sug === 'cumplido') ? 'producida' : sug;
 
   if (categoria === 'prueba' && tipo === 'documental') {
     if (raw.impugnacionAutenticidad || constaImpugnacionAutenticidad(raw.descripcion, raw.observaciones)) {
@@ -85,28 +139,70 @@ export function resolveEstadoImport(
     }
     // Documental ya acompañada sin impugnación → producida (obra en autos).
     // Sobrescribe pendiente_produccion si la IA lo dejó por defecto.
-    if (!sug || sug === 'pendiente_produccion') {
+    if (!sugNorm || sugNorm === 'pendiente_produccion') {
       return 'producida';
     }
-  }
-
-  if (sug && ESTADOS_PRUEBA_IMPORT.has(sug)) {
-    return sug as ControlItemEstado;
+    return sugerenciaEnSet(sugNorm, ESTADOS_PRUEBA_IMPORT);
   }
 
   if (categoria === 'prueba' && tipo === 'documental_en_poder') {
-    if (raw.intimacionOrdenada || constaIntimacionDocumental(raw.descripcion, raw.observaciones)) {
+    if (sugNorm === 'apercibimiento_en_contra' || constaApercibimientoDocumental(raw.descripcion, raw.observaciones)) {
+      return 'apercibimiento_en_contra';
+    }
+    if (sugNorm === 'exhibicion_parcial' || constaExhibicionParcial(raw.descripcion, raw.observaciones)) {
+      return 'exhibicion_parcial';
+    }
+    if (
+      sugNorm === 'intimacion_ordenada' ||
+      raw.intimacionOrdenada ||
+      constaIntimacionDocumental(raw.descripcion, raw.observaciones)
+    ) {
       return 'intimacion_ordenada';
     }
+    return sugerenciaEnSet(sugNorm, ESTADOS_PRUEBA_IMPORT);
   }
 
-  if (
-    categoria === 'prueba' ||
-    (categoria === 'audiencia' && (tipo === 'confesional' || tipo === 'testimonial'))
-  ) {
+  if (categoria === 'prueba' && (tipo === 'confesional' || tipo === 'testimonial')) {
     if (constaDesistimientoPrueba(raw.descripcion, raw.observaciones)) {
       return 'desistida';
     }
+    if (
+      sugNorm === 'audiencia_fijada' ||
+      constaAudienciaFijada(raw.descripcion, raw.observaciones, raw.fechaLimite)
+    ) {
+      return 'audiencia_fijada';
+    }
+    return sugerenciaEnSet(sugNorm, ESTADOS_PRUEBA_IMPORT);
+  }
+
+  if (categoria === 'prueba' && tipo === 'informativa') {
+    return sugerenciaEnSet(sugNorm, ESTADOS_INFORMATIVA_IMPORT);
+  }
+
+  if (categoria === 'prueba' && tipo === 'pericial') {
+    return sugerenciaEnSet(sugNorm, ESTADOS_PERICIAL_IMPORT);
+  }
+
+  if (categoria === 'diligencia') {
+    // Incluye estados genéricos + cédula/oficio electrónico (unión en ESTADOS_DILIGENCIA_IMPORT).
+    return sugerenciaEnSet(sugNorm, ESTADOS_DILIGENCIA_IMPORT);
+  }
+
+  if (categoria === 'audiencia') {
+    if (sugNorm === 'audiencia_fijada') return 'programada';
+    return sugerenciaEnSet(sugNorm, ESTADOS_AUDIENCIA_IMPORT);
+  }
+
+  if (categoria === 'mejor_proveer') {
+    return sugerenciaEnSet(sugNorm, ESTADOS_MEJOR_PROVEER_IMPORT);
+  }
+
+  if (sugNorm && ESTADOS_PRUEBA_IMPORT.has(sugNorm)) {
+    return sugNorm as ControlItemEstado;
+  }
+
+  if (categoria === 'prueba' && constaDesistimientoPrueba(raw.descripcion, raw.observaciones)) {
+    return 'desistida';
   }
 
   return undefined;
@@ -206,6 +302,8 @@ export function aplicarSubprocesosPostImport(items: ControlPruebaItem[]): Contro
   let result = items;
 
   for (const item of items) {
+    const cat = item.categoria ?? 'prueba';
+
     if (item.tipo === 'documental' && item.estado === 'autenticidad_impugnada') {
       const r = evaluarSubProcesosAutomaticos({
         items: result,
@@ -217,12 +315,32 @@ export function aplicarSubprocesosPostImport(items: ControlPruebaItem[]): Contro
       continue;
     }
 
-    if (item.tipo === 'documental_en_poder' && item.estado === 'intimacion_ordenada') {
+    if (
+      item.tipo === 'documental_en_poder' &&
+      (item.estado === 'intimacion_ordenada' ||
+        item.estado === 'exhibicion_parcial' ||
+        item.estado === 'apercibimiento_en_contra')
+    ) {
       const r = evaluarSubProcesosAutomaticos({
         items: result,
         itemId: item.id,
         itemAnterior: { ...item, estado: 'pendiente_produccion' },
-        patch: { estado: 'intimacion_ordenada' },
+        patch: { estado: item.estado },
+      });
+      result = r.items;
+      continue;
+    }
+
+    if (
+      cat === 'prueba' &&
+      (item.tipo === 'confesional' || item.tipo === 'testimonial') &&
+      item.estado === 'audiencia_fijada'
+    ) {
+      const r = evaluarSubProcesosAutomaticos({
+        items: result,
+        itemId: item.id,
+        itemAnterior: { ...item, estado: 'pendiente_produccion' },
+        patch: { estado: 'audiencia_fijada' },
       });
       result = r.items;
     }

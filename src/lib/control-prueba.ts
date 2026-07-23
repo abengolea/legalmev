@@ -95,6 +95,7 @@ export {
   TIPOS_AUDIENCIA,
 };
 /** @deprecated */ export { TIPOS_PRUEBA as PRUEBA_TIPOS };
+export { usaEstadosComunicacionEspeciales } from '@/lib/control-prueba-cedula-notif';
 
 export const CONTROL_PRUEBA_COLLECTION = 'controlPrueba';
 
