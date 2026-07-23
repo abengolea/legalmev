@@ -1,22 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuth, getAdminDb } from "@/lib/firebase-admin";
-import { findColegioMemberByEmail } from "@/lib/notificas-integration";
+import { resolveNotificasDiscountForEmail } from "@/lib/notificas-integration";
 import { buildNotificasLoginUrl } from "@/lib/notificas-public-url";
-
-function promoDefaults() {
-  const freeRaw = process.env.NOTIFICAS_PROMO_FREE_SHIPMENTS?.trim();
-  const discRaw = process.env.NOTIFICAS_PROMO_DISCOUNT_PERCENT?.trim();
-  const freeShipments = freeRaw ? Number(freeRaw) : 3;
-  const discountPercent = discRaw ? Number(discRaw) : 50;
-  return {
-    freeShipments:
-      Number.isFinite(freeShipments) && freeShipments >= 0 ? Math.floor(freeShipments) : 3,
-    discountPercent:
-      Number.isFinite(discountPercent) && discountPercent >= 0 && discountPercent <= 100
-        ? Math.floor(discountPercent)
-        : 50,
-  };
-}
 
 async function authUid(request: NextRequest): Promise<
   | { ok: true; uid: string; email: string }
@@ -41,7 +26,7 @@ async function authUid(request: NextRequest): Promise<
 
 /**
  * GET /api/user/notificas-promo
- * Indica si mostrar el modal de Notificas (matriculado en colegio con convenio activo).
+ * Modal Notificas: 50% convenio colegio, o 20% por estar registrado en LegalMev (sin envíos gratis).
  */
 export async function GET(request: NextRequest) {
   const auth = await authUid(request);
@@ -59,26 +44,30 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ ok: true, show: false, reason: "dismissed" });
   }
 
-  const hit = await findColegioMemberByEmail(email);
-  if (!hit || !hit.isMember || !hit.convenioActivo) {
-    return NextResponse.json({ ok: true, show: false, reason: "sin_convenio" });
+  const resolved = await resolveNotificasDiscountForEmail(email);
+  if (!resolved.discountTier || resolved.discountPercent <= 0) {
+    return NextResponse.json({ ok: true, show: false, reason: "sin_descuento" });
   }
 
-  const { freeShipments, discountPercent } = promoDefaults();
   const userName =
     (typeof userData?.name === "string" && userData.name.trim()) ||
-    hit.memberName ||
+    resolved.userName ||
     email.split("@")[0];
 
   return NextResponse.json({
     ok: true,
     show: true,
+    tier: resolved.discountTier,
     userName,
-    colegioId: hit.colegioId,
-    colegioName: hit.colegioName,
-    freeShipments,
-    discountPercent,
-    notificasLoginUrl: buildNotificasLoginUrl(hit.colegioId),
+    colegioId: resolved.colegioId ?? null,
+    colegioName: resolved.colegioName ?? null,
+    freeShipments: resolved.freeShipments,
+    discountPercent: resolved.discountPercent,
+    notificasLoginUrl: buildNotificasLoginUrl({
+      colegioId: resolved.colegioId,
+      discountPercent: resolved.discountPercent,
+      tier: resolved.discountTier,
+    }),
   });
 }
 

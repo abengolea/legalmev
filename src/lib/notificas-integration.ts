@@ -98,6 +98,113 @@ export type LegalMevColegioSummary = {
   memberCount: number;
 };
 
+export type NotificasDiscountTier = "convenio" | "legalmev";
+
+export type NotificasDiscountLookup = {
+  isRegistered: boolean;
+  hasConvenio: boolean;
+  discountTier: NotificasDiscountTier | null;
+  discountPercent: number;
+  /** Solo convenio: envíos gratis de prueba (el 20% LegalMev no incluye). */
+  freeShipments: number;
+  userName?: string;
+  colegioId?: string;
+  colegioName?: string;
+};
+
+function notificasPromoPercents() {
+  const convenioRaw = process.env.NOTIFICAS_PROMO_DISCOUNT_PERCENT?.trim();
+  const registeredRaw = process.env.NOTIFICAS_PROMO_REGISTERED_DISCOUNT_PERCENT?.trim();
+  const freeRaw = process.env.NOTIFICAS_PROMO_FREE_SHIPMENTS?.trim();
+  const convenio = convenioRaw ? Number(convenioRaw) : 50;
+  const registered = registeredRaw ? Number(registeredRaw) : 20;
+  const freeShipments = freeRaw ? Number(freeRaw) : 3;
+  const clamp = (n: number, fallback: number) =>
+    Number.isFinite(n) && n >= 0 && n <= 100 ? Math.floor(n) : fallback;
+  return {
+    convenioPercent: clamp(convenio, 50),
+    registeredPercent: clamp(registered, 20),
+    freeShipments:
+      Number.isFinite(freeShipments) && freeShipments >= 0 ? Math.floor(freeShipments) : 3,
+  };
+}
+
+/**
+ * Usuario LegalMev por email (perfil Firestore activo).
+ * No crea perfiles ni modifica datos.
+ */
+export async function findRegisteredUserByEmail(email: string): Promise<{
+  uid: string;
+  name: string;
+  status: string;
+} | null> {
+  const norm = email.trim().toLowerCase();
+  if (!norm || !norm.includes("@")) return null;
+
+  const adminDb = getAdminDb();
+  const snap = await adminDb.collection("users").where("email", "==", norm).limit(5).get();
+  if (snap.empty) return null;
+
+  for (const doc of snap.docs) {
+    const data = doc.data() ?? {};
+    const status = String(data.status ?? "activo").trim().toLowerCase();
+    if (status === "bloqueado" || status === "inactivo") continue;
+    const name =
+      (typeof data.name === "string" && data.name.trim()) ||
+      norm.split("@")[0];
+    return { uid: doc.id, name, status: status || "activo" };
+  }
+  return null;
+}
+
+/**
+ * Descuento Notificas para un email: 50% convenio (prioridad) o 20% registrado LegalMev.
+ * El 20% no incluye envíos gratis.
+ */
+export async function resolveNotificasDiscountForEmail(
+  email: string,
+): Promise<NotificasDiscountLookup> {
+  const norm = email.trim().toLowerCase();
+  const { convenioPercent, registeredPercent, freeShipments } = notificasPromoPercents();
+  const empty: NotificasDiscountLookup = {
+    isRegistered: false,
+    hasConvenio: false,
+    discountTier: null,
+    discountPercent: 0,
+    freeShipments: 0,
+  };
+  if (!norm || !norm.includes("@")) return empty;
+
+  const [hit, user] = await Promise.all([
+    findColegioMemberByEmail(norm),
+    findRegisteredUserByEmail(norm),
+  ]);
+  const hasConvenio = Boolean(hit?.isMember && hit.convenioActivo);
+  if (hasConvenio && hit) {
+    return {
+      isRegistered: Boolean(user),
+      hasConvenio: true,
+      discountTier: "convenio",
+      discountPercent: convenioPercent,
+      freeShipments,
+      userName: user?.name || hit.memberName || undefined,
+      colegioId: hit.colegioId,
+      colegioName: hit.colegioName,
+    };
+  }
+
+  if (!user) return empty;
+
+  return {
+    isRegistered: true,
+    hasConvenio: false,
+    discountTier: "legalmev",
+    discountPercent: registeredPercent,
+    freeShipments: 0,
+    userName: user.name,
+  };
+}
+
 /** Lista colegios para que Notificas vincule descuentos (admin). */
 export async function listColegiosForNotificas(): Promise<LegalMevColegioSummary[]> {
   const adminDb = getAdminDb();
