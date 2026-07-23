@@ -4,7 +4,9 @@ import { useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import type { CedulaNotifMedio, ControlPruebaItem, PruebaParte } from '@/types/control-prueba';
 import { patchDocumentalEnPoder, intimacionDocumentalActiva } from '@/lib/control-prueba-documental-poder';
-import { hijosDePadre } from '@/lib/control-prueba-subprocesos';
+import {
+  cedulasIntimacionDocumentalDePadre,
+} from '@/lib/control-prueba-subprocesos';
 import { getEstadoConfig, PARTE_LABELS, resolveCategoria } from '@/lib/control-prueba';
 import { evaluarAlertaItem, ALERTA_NIVEL_CONFIG } from '@/lib/control-prueba-alertas';
 import { diasHabilesHasta, etiquetaDiasHabiles } from '@/lib/control-prueba-plazos';
@@ -20,7 +22,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { ChevronRight, FileStack } from 'lucide-react';
+import { ChevronRight, FileStack, Plus } from 'lucide-react';
 
 type Props = {
   item: ControlPruebaItem;
@@ -32,6 +34,85 @@ type Props = {
 };
 
 const PARTES_OBLIGADAS: PruebaParte[] = ['actor', 'demandado', 'tercero'];
+
+type EnlacesProps = {
+  item: ControlPruebaItem;
+  allItems: ControlPruebaItem[];
+  onAddCedula?: (destinatario?: string) => void;
+  onFocusSubproceso?: (itemId: string) => void;
+};
+
+/** Enlaces compactos bajo documental en poder (intimación / exhibición parcial). */
+export function ControlPruebaCedulasIntimacionDocumentalEnlaces({
+  item,
+  allItems,
+  onAddCedula,
+  onFocusSubproceso,
+}: EnlacesProps) {
+  const intimacionActiva = intimacionDocumentalActiva(String(item.estado));
+  const cedulasVinculadas = useMemo(
+    () => cedulasIntimacionDocumentalDePadre(allItems, item.id),
+    [allItems, item.id],
+  );
+
+  if (!intimacionActiva && item.estado !== 'apercibimiento_en_contra') return null;
+
+  const labelCedula = (cedula: ControlPruebaItem, idx: number) => {
+    const dest = cedula.diligencia?.destinatario?.trim();
+    const base =
+      cedulasVinculadas.length > 1 ? `Cédula de intimación ${idx + 1}` : 'Cédula de intimación';
+    if (dest) return `${base} · ${dest}`;
+    return base;
+  };
+
+  if (!intimacionActiva && cedulasVinculadas.length === 0) {
+    return (
+      <p className="text-[10px] mt-0.5 text-rose-800 leading-snug">
+        Apercibimiento en contra — no acompañaron la documental
+      </p>
+    );
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5">
+      {cedulasVinculadas.map((cedula, idx) =>
+        onFocusSubproceso ? (
+          <Button
+            key={cedula.id}
+            type="button"
+            variant="link"
+            className="h-auto p-0 text-[10px] text-violet-800 font-normal"
+            onClick={() => onFocusSubproceso(cedula.id)}
+          >
+            {labelCedula(cedula, idx)} →
+          </Button>
+        ) : (
+          <span key={cedula.id} className="text-[10px] text-violet-800">
+            {labelCedula(cedula, idx)}
+          </span>
+        ),
+      )}
+      {onAddCedula && intimacionActiva && (
+        <Button
+          type="button"
+          variant="link"
+          className="h-auto p-0 text-[10px] text-violet-800 font-normal"
+          onClick={() => onAddCedula()}
+        >
+          <Plus className="h-3 w-3 inline mr-0.5 -mt-px" />
+          {cedulasVinculadas.length > 0
+            ? 'Crear otra cédula'
+            : 'Crear cédula de intimación'}
+        </Button>
+      )}
+      {intimacionActiva && cedulasVinculadas.length === 0 && !onAddCedula && (
+        <span className="text-[10px] text-violet-800">
+          Intimación ordenada — se generará la cédula al guardar
+        </span>
+      )}
+    </div>
+  );
+}
 
 export function ControlPruebaDocumentalEnPoderBlock({
   item,
@@ -48,10 +129,7 @@ export function ControlPruebaDocumentalEnPoderBlock({
   const apercibimiento = item.estado === 'apercibimiento_en_contra';
 
   const cedulasVinculadas = useMemo(
-    () =>
-      hijosDePadre(item.id, allItems).filter(
-        (h) => h.vinculo?.rol === 'cedula_intimacion_documental',
-      ),
+    () => cedulasIntimacionDocumentalDePadre(allItems, item.id),
     [allItems, item.id],
   );
 

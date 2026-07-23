@@ -1353,7 +1353,8 @@ export function ControlPruebaPanel() {
     } else {
       toast({
         title: 'No se pudo crear la cédula',
-        description: 'Seleccione una audiencia fijada vinculada o créela desde la prueba ofrecida.',
+        description:
+          'Para documental en poder, el estado debe ser intimación ordenada o exhibición parcial. Para audiencia, fije primero la audiencia vinculada.',
       });
     }
   };

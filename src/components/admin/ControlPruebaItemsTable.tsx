@@ -52,6 +52,7 @@ import {
   usaFlujoAutenticidadDocumental,
 } from '@/lib/control-prueba-documental-autenticidad';
 import { ControlPruebaOficiosAutenticidadEnlaces } from '@/components/admin/ControlPruebaDocumentalAutenticidadBlock';
+import { ControlPruebaCedulasIntimacionDocumentalEnlaces } from '@/components/admin/ControlPruebaDocumentalEnPoderBlock';
 import { ControlPruebaCedulasAudienciaEnlaces } from '@/components/admin/ControlPruebaCedulasAudienciaEnlaces';
 import { ControlPruebaAudienciaEventoEnlaces } from '@/components/admin/ControlPruebaAudienciaEventoEnlaces';
 import {
@@ -518,17 +519,23 @@ export function ControlPruebaItemsTable({
                     </div>
                   )}
                   {usaFlujoDocumentalEnPoder(item) && (
-                    <p className="text-[10px] mt-0.5 text-violet-800 leading-snug whitespace-normal">
-                      {item.estado === 'postpuesta_juez'
-                        ? 'Postergada — pedir intimación'
-                        : item.estado === 'intimacion_ordenada'
-                          ? 'Intimación ordenada · expandir para cédula'
-                          : item.estado === 'exhibicion_parcial'
-                            ? 'Exhibición parcial · nueva cédula por faltantes'
-                            : item.estado === 'apercibimiento_en_contra'
-                              ? 'Apercibimiento en contra — no acompañaron la documental'
-                              : 'Sin intimación — documental en poder de contraparte'}
-                    </p>
+                    intimacionDocumentalActiva(String(item.estado)) ||
+                    item.estado === 'apercibimiento_en_contra' ? (
+                      <ControlPruebaCedulasIntimacionDocumentalEnlaces
+                        item={item}
+                        allItems={allItems}
+                        onAddCedula={
+                          onAddCedulaVinculada ? () => onAddCedulaVinculada(item.id) : undefined
+                        }
+                        onFocusSubproceso={onFocusItem}
+                      />
+                    ) : (
+                      <p className="text-[10px] mt-0.5 text-violet-800 leading-snug whitespace-normal">
+                        {item.estado === 'postpuesta_juez'
+                          ? 'Postergada — pedir intimación'
+                          : 'Sin intimación — documental en poder de contraparte'}
+                      </p>
+                    )
                   )}
                   {usaFlujoAutenticidadDocumental(item) && item.estado === 'autenticidad_impugnada' && (
                     <ControlPruebaOficiosAutenticidadEnlaces

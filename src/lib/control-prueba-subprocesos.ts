@@ -301,7 +301,10 @@ export function migrarCedulasEmbebidas(items: ControlPruebaItem[]): ControlPrueb
   return [...result, ...nuevos].map((item, index) => ({ ...item, orden: index + 1 }));
 }
 
-function cedulasIntimacionDocumentalDePadre(items: ControlPruebaItem[], parentId: string): ControlPruebaItem[] {
+export function cedulasIntimacionDocumentalDePadre(
+  items: ControlPruebaItem[],
+  parentId: string,
+): ControlPruebaItem[] {
   return items.filter(
     (i) => i.vinculo?.parentItemId === parentId && i.vinculo?.rol === 'cedula_intimacion_documental',
   );
@@ -983,16 +986,12 @@ export function crearCedulaManualVinculada(
     requiereFlujoDocumentalEnPoder(padre.tipo) &&
     intimacionDocumentalActiva(String(padre.estado))
   ) {
-    const dep = padre.documentalEnPoder ?? {};
-    const parte = String(dep.parteConDocumentos ?? parteContrariaDefault(padre.ofrecidaPor));
-    const plazo = dep.plazoPresentacion ?? padre.fechaLimite ?? '';
-    const medio = String(dep.medioIntimacion ?? 'papel');
     const porFaltantes = String(padre.estado) === 'exhibicion_parcial';
     const n = cedulasIntimacionDocumentalDePadre(items, padre.id).length + 1;
+    // Clave única por creación manual (no reutilizar la del auto-create).
     const tk = porFaltantes
       ? `cedula_intimacion_documental|${padre.id}|parcial|manual|${n}`
-      : triggerKeyIntimacionDocumental(padre.id, parte, plazo, medio);
-    if (existeHijoConTrigger(items, tk)) return { items, creado: null };
+      : `cedula_intimacion_documental|${padre.id}|manual|${n}`;
     const creado = buildCedulaIntimacionDocumental(padre, {
       destinatario,
       autoCreated: false,
