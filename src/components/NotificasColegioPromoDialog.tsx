@@ -26,13 +26,14 @@ type PromoPayload = {
   notificasLoginUrl?: string;
 };
 
-const SESSION_SHOWN_KEY = "legalmev-notificas-promo-shown";
+const SESSION_SHOWN_KEY = "legalmev-notificas-promo-v2-shown";
 
 export function NotificasColegioPromoDialog() {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [payload, setPayload] = useState<PromoPayload | null>(null);
   const [dismissing, setDismissing] = useState(false);
+  const [sessionKey, setSessionKey] = useState<string | null>(null);
 
   const fetchPromo = useCallback(async () => {
     const user = auth.currentUser;
@@ -63,15 +64,16 @@ export function NotificasColegioPromoDialog() {
 
       const tier: PromoTier = data.tier === "legalmev" ? "legalmev" : "convenio";
       const colegioId = typeof data.colegioId === "string" ? data.colegioId : "";
-      const sessionKey =
+      const key =
         tier === "convenio" && colegioId
           ? `${SESSION_SHOWN_KEY}:convenio:${colegioId}`
           : `${SESSION_SHOWN_KEY}:${tier}`;
-      if (typeof window !== "undefined" && sessionStorage.getItem(sessionKey) === "1") {
+      if (typeof window !== "undefined" && sessionStorage.getItem(key) === "1") {
         setPayload(null);
         return;
       }
 
+      setSessionKey(key);
       setPayload({
         show: true,
         tier,
@@ -79,14 +81,16 @@ export function NotificasColegioPromoDialog() {
         colegioId,
         colegioName: typeof data.colegioName === "string" ? data.colegioName : "tu colegio",
         freeShipments: typeof data.freeShipments === "number" ? data.freeShipments : 0,
-        discountPercent: typeof data.discountPercent === "number" ? data.discountPercent : tier === "convenio" ? 50 : 20,
+        discountPercent:
+          typeof data.discountPercent === "number"
+            ? data.discountPercent
+            : tier === "convenio"
+              ? 50
+              : 20,
         notificasLoginUrl:
           typeof data.notificasLoginUrl === "string" ? data.notificasLoginUrl : undefined,
       });
       setOpen(true);
-      if (typeof window !== "undefined") {
-        sessionStorage.setItem(sessionKey, "1");
-      }
     } catch {
       setPayload(null);
     } finally {
@@ -104,6 +108,12 @@ export function NotificasColegioPromoDialog() {
     });
     return () => unsub();
   }, [fetchPromo]);
+
+  const markSessionShown = () => {
+    if (typeof window !== "undefined" && sessionKey) {
+      sessionStorage.setItem(sessionKey, "1");
+    }
+  };
 
   const dismissPermanent = async () => {
     setDismissing(true);
@@ -123,16 +133,23 @@ export function NotificasColegioPromoDialog() {
     } catch {
       /* cerrar igual */
     } finally {
+      markSessionShown();
       setDismissing(false);
       setOpen(false);
     }
   };
 
   const goToNotificas = () => {
+    markSessionShown();
     const url = payload?.notificasLoginUrl;
     if (url) {
       window.open(url, "_blank", "noopener,noreferrer");
     }
+  };
+
+  const handleOpenChange = (next: boolean) => {
+    if (!next) markSessionShown();
+    setOpen(next);
   };
 
   if (loading || !payload?.show) {
@@ -146,8 +163,8 @@ export function NotificasColegioPromoDialog() {
   const isConvenio = payload.tier === "convenio";
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto">
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto z-[100]">
         <DialogHeader>
           <DialogTitle className="text-left text-base leading-snug pr-6">
             {isConvenio ? (
@@ -226,12 +243,6 @@ export function NotificasColegioPromoDialog() {
                   </>
                 )}
               </p>
-
-              <p className="text-xs leading-relaxed text-muted-foreground">
-                Notificas busca modernizar y agilizar las comunicaciones fehacientes digitales,
-                incorporando tecnología blockchain para brindar mayor seguridad, trazabilidad y
-                respaldo probatorio.
-              </p>
             </div>
           </DialogDescription>
         </DialogHeader>
@@ -242,7 +253,15 @@ export function NotificasColegioPromoDialog() {
             <ExternalLink className="ml-2 h-4 w-4 opacity-70" aria-hidden />
           </Button>
           <div className="flex w-full gap-2">
-            <Button type="button" variant="outline" className="flex-1" onClick={() => setOpen(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              className="flex-1"
+              onClick={() => {
+                markSessionShown();
+                setOpen(false);
+              }}
+            >
               Ahora no
             </Button>
             <Button

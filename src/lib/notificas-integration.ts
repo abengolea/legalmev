@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { getAdminDb } from "@/lib/firebase-admin";
+import { getAdminDb, getAuth } from "@/lib/firebase-admin";
 import { normalizeMembers, type ColegioMember } from "@/lib/colegio-members";
 
 export function notificasIntegrationSecret(): string | undefined {
@@ -131,7 +131,7 @@ function notificasPromoPercents() {
 
 /**
  * Usuario LegalMev por email (perfil Firestore activo).
- * No crea perfiles ni modifica datos.
+ * Fallback: Auth getUserByEmail → doc users/{uid} (cubre emails mal normalizados en Firestore).
  */
 export async function findRegisteredUserByEmail(email: string): Promise<{
   uid: string;
@@ -143,7 +143,6 @@ export async function findRegisteredUserByEmail(email: string): Promise<{
 
   const adminDb = getAdminDb();
   const snap = await adminDb.collection("users").where("email", "==", norm).limit(5).get();
-  if (snap.empty) return null;
 
   for (const doc of snap.docs) {
     const data = doc.data() ?? {};
@@ -154,7 +153,31 @@ export async function findRegisteredUserByEmail(email: string): Promise<{
       norm.split("@")[0];
     return { uid: doc.id, name, status: status || "activo" };
   }
-  return null;
+
+  try {
+    const authUser = await getAuth().getUserByEmail(norm);
+    const userSnap = await adminDb.collection("users").doc(authUser.uid).get();
+    if (!userSnap.exists) {
+      return {
+        uid: authUser.uid,
+        name: authUser.displayName?.trim() || norm.split("@")[0],
+        status: "activo",
+      };
+    }
+    const data = userSnap.data() ?? {};
+    const status = String(data.status ?? "activo").trim().toLowerCase();
+    if (status === "bloqueado" || status === "inactivo") return null;
+    return {
+      uid: authUser.uid,
+      name:
+        (typeof data.name === "string" && data.name.trim()) ||
+        authUser.displayName?.trim() ||
+        norm.split("@")[0],
+      status: status || "activo",
+    };
+  } catch {
+    return null;
+  }
 }
 
 /**

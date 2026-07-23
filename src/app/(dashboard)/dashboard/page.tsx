@@ -25,6 +25,7 @@ import Link from 'next/link';
 import { fetchCheckColegio } from '@/lib/check-colegio-client';
 import { SUPPORTED_PORTALS_DASHBOARD } from '@/lib/supported-portals';
 import { PDF_DOWNLOADS_UNLIMITED } from '@/lib/pdf-downloads-policy';
+import { NotificasPromoDashboardCard } from '@/components/NotificasPromoDashboardCard';
 
 type UserData = {
   name?: string;
@@ -123,6 +124,8 @@ export default function DashboardPage() {
         </h1>
         <p className="text-muted-foreground">{userData?.email}</p>
       </div>
+
+      <NotificasPromoDashboardCard />
 
       <Card className="border-primary/30 bg-primary/5 shadow-sm">
         <CardHeader className="pb-2">
