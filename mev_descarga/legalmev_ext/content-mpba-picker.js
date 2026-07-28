@@ -37,7 +37,7 @@
     const picker = Ui.openPicker({
       portal: 'MPBA',
       title: 'Armar exportación MPBA',
-      subtitle: 'Elegí trámites e integrá carpeta ZIP o un PDF único',
+      subtitle: 'Elegí trámites e integrá un PDF único',
       items: [],
       originLabel: 'MPBA · Ver Proceso',
       async onExport({ mode, selectedItems, setProgress, cancelFlag }) {
@@ -54,7 +54,7 @@
         const datos = C.extractDatos();
         datos.portal = 'MPBA';
 
-        setProgress(88, mode === 'pdf' ? 'Armando PDF…' : 'Armando ZIP…');
+        setProgress(88, 'Armando PDF…');
         await window.LegalMevExportRunner.runExport({
           mode,
           datos,

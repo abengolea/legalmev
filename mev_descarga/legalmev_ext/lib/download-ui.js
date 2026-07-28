@@ -1,6 +1,6 @@
 /**
  * UI de exportación LegalMev (identidad propia).
- * Panel compacto + panel de armado de exportación (selección → ZIP / PDF).
+ * Panel compacto + panel de armado de exportación (selección → PDF único).
  * Tipografía: Inter + Poppins · paleta LegalMev #2A6A78 / #54A6A8
  */
 (function () {
@@ -10,6 +10,8 @@
   const FONTS_ID = 'lm-legalmev-fonts';
   const BAR_ID = 'lm-export-dock';
   const MODAL_ID = 'lm-export-panel';
+  const INVITE_ID = 'lm-export-invite';
+  const SITE_DEFAULT = 'https://www.legalmev.com.ar';
 
   const FONT_BODY = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
   const FONT_HEAD = "'Poppins', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
@@ -20,6 +22,27 @@
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;');
+  }
+
+  async function resolveSiteBase() {
+    try {
+      const { apiBase } = await chrome.storage.local.get('apiBase');
+      if (apiBase && typeof apiBase === 'string' && /^https?:\/\//i.test(apiBase)) {
+        return apiBase.replace(/\/$/, '');
+      }
+    } catch (_) {}
+    return SITE_DEFAULT;
+  }
+
+  function openTool(path) {
+    resolveSiteBase().then((base) => {
+      const url = `${base}${path}`;
+      try {
+        chrome.runtime.sendMessage({ type: 'OPEN_URL', url }, () => {
+          void chrome.runtime.lastError;
+        });
+      } catch (_) {}
+    });
   }
 
   function ensureFonts() {
@@ -190,9 +213,6 @@
         background: #2A6A78; color: #fff; border-color: #2A6A78;
       }
       #${MODAL_ID} .lm-foot button.primary:hover { background: #54A6A8; border-color: #54A6A8; }
-      #${MODAL_ID} .lm-foot button.secondary-zip {
-        background: #fff; color: #2A6A78; border: 1.5px solid #2A6A78;
-      }
       #${MODAL_ID} .lm-foot button:disabled { opacity: .45; cursor: wait; }
       #${MODAL_ID} .lm-progress {
         display: none; margin-top: 10px; background: #e8f1f2; border-radius: 4px; height: 6px; overflow: hidden;
@@ -215,8 +235,101 @@
         #${MODAL_ID} .lm-panel { width: 100%; border-radius: 0; }
         #${BAR_ID} { right: 12px; left: 12px; max-width: none; }
       }
+
+      /* Cartel post-descarga */
+      #${INVITE_ID} {
+        position: fixed; inset: 0; z-index: 2147483647;
+        display: flex; align-items: center; justify-content: center;
+        background: rgba(26, 58, 66, 0.5); padding: 16px;
+        font-family: ${FONT_BODY};
+      }
+      #${INVITE_ID} .lm-invite-card {
+        width: min(420px, 100%); background: #fff; border: 1px solid #c5dce0;
+        border-radius: 12px; box-shadow: 0 16px 48px rgba(26,58,66,.22);
+        overflow: hidden;
+      }
+      #${INVITE_ID} .lm-invite-head {
+        padding: 18px 18px 12px;
+        background: linear-gradient(180deg, #f4fafb, #fff);
+        border-bottom: 1px solid #d7e6e9;
+      }
+      #${INVITE_ID} .lm-invite-brand {
+        font-family: ${FONT_HEAD}; font-size: 11px; font-weight: 700;
+        letter-spacing: .06em; text-transform: uppercase; color: #54A6A8; margin: 0 0 6px;
+      }
+      #${INVITE_ID} .lm-invite-title {
+        font-family: ${FONT_HEAD}; font-size: 17px; font-weight: 700; color: #2A6A78; margin: 0 0 6px;
+      }
+      #${INVITE_ID} .lm-invite-body {
+        padding: 14px 18px 18px; font-size: 13px; color: #29464e; line-height: 1.45;
+      }
+      #${INVITE_ID} .lm-invite-actions {
+        display: flex; flex-direction: column; gap: 8px; margin-top: 14px;
+      }
+      #${INVITE_ID} .lm-invite-actions button {
+        border: none; border-radius: 8px; padding: 11px 14px; cursor: pointer;
+        font-weight: 600; font-size: 13px; font-family: ${FONT_BODY};
+      }
+      #${INVITE_ID} .lm-invite-primary { background: #2A6A78; color: #fff; }
+      #${INVITE_ID} .lm-invite-primary:hover { background: #54A6A8; }
+      #${INVITE_ID} .lm-invite-secondary {
+        background: #fff; color: #2A6A78; border: 1px solid #2A6A78 !important;
+      }
+      #${INVITE_ID} .lm-invite-secondary:hover { background: #eef7f8; }
+      #${INVITE_ID} .lm-invite-dismiss {
+        background: transparent; color: #5a7a82; font-weight: 500; font-size: 12px;
+        padding: 8px; text-decoration: underline; text-underline-offset: 2px;
+      }
     `;
     document.documentElement.appendChild(style);
+  }
+
+  function closeInvite() {
+    document.getElementById(INVITE_ID)?.remove();
+  }
+
+  /**
+   * Tras bajar PDF: invitar a cargar el archivo en Control de prueba o Copiloto.
+   */
+  function showPostDownloadInvite() {
+    injectCss();
+    closeInvite();
+    const modal = document.createElement('div');
+    modal.id = INVITE_ID;
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    modal.setAttribute('aria-labelledby', 'lm-invite-title');
+    modal.innerHTML = `
+      <div class="lm-invite-card">
+        <div class="lm-invite-head">
+          <p class="lm-invite-brand">LegalMev</p>
+          <h2 class="lm-invite-title" id="lm-invite-title">PDF listo</h2>
+        </div>
+        <div class="lm-invite-body">
+          <p style="margin:0">
+            Cargá el archivo que acabás de bajar en <strong>Control de prueba</strong>
+            o en el <strong>Copiloto de Audiencias</strong> para probar las herramientas.
+          </p>
+          <div class="lm-invite-actions">
+            <button type="button" class="lm-invite-primary" data-act="cp">Abrir Control de prueba</button>
+            <button type="button" class="lm-invite-secondary" data-act="copilot">Abrir Copiloto de Audiencias</button>
+            <button type="button" class="lm-invite-dismiss" data-act="close">Cerrar</button>
+          </div>
+        </div>
+      </div>`;
+    document.documentElement.appendChild(modal);
+    modal.querySelector('[data-act="cp"]')?.addEventListener('click', () => {
+      openTool('/dashboard/control-prueba');
+      closeInvite();
+    });
+    modal.querySelector('[data-act="copilot"]')?.addEventListener('click', () => {
+      openTool('/dashboard/copiloto-audiencias');
+      closeInvite();
+    });
+    modal.querySelector('[data-act="close"]')?.addEventListener('click', closeInvite);
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) closeInvite();
+    });
   }
 
   /**
@@ -253,7 +366,7 @@
   }
 
   /**
-   * Panel lateral: elegir actuaciones e integrar ZIP o PDF.
+   * Panel lateral: elegir actuaciones e integrar un PDF único.
    * Sin filtros heurísticos por tipo (poco fiables). Vista fija: todos los movimientos.
    */
   function openPicker(opts) {
@@ -279,7 +392,7 @@
           <button type="button" class="lm-x" title="Cerrar" aria-label="Cerrar">×</button>
           <p class="lm-brand-mini">LegalMev</p>
           <h2 id="lm-dl-title">${escapeHtml(opts.title || 'Armar exportación')}</h2>
-          <p>${escapeHtml(opts.subtitle || 'Elegí qué incluir. Después descargás como carpeta ZIP o un solo PDF.')}</p>
+          <p>${escapeHtml(opts.subtitle || 'Elegí qué incluir y descargá un PDF único.')}</p>
         </div>
         <div class="lm-body">
           <div class="lm-warn" style="display:none"></div>
@@ -303,8 +416,7 @@
         <div class="lm-foot">
           <div class="lm-status-inline" id="lm-status">Preparando…</div>
           <button type="button" data-act="cancel">Cerrar</button>
-          <button type="button" class="secondary-zip" data-act="zip" disabled>Carpeta ZIP</button>
-          <button type="button" class="primary" data-act="pdf" disabled>PDF único</button>
+          <button type="button" class="primary" data-act="pdf" disabled>Descargar PDF</button>
         </div>
       </div>`;
     document.documentElement.appendChild(modal);
@@ -344,12 +456,40 @@
       renderList();
       updateActions();
     });
-    modal.querySelector('[data-act="zip"]').addEventListener('click', () => startExport('zip'));
     modal.querySelector('[data-act="pdf"]').addEventListener('click', () => startExport('pdf'));
 
     function selectedItems() {
       return items.filter((it) => it.selected);
     }
+
+    let lastIconPctSent = null;
+    let lastIconPctAt = 0;
+
+    function notifyIconProgress(pct) {
+      if (pct == null) return;
+      const n = Math.max(0, Math.min(100, Math.round(pct)));
+      const now = Date.now();
+      // Evitar inundar el SW; siempre mandar 0/100 o cambios ≥1 %.
+      if (n !== 100 && n !== 0 && n === lastIconPctSent && now - lastIconPctAt < 200) return;
+      lastIconPctSent = n;
+      lastIconPctAt = now;
+      try {
+        chrome.runtime.sendMessage({ type: 'PICKER_EXPORT_PROGRESS', progreso: n }, () => {
+          void chrome.runtime.lastError;
+        });
+      } catch (_) {}
+    }
+
+    function notifyIconProgressEnd() {
+      lastIconPctSent = null;
+      lastIconPctAt = 0;
+      try {
+        chrome.runtime.sendMessage({ type: 'PICKER_EXPORT_DONE' }, () => {
+          void chrome.runtime.lastError;
+        });
+      } catch (_) {}
+    }
+
     function setStatus(text) {
       const el = modal.querySelector('#lm-status');
       if (el) el.textContent = text;
@@ -357,12 +497,9 @@
 
     function updateActions() {
       const n = selectedItems().length;
-      const zipBtn = modal.querySelector('[data-act="zip"]');
       const pdfBtn = modal.querySelector('[data-act="pdf"]');
       if (!busy) {
-        zipBtn.textContent = n ? `Carpeta ZIP (${n})` : 'Carpeta ZIP';
-        pdfBtn.textContent = n ? `PDF único (${n})` : 'PDF único';
-        zipBtn.disabled = n === 0;
+        pdfBtn.textContent = n ? `Descargar PDF (${n})` : 'Descargar PDF';
         pdfBtn.disabled = n === 0;
       }
       setStatus(
@@ -399,9 +536,16 @@
       list.innerHTML = items
         .map((it) => {
           const desc = titleCaseDesc(it.descripcion || it.titulo || it.tipo || 'Actuación');
-          const badge = hasDoc(it)
-            ? '<span class="lm-doc-yes">Con doc.</span>'
-            : '<span class="lm-doc-no">Sin doc.</span>';
+          const adjN = Array.isArray(it.adjuntosMeta)
+            ? it.adjuntosMeta.length
+            : /adjunto/i.test(it.tipo || '') || it.poseeAdjunto
+              ? Math.max(1, (it.docCount || 1) - 1)
+              : 0;
+          const badge = adjN > 0
+            ? `<span class="lm-doc-yes">${adjN} adj.</span>`
+            : hasDoc(it)
+              ? '<span class="lm-doc-yes">Con doc.</span>'
+              : '<span class="lm-doc-no">Sin doc.</span>';
           return `<label class="lm-row" data-id="${escapeHtml(it.id)}">
             <input type="checkbox" data-sel ${it.selected ? 'checked' : ''}/>
             <span class="lm-fecha">${escapeHtml(it.fecha || '')}</span>
@@ -423,14 +567,11 @@
 
     function setBusy(v, label) {
       busy = v;
-      const zipBtn = modal.querySelector('[data-act="zip"]');
       const pdfBtn = modal.querySelector('[data-act="pdf"]');
       const cancelBtn = modal.querySelector('[data-act="cancel"]');
       if (v) {
-        if (label === 'pdf') pdfBtn.textContent = 'Generando PDF…';
-        if (label === 'zip') zipBtn.textContent = 'Generando ZIP…';
+        pdfBtn.textContent = 'Generando PDF…';
         cancelBtn.textContent = 'Cancelar';
-        zipBtn.disabled = true;
         pdfBtn.disabled = true;
       } else {
         cancelBtn.textContent = 'Cerrar';
@@ -443,6 +584,7 @@
       const fill = modal.querySelector('.lm-progress > i');
       if (bar) bar.style.display = 'block';
       if (fill && pct != null) fill.style.width = `${Math.max(0, Math.min(100, pct))}%`;
+      if (pct != null) notifyIconProgress(pct);
       if (msg) setStatus(msg);
     }
 
@@ -451,23 +593,27 @@
       if (!selected.length || busy) return;
       cancelFlag.cancelled = false;
       setBusy(true, mode);
-      setProgress(2, mode === 'pdf' ? 'Generando PDF…' : 'Generando ZIP…');
+      setProgress(2, 'Generando PDF…');
       try {
         await opts.onExport?.({
-          mode,
+          mode: 'pdf',
           selectedItems: selected,
           allItems: items,
           setProgress,
           cancelFlag,
         });
         if (!cancelFlag.cancelled) {
-          setProgress(100, mode === 'pdf' ? 'PDF listo.' : 'ZIP listo.');
-          setTimeout(closeModal, 600);
+          setProgress(100, 'PDF listo.');
+          setTimeout(() => {
+            closeModal();
+            showPostDownloadInvite();
+          }, 500);
         }
       } catch (e) {
         setStatus(e?.message || String(e));
         alert(e?.message || String(e));
       } finally {
+        notifyIconProgressEnd();
         setBusy(false);
       }
     }
@@ -525,7 +671,7 @@
     return label ? `Causa guardada: ${label}.` : 'Causa guardada para seguimiento.';
   }
 
-  const api = { mountFloatingBar, openPicker, closeModal, followResultMessage };
+  const api = { mountFloatingBar, openPicker, closeModal, closeInvite, showPostDownloadInvite, followResultMessage };
   if (typeof window !== 'undefined') window.LegalMevDownloadUi = api;
   if (typeof self !== 'undefined') self.LegalMevDownloadUi = api;
 })();

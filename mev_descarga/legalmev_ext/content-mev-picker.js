@@ -1,5 +1,5 @@
 /**
- * MEV — detecta procesales.asp, barra flotante, modal de categorías → ZIP / PDF.
+ * MEV — detecta procesales.asp, barra flotante, modal de categorías → PDF único.
  */
 (function () {
   'use strict';
@@ -452,34 +452,20 @@
     const picker = Ui.openPicker({
       portal: 'MEV',
       title: 'Armar exportación MEV',
-      subtitle: 'Elegí actuaciones e integrá carpeta ZIP o un PDF único',
+      subtitle: 'Elegí actuaciones e integrá un PDF único',
       items: [],
       originLabel: 'MEV · procesales',
       async onExport({ mode, selectedItems, setProgress, cancelFlag }) {
         const { actuaciones, datos } = await hydrateSelected(selectedItems, setProgress, cancelFlag);
+        // PDF único MEV = texto de proveídos (apto para Control de prueba / Copiloto).
         await window.LegalMevExportRunner.runExport({
-          mode,
+          mode: 'pdf',
           datos,
           actuaciones,
           cancelFlag,
           setProgress,
-          async resolveAdjuntos(act) {
-            const out = [];
-            const Fetch = window.LegalMevRobustFetch;
-            const failed = [];
-            for (const adj of act.adjuntos || []) {
-              if (cancelFlag.cancelled) break;
-              const result = await Fetch.fetchBinary(adj.url, { fileName: adj.nombre });
-              if (!result.ok) {
-                failed.push(`${adj.nombre}: ${result.error}`);
-                continue;
-              }
-              out.push({ nombre: adj.nombre, bytes: result.bytes });
-            }
-            if (failed.length && !out.length) throw new Error(failed.join('; '));
-            if (failed.length) console.warn('[LegalMEV Monitor] Adjuntos fallidos:', failed);
-            return out;
-          },
+          forceTextPdf: true,
+          resolveAdjuntos: async () => [],
         });
       },
     });

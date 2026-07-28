@@ -1,5 +1,5 @@
 /**
- * Tucumán SAE — modal de selección + PDF/ZIP LegalMev (mismo flujo que MEV/PJN/Salta).
+ * Tucumán SAE — modal de selección + PDF único LegalMev (mismo flujo que MEV/PJN/Salta).
  */
 (function () {
   'use strict';
@@ -67,7 +67,7 @@
         datos.portal = 'TUCUMAN';
         datos.jurisdiccion = datos.jurisdiccion || 'Tucumán';
 
-        setProgress(88, mode === 'pdf' ? 'Armando PDF…' : 'Armando ZIP…');
+        setProgress(88, 'Armando PDF…');
         await window.LegalMevExportRunner.runExport({
           mode,
           datos,

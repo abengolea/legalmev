@@ -15,8 +15,8 @@ Motor: `seguimiento/`, adaptadores `portales/`, sync `sync/`.
 
 ## Exportación bajo demanda
 
-Módulos: `exportacion/` (nombres, categorías, PDF, empaquetado ZIP).  
-Carpeta ZIP: `LegalMev_{PORTAL}_{nro}_{yyyyMMdd}` con `indice.pdf`.
+Módulos: `exportacion/` (nombres, categorías, PDF único).  
+Descarga: un solo PDF (`LegalMev_{PORTAL}_{nro}_{yyyyMMdd}.pdf`).
 
 ## Pruebas
 

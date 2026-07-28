@@ -106,7 +106,6 @@
         "lib/jspdf.min.js",
         "exportacion/texto-pdf.js",
         "exportacion/merge-pdfs.js",
-        "lib/jszip.min.js",
         "exportacion/empaquetar.js",
         "content-salta.js",
         "content-salta-picker.js"
@@ -128,7 +127,6 @@
         "lib/download-ui.js",
         "lib/jspdf.min.js",
         "exportacion/texto-pdf.js",
-        "lib/jszip.min.js",
         "exportacion/empaquetar.js",
         "content-entrerios.js",
         "content-entrerios-picker.js"
@@ -152,7 +150,6 @@
         "lib/jspdf.min.js",
         "exportacion/texto-pdf.js",
         "exportacion/merge-pdfs.js",
-        "lib/jszip.min.js",
         "exportacion/empaquetar.js",
         "content-tucuman.js",
         "content-tucuman-picker.js"
@@ -172,7 +169,6 @@
         "lib/download-ui.js",
         "lib/jspdf.min.js",
         "exportacion/texto-pdf.js",
-        "lib/jszip.min.js",
         "exportacion/empaquetar.js",
         "content-mpba.js",
         "content-mpba-picker.js"

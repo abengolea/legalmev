@@ -1,5 +1,5 @@
 /**
- * PJN — detecta expediente.seam, barra flotante, modal de categorías → ZIP / PDF.
+ * PJN — detecta expediente.seam, barra flotante, modal de categorías → PDF único.
  * Recolecta filas de todas las páginas del listado cuando hay paginador.
  */
 (function () {
@@ -230,7 +230,7 @@
     const picker = Ui.openPicker({
       portal: 'PJN',
       title: 'Armar exportación PJN',
-      subtitle: 'Elegí actuaciones e integrá carpeta ZIP o un PDF único',
+      subtitle: 'Elegí actuaciones e integrá un PDF único',
       items: [],
       warning:
         'Si el expediente tiene actuaciones históricas fuera de esta vista, incluilas desde «Ver históricas» en el portal antes de descargar.',

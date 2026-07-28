@@ -1,5 +1,5 @@
 /**
- * Salta — modal de selección + PDF/ZIP con el mismo formato LegalMev que MEV/PJN.
+ * Salta — modal de selección + PDF único con el mismo formato LegalMev que MEV/PJN.
  */
 (function () {
   'use strict';
@@ -26,7 +26,7 @@
       portal: 'SALTA',
       title: 'Armar exportación Salta',
       subtitle:
-        'Cada actuación es un PDF del portal. El PDF único une esos documentos; el ZIP guarda uno por movimiento.',
+        'Cada actuación es un PDF del portal. Si tiene clip de Adjuntos, LegalMev también incluye esos escritos en el PDF único.',
       items: [],
       originLabel: 'Salta · consulta pública',
       async onExport({ mode, selectedItems, setProgress, cancelFlag }) {
@@ -79,7 +79,7 @@
         datos.portal = 'SALTA';
         datos.jurisdiccion = datos.jurisdiccion || 'Salta';
 
-        setProgress(88, mode === 'pdf' ? 'Armando PDF…' : 'Armando ZIP…');
+        setProgress(88, 'Armando PDF…');
         await window.LegalMevExportRunner.runExport({
           mode,
           datos,
