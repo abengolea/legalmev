@@ -24,7 +24,7 @@ const ESTADO_DILIGENCIA_A_INFORMATIVA: Record<string, string> = {
   pendiente_produccion: 'pendiente',
   postpuesta_juez: 'pendiente',
   producida: 'producida',
-  desistida: 'vencido',
+  desistida: 'desistida',
   no_admitida: 'vencido',
 };
 

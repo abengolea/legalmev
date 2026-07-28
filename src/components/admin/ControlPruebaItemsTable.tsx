@@ -342,6 +342,7 @@ export function ControlPruebaItemsTable({
                                 'cumplido',
                                 'vencido',
                                 'valoracion_judicial',
+                                'desistida',
                               ] as string[]
                             ).includes(String(item.estado))
                           ) {

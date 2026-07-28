@@ -176,6 +176,9 @@ export function resolveEstadoImport(
   }
 
   if (categoria === 'prueba' && tipo === 'informativa') {
+    if (constaDesistimientoPrueba(raw.descripcion, raw.observaciones)) {
+      return 'desistida';
+    }
     return sugerenciaEnSet(sugNorm, ESTADOS_INFORMATIVA_IMPORT);
   }
 

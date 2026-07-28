@@ -272,7 +272,7 @@ ofrecidaPor: **actor o demandado** (quien ofreció el medio). Excepción: perici
 
 **C) Prueba informativa admitida** — categoria=prueba, tipo=**informativa** (apartado Prueba). Medio originario (“se informa / se oficia a…”). Completar destinatarioOficio (campo propio, no en observaciones) y fechaLimite si hay plazo.
 - **ofrecidaPor: actor o demandado** — quien la ofreció en demanda/contestación/apertura. **NUNCA** tribunal (el tribunal libera el oficio; la parte ofrece el medio).
-- Estados válidos: pendiente → **presentado** → **observado** → librado → diligenciado → contestacion_parcial → **producida** (cierre exitoso). También vencido / valoracion_judicial.
+- Estados válidos: pendiente → **presentado** → **observado** → librado → diligenciado → contestacion_parcial → **producida** (cierre exitoso). También vencido / valoracion_judicial / **desistida**.
 - **PROHIBIDO** usar estado \`contestado\` o \`cumplido\` en informativa: el cierre exitoso es **producida**.
 - **NO** registrarla como diligencia tipo oficio suelta en Comunicaciones.
 - Los oficios **hijos** de autenticidad documental van aparte (oficiosAutenticidadPendientes / vinculo al documental), no como informativa.

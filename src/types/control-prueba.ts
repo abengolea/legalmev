@@ -53,6 +53,7 @@ export const INFORMATIVA_ESTADOS = [
   'producida',
   'vencido',
   'valoracion_judicial',
+  'desistida',
 ] as const;
 
 /** Medio de la cédula de notificación de audiencia */

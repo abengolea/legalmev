@@ -363,6 +363,9 @@ export function getEstadoConfig(categoria: ItemCategoria, estado: string, item?:
     if (estado === 'valoracion_judicial') {
       return ESTADO_CONFIG.valoracion_judicial;
     }
+    if (estado === 'desistida') {
+      return ESTADO_CONFIG.desistida;
+    }
     if (estado === 'producida' || estado === 'cumplido') {
       return ESTADO_CONFIG.producida;
     }

@@ -230,6 +230,92 @@ export function marcarHijosSinEfectoPorPadreEliminado(
   return eliminarHijosAutoCreados(items, parentId);
 }
 
+/**
+ * Al desistir una prueba madre: elimina todas las diligencias hijas
+ * (directas, bajo eventos de audiencia, por pruebaVinculadaId / oficioOrigenId y sucesoras).
+ */
+export function eliminarDiligenciasHijasDeMadre(
+  items: ControlPruebaItem[],
+  madreId: string,
+): ControlPruebaItem[] {
+  const eventoIds = new Set(
+    items
+      .filter(
+        (i) =>
+          i.vinculo?.parentItemId === madreId &&
+          (i.vinculo?.rol === 'audiencia_prueba' || resolveCategoria(i) === 'audiencia'),
+      )
+      .map((i) => i.id),
+  );
+
+  const toRemove = new Set<string>();
+  for (const i of items) {
+    if (resolveCategoria(i) !== 'diligencia') continue;
+    const parentId = i.vinculo?.parentItemId;
+    if (parentId === madreId || (parentId && eventoIds.has(parentId))) {
+      toRemove.add(i.id);
+      continue;
+    }
+    if (i.diligencia?.pruebaVinculadaId === madreId) {
+      toRemove.add(i.id);
+      continue;
+    }
+    if (i.diligencia?.oficioOrigenId === madreId) {
+      toRemove.add(i.id);
+    }
+  }
+
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const i of items) {
+      if (resolveCategoria(i) !== 'diligencia') continue;
+      if (toRemove.has(i.id)) continue;
+      const origen = i.diligencia?.oficioOrigenId;
+      if (origen && toRemove.has(origen)) {
+        toRemove.add(i.id);
+        changed = true;
+      }
+    }
+  }
+
+  if (toRemove.size === 0) return items;
+  return items.filter((i) => !toRemove.has(i.id));
+}
+
+function evaluarDesistimientoPrueba(ctx: SubprocesoEvalContext): SubprocesoEvalResult {
+  const alertas: string[] = [];
+  let items = [...ctx.items];
+
+  if (ctx.patch.estado === undefined || String(ctx.patch.estado) !== 'desistida') {
+    return { items, creados: [], alertas };
+  }
+  if (String(ctx.itemAnterior.estado) === 'desistida') {
+    return { items, creados: [], alertas };
+  }
+
+  const padre = items.find((i) => i.id === ctx.itemId);
+  if (!padre || padre.vinculo?.parentItemId) {
+    return { items, creados: [], alertas };
+  }
+  const cat = resolveCategoria(padre);
+  if (cat === 'diligencia' || cat === 'tramite' || cat === 'mejor_proveer') {
+    return { items, creados: [], alertas };
+  }
+
+  const before = items.length;
+  items = eliminarDiligenciasHijasDeMadre(items, padre.id);
+  const removed = before - items.length;
+  if (removed > 0) {
+    alertas.push(
+      removed === 1
+        ? 'Se eliminó 1 diligencia vinculada (prueba desistida).'
+        : `Se eliminaron ${removed} diligencias vinculadas (prueba desistida).`,
+    );
+  }
+  return { items, creados: [], alertas };
+}
+
 function actualizarPlazosCedulasActivas(items: ControlPruebaItem[], padre: ControlPruebaItem): ControlPruebaItem[] {
   const fecha = esEventoAudienciaPrueba(padre)
     ? padre.fechaLimite
@@ -967,10 +1053,19 @@ export function evaluarSubProcesosAutomaticos(ctx: SubprocesoEvalContext): Subpr
     ...ctx,
     items: documentalPoder.items,
   });
-  return {
+  const desistimiento = evaluarDesistimientoPrueba({
+    ...ctx,
     items: documentalAuth.items,
+  });
+  return {
+    items: desistimiento.items,
     creados: [...audiencia.creados, ...documentalPoder.creados, ...documentalAuth.creados],
-    alertas: [...audiencia.alertas, ...documentalPoder.alertas, ...documentalAuth.alertas],
+    alertas: [
+      ...audiencia.alertas,
+      ...documentalPoder.alertas,
+      ...documentalAuth.alertas,
+      ...desistimiento.alertas,
+    ],
   };
 }
 
