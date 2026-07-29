@@ -54,7 +54,7 @@ env:
   - variable: NEXT_PUBLIC_FIREBASE_API_KEY
     secret: NEXT_PUBLIC_FIREBASE_API_KEY
   - variable: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
-    value: caseclarity-hij0x.firebaseapp.com
+    value: auth.legalmev.com.ar
   - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID
     value: caseclarity-hij0x
   - variable: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
