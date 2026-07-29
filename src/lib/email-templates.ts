@@ -129,6 +129,40 @@ export function buildInviteEmailHtml(params: {
   return emailWrapper(emailHeader() + emailCard(content) + emailFooter());
 }
 
+/** Invitación general a crear cuenta / conocer LegalMev (no ligada a un colegio). */
+export function buildUserInviteEmailHtml(params: {
+  registerUrl: string;
+  customMessage?: string;
+}): string {
+  const custom = params.customMessage?.trim()
+    ? `<p style="margin:0 0 24px;">${escapeHtml(params.customMessage.trim()).replace(/\n/g, '<br>')}</p>`
+    : '';
+
+  const content = `
+    <p style="margin:0 0 16px;font-size:16px;">Hola,</p>
+    <p style="margin:0 0 24px;">
+      Te invitamos a conocer <strong>LegalMev</strong>: la herramienta para abogados que exporta
+      expedientes completos a PDF desde la MEV de la SCBA (civiles y penales), PJN, Salta, Entre Ríos y Tucumán.
+    </p>
+    ${custom}
+    <div style="margin:0 0 24px;padding:16px 18px;background:#f0f7f8;border-radius:8px;border-left:4px solid #2A6A78;">
+      <p style="margin:0 0 12px;font-weight:600;color:#2A6A78;">¿Qué podés hacer?</p>
+      <ul style="margin:0;padding-left:20px;color:#374151;font-size:15px;line-height:1.7;">
+        <li>Exportar expedientes a PDF con un clic desde la extensión de Chrome (sin límites y totalmente gratis).</li>
+        <li>Usar herramientas como Control de prueba y Copiloto de Audiencias.</li>
+      </ul>
+    </div>
+    ${ctaButton(params.registerUrl, 'Crear mi cuenta gratis')}
+    <p style="margin:0 0 8px;font-size:14px;color:#6b7280;">
+      Si ya tenés cuenta, podés iniciar sesión en
+      <a href="${BASE}/login" style="color:#2A6A78;">legalmev.com.ar</a>.
+    </p>
+    <p style="margin:0;font-size:14px;color:#6b7280;">Si no esperabas este correo, podés ignorarlo.</p>
+    <p style="margin:24px 0 0;font-size:14px;color:#9ca3af;">— El equipo de LegalMev</p>
+  `;
+  return emailWrapper(emailHeader() + emailCard(content) + emailFooter());
+}
+
 export function buildTestEmailHtml(fromAddress: string): string {
   const safeFrom = escapeHtml(fromAddress);
   const content = `

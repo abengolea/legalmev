@@ -1,4 +1,4 @@
-
+﻿
 'use client';
 
 import { useState, useEffect, useRef, useMemo, type ReactNode } from 'react';
@@ -31,6 +31,7 @@ import { Button } from '@/components/ui/button';
 import { Cpu, Database, Users, XCircle, FileText, MessageSquare, Bot, Send, PlusCircle, Zap, CreditCard, BarChart3, Building2, Upload, AlertTriangle, Receipt, Link2, UserPlus, LayoutDashboard, TrendingUp, DollarSign, FileOutput, ArrowRight, Settings, Mail, MoreHorizontal, Ban, Unlock, RefreshCw, History, StickyNote, Gavel, Search, FileSearch } from 'lucide-react';
 import { AudienciaCopilotAdminReport } from '@/components/admin/AudienciaCopilotAdminReport';
 import { CopilotoAnnouncementEmailCard } from '@/components/admin/CopilotoAnnouncementEmailCard';
+import { InviteEmailsCard } from '@/components/admin/InviteEmailsCard';
 import { ControlPruebaAdminReport } from '@/components/admin/ControlPruebaAdminReport';
 import {
   AUDIENCIA_COPILOT_TRIAL_SESSIONS,
@@ -149,20 +150,20 @@ type Colegio = {
 
 const systemStatus = [
     { name: 'Servicio de API', status: 'Operacional', icon: <Cpu className="h-5 w-5 text-green-500" /> },
-    { name: 'Conexión a Base de Datos', status: 'Operacional', icon: <Database className="h-5 w-5 text-green-500" /> },
+    { name: 'Conexi├│n a Base de Datos', status: 'Operacional', icon: <Database className="h-5 w-5 text-green-500" /> },
     { name: 'Servicio de WhatsApp', status: 'Rendimiento Degradado', icon: <MessageSquare className="h-5 w-5 text-yellow-500" /> },
-    { name: 'Servicio de Email', status: 'Interrupción', icon: <XCircle className="h-5 w-5 text-red-500" /> },
+    { name: 'Servicio de Email', status: 'Interrupci├│n', icon: <XCircle className="h-5 w-5 text-red-500" /> },
 ];
 
 const mockLogs = `
-[2023-10-27 10:00:00] INFO: Usuario 'ana.gomez@ejemplo.com' inició sesión correctamente.
-[2023-10-27 10:01:15] INFO: Análisis del caso 'CASO001' completado. Probabilidad de éxito: 75%.
+[2023-10-27 10:00:00] INFO: Usuario 'ana.gomez@ejemplo.com' inici├│ sesi├│n correctamente.
+[2023-10-27 10:01:15] INFO: An├ílisis del caso 'CASO001' completado. Probabilidad de ├®xito: 75%.
 [2023-10-27 10:02:30] WARN: El servicio de WhatsApp responde lentamente. Latencia: 1500ms.
-[2023-10-27 10:05:00] INFO: Usuario 'juan.perez@bufete.com' aceptó el caso 'CASO001'.
-[2023-10-27 10:10:45] ERROR: No se pudo conectar al servicio de email. Conexión SMTP rechazada.
-[2023-10-27 10:11:00] INFO: Cuenta del usuario 'carlos.t@ejemplo.com' bloqueada tras 5 intentos de inicio de sesión fallidos.
+[2023-10-27 10:05:00] INFO: Usuario 'juan.perez@bufete.com' acept├│ el caso 'CASO001'.
+[2023-10-27 10:10:45] ERROR: No se pudo conectar al servicio de email. Conexi├│n SMTP rechazada.
+[2023-10-27 10:11:00] INFO: Cuenta del usuario 'carlos.t@ejemplo.com' bloqueada tras 5 intentos de inicio de sesi├│n fallidos.
 [2023-10-27 10:15:22] INFO: Nuevo caso 'CASO004' recibido de 'diana.p@ejemplo.com'.
-[2023-10-27 10:16:00] INFO: Caso 'CASO004' rechazado automáticamente por bajo valor estimado ($15000).
+[2023-10-27 10:16:00] INFO: Caso 'CASO004' rechazado autom├íticamente por bajo valor estimado ($15000).
 `;
 
 const getStatusBadge = (status: string) => {
@@ -186,7 +187,7 @@ const getSystemStatusColor = (status: string) => {
             return 'text-green-500';
         case 'Rendimiento Degradado':
             return 'text-yellow-500';
-        case 'Interrupción':
+        case 'Interrupci├│n':
             return 'text-red-500';
         default:
             return 'text-muted-foreground';
@@ -229,7 +230,7 @@ function AITestChat() {
             setMessages(prev => [...prev, aiMessage]);
         } catch (error) {
             console.error("Error calling AI:", error);
-            const errorMessage: Message = { role: 'model', content: "Lo siento, ha ocurrido un error. Por favor, inténtalo de nuevo." };
+            const errorMessage: Message = { role: 'model', content: "Lo siento, ha ocurrido un error. Por favor, int├®ntalo de nuevo." };
             setMessages(prev => [...prev, errorMessage]);
         } finally {
             setIsLoading(false);
@@ -240,7 +241,7 @@ function AITestChat() {
         <Card>
             <CardHeader>
                 <CardTitle>Test de IA Conversacional</CardTitle>
-                <CardDescription>Simula una conversación con el asistente legal de IA.</CardDescription>
+                <CardDescription>Simula una conversaci├│n con el asistente legal de IA.</CardDescription>
             </CardHeader>
             <CardContent>
                 <div className="mb-4 space-y-2">
@@ -249,7 +250,7 @@ function AITestChat() {
                         id="lawyer-name"
                         value={lawyerName} 
                         onChange={(e) => setLawyerName(e.target.value)}
-                        placeholder="ej. Juan Pérez"
+                        placeholder="ej. Juan P├®rez"
                     />
                 </div>
                 <div className="border rounded-lg h-[60vh] flex flex-col">
@@ -302,7 +303,7 @@ function AITestChat() {
                             <Input
                                 value={input}
                                 onChange={(e) => setInput(e.target.value)}
-                                placeholder="Escribe tu mensaje aquí..."
+                                placeholder="Escribe tu mensaje aqu├¡..."
                                 disabled={isLoading}
                                 autoComplete="off"
                             />
@@ -398,7 +399,7 @@ function UserManagement() {
       if (json.ok) {
         toast({
           title: json.message ?? 'Premium asignado',
-          description: type === 'monthly' ? '30 días con cuota mensual estándar' : 'Sin límite de descargas',
+          description: type === 'monthly' ? '30 d├¡as con cuota mensual est├índar' : 'Sin l├¡mite de descargas',
         });
       } else {
         toast({ variant: 'destructive', title: 'Error', description: json.error ?? 'No se pudo actualizar.' });
@@ -412,7 +413,7 @@ function UserManagement() {
   };
 
   const handleRevokePremium = async (userId: string) => {
-    if (!confirm('¿Quitar el acceso premium a este usuario?')) return;
+    if (!confirm('┬┐Quitar el acceso premium a este usuario?')) return;
     setUpdatingId(userId);
     try {
       const { auth } = await import('@/lib/firebase');
@@ -425,7 +426,7 @@ function UserManagement() {
       });
       const json = await safeResJson<{ ok?: boolean; message?: string; error?: string }>(res);
       if (json.ok) {
-        toast({ title: 'Premium revocado', description: 'El usuario volvió a plan gratuito.' });
+        toast({ title: 'Premium revocado', description: 'El usuario volvi├│ a plan gratuito.' });
       } else {
         toast({ variant: 'destructive', title: 'Error', description: json.error ?? 'No se pudo revocar.' });
       }
@@ -453,7 +454,7 @@ function UserManagement() {
 
   const handleChangeRole = async (userId: string, newRole: string) => {
     if (userId === currentUserId) {
-      toast({ variant: 'destructive', title: 'Error', description: 'No podés cambiar tu propio rol.' });
+      toast({ variant: 'destructive', title: 'Error', description: 'No pod├®s cambiar tu propio rol.' });
       return;
     }
     setUpdatingId(userId);
@@ -490,7 +491,7 @@ function UserManagement() {
         headers: { Authorization: `Bearer ${token}` },
       });
       const json = await safeResJson<{ ok?: boolean; error?: string }>(res);
-      if (json.ok) toast({ title: 'Email enviado', description: 'Correo de verificación reenviado.' });
+      if (json.ok) toast({ title: 'Email enviado', description: 'Correo de verificaci├│n reenviado.' });
       else toast({ variant: 'destructive', title: 'Error', description: json.error ?? 'No se pudo enviar.' });
     } catch (e) {
       console.error(e);
@@ -503,8 +504,8 @@ function UserManagement() {
   const handleGrantAudienciaCopilotTrial = async (userId: string, renew = false) => {
     const target = users.find((u) => u.id === userId);
     const msg = renew
-      ? `¿Renovar la prueba de copiloto (${AUDIENCIA_COPILOT_TRIAL_SESSIONS} audiencias) para ${target?.email ?? 'este usuario'}?`
-      : `¿Dar prueba gratis del Copiloto de Audiencias (${AUDIENCIA_COPILOT_TRIAL_SESSIONS} audiencias) a ${target?.email ?? 'este usuario'}?`;
+      ? `┬┐Renovar la prueba de copiloto (${AUDIENCIA_COPILOT_TRIAL_SESSIONS} audiencias) para ${target?.email ?? 'este usuario'}?`
+      : `┬┐Dar prueba gratis del Copiloto de Audiencias (${AUDIENCIA_COPILOT_TRIAL_SESSIONS} audiencias) a ${target?.email ?? 'este usuario'}?`;
     if (!confirm(msg)) return;
 
     setUpdatingId(userId);
@@ -535,7 +536,7 @@ function UserManagement() {
   };
 
   const handleRevokeAudienciaCopilotTrial = async (userId: string) => {
-    if (!confirm('¿Quitar la prueba del Copiloto de Audiencias a este usuario?')) return;
+    if (!confirm('┬┐Quitar la prueba del Copiloto de Audiencias a este usuario?')) return;
     setUpdatingId(userId);
     try {
       const { auth } = await import('@/lib/firebase');
@@ -563,8 +564,8 @@ function UserManagement() {
   const handleGrantControlPruebaTrial = async (userId: string, renew = false) => {
     const target = users.find((u) => u.id === userId);
     const msg = renew
-      ? `¿Renovar Control de prueba (${CONTROL_PRUEBA_TRIAL_MONTHLY_LIMIT}/mes) para ${target?.email ?? 'este usuario'}?`
-      : `¿Habilitar Control de prueba (${CONTROL_PRUEBA_TRIAL_MONTHLY_LIMIT} controles/mes) para ${target?.email ?? 'este usuario'}?`;
+      ? `┬┐Renovar Control de prueba (${CONTROL_PRUEBA_TRIAL_MONTHLY_LIMIT}/mes) para ${target?.email ?? 'este usuario'}?`
+      : `┬┐Habilitar Control de prueba (${CONTROL_PRUEBA_TRIAL_MONTHLY_LIMIT} controles/mes) para ${target?.email ?? 'este usuario'}?`;
     if (!confirm(msg)) return;
 
     setUpdatingId(userId);
@@ -595,7 +596,7 @@ function UserManagement() {
   };
 
   const handleRevokeControlPruebaTrial = async (userId: string) => {
-    if (!confirm('¿Quitar el acceso de Control de prueba a este usuario?')) return;
+    if (!confirm('┬┐Quitar el acceso de Control de prueba a este usuario?')) return;
     setUpdatingId(userId);
     try {
       const { auth } = await import('@/lib/firebase');
@@ -645,10 +646,10 @@ function UserManagement() {
 
   const handleBlock = async (userId: string, disabled: boolean) => {
     if (userId === currentUserId) {
-      toast({ variant: 'destructive', title: 'No podés bloquear tu propia cuenta.' });
+      toast({ variant: 'destructive', title: 'No pod├®s bloquear tu propia cuenta.' });
       return;
     }
-    if (!confirm(disabled ? '¿Bloquear esta cuenta? El usuario no podrá iniciar sesión.' : '¿Desbloquear esta cuenta?')) return;
+    if (!confirm(disabled ? '┬┐Bloquear esta cuenta? El usuario no podr├í iniciar sesi├│n.' : '┬┐Desbloquear esta cuenta?')) return;
     setUpdatingId(userId);
     try {
       const { auth } = await import('@/lib/firebase');
@@ -742,8 +743,8 @@ function UserManagement() {
     <Card>
       <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <CardTitle>Gestión de Usuarios</CardTitle>
-          <CardDescription>Asigná tier y gestioná descargas. La cuota premium (expedientes/mes) se configura en la pestaña Configuración.</CardDescription>
+          <CardTitle>Gesti├│n de Usuarios</CardTitle>
+          <CardDescription>Asign├í tier y gestion├í descargas. La cuota premium (expedientes/mes) se configura en la pesta├▒a Configuraci├│n.</CardDescription>
         </div>
         <Button asChild>
           <Link href="/admin/users/new">
@@ -760,7 +761,7 @@ function UserManagement() {
               <Input
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Buscar por nombre, email, teléfono o colegio..."
+                placeholder="Buscar por nombre, email, tel├®fono o colegio..."
                 className="h-9 pl-8"
               />
             </div>
@@ -815,7 +816,7 @@ function UserManagement() {
               <TableRow>
                 <TableHead>Nombre</TableHead>
                 <TableHead>Email</TableHead>
-                <TableHead>Teléfono</TableHead>
+                <TableHead>Tel├®fono</TableHead>
                 <TableHead>Rol</TableHead>
                 <TableHead>Estado</TableHead>
                 <TableHead>Plan</TableHead>
@@ -913,7 +914,7 @@ function UserManagement() {
                             variant="outline"
                             onClick={() => handleSetPremium(user.id, 'monthly')}
                             disabled={updatingId === user.id}
-                            title="Premium por 30 días"
+                            title="Premium por 30 d├¡as"
                           >
                             <Zap className="h-4 w-4 mr-1" /> 1 mes
                           </Button>
@@ -922,7 +923,7 @@ function UserManagement() {
                             variant="outline"
                             onClick={() => handleSetPremium(user.id, 'forever')}
                             disabled={updatingId === user.id}
-                            title="Premium permanente sin límite"
+                            title="Premium permanente sin l├¡mite"
                           >
                             <Zap className="h-4 w-4 mr-1" /> Siempre
                           </Button>
@@ -975,7 +976,7 @@ function UserManagement() {
                             <History className="h-4 w-4 mr-2" /> Ver exportaciones
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => handleResendVerification(user.id)}>
-                            <Mail className="h-4 w-4 mr-2" /> Reenviar verificación
+                            <Mail className="h-4 w-4 mr-2" /> Reenviar verificaci├│n
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => handleResetDownloads(user.id)}>
                             <RefreshCw className="h-4 w-4 mr-2" /> Resetear descargas
@@ -1038,7 +1039,7 @@ function UserManagement() {
                 Historial de exportaciones
                 {exportacionesUserId && (() => {
                   const u = users.find((x) => x.id === exportacionesUserId);
-                  return u ? ` — ${u.name}` : '';
+                  return u ? ` ÔÇö ${u.name}` : '';
                 })()}
               </DialogTitle>
             </DialogHeader>
@@ -1054,7 +1055,7 @@ function UserManagement() {
                       <TableHead>Fecha</TableHead>
                       <TableHead>Expediente</TableHead>
                       <TableHead>Actuaciones</TableHead>
-                      <TableHead>Carátula</TableHead>
+                      <TableHead>Car├ítula</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -1128,7 +1129,7 @@ function ResponsablesFicha() {
     e.preventDefault();
     const parsed = emails.split(/[,;\s]+/).map((e) => e.trim().toLowerCase()).filter(Boolean);
     if (!selectedColegioId || parsed.length === 0) {
-      toast({ variant: 'destructive', title: 'Completá colegio y al menos un email' });
+      toast({ variant: 'destructive', title: 'Complet├í colegio y al menos un email' });
       return;
     }
     setSubmitting(true);
@@ -1145,7 +1146,7 @@ function ResponsablesFicha() {
       const json = await safeResJson<{ ok?: boolean; added?: number; emailsSent?: number; emailsFailed?: string[]; message?: string }>(res);
       if (json.ok) {
         const desc = json.emailsSent
-          ? `Agregados. ${json.emailsSent} correo(s) de invitación enviado(s) para crear/configurar contraseña.`
+          ? `Agregados. ${json.emailsSent} correo(s) de invitaci├│n enviado(s) para crear/configurar contrase├▒a.`
           : json.message || 'Responsables dados de alta.';
         if (json.emailsFailed?.length) {
           toast({
@@ -1178,7 +1179,7 @@ function ResponsablesFicha() {
           Dar de alta responsables de colegio
         </CardTitle>
         <CardDescription>
-          Agregá emails de personas que administrarán la lista de colegiados autorizados. Recibirán un correo para crear o configurar su contraseña. Luego podrán subir Excel/CSV y verán &quot;Mi colegio&quot; en el menú.
+          Agreg├í emails de personas que administrar├ín la lista de colegiados autorizados. Recibir├ín un correo para crear o configurar su contrase├▒a. Luego podr├ín subir Excel/CSV y ver├ín &quot;Mi colegio&quot; en el men├║.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -1187,7 +1188,7 @@ function ResponsablesFicha() {
             <Label htmlFor="colegio-select">Colegio</Label>
             <Select value={selectedColegioId} onValueChange={setSelectedColegioId}>
               <SelectTrigger id="colegio-select" className="mt-1">
-                <SelectValue placeholder="Seleccioná un colegio" />
+                <SelectValue placeholder="Seleccion├í un colegio" />
               </SelectTrigger>
               <SelectContent>
                 {colegios.map((c) => (
@@ -1366,14 +1367,14 @@ function ColegiosManagement() {
         body: JSON.stringify(body),
       });
       const json = await safeResJson(res);
-      if (json.ok) { toast({ title: 'Configuración guardada' }); void fetchColegios(); setEditValues((s) => { const n = { ...s }; delete n[colegioId]; return n; }); }
+      if (json.ok) { toast({ title: 'Configuraci├│n guardada' }); void fetchColegios(); setEditValues((s) => { const n = { ...s }; delete n[colegioId]; return n; }); }
       else toast({ variant: 'destructive', title: 'Error', description: (json as { error?: string }).error ?? 'No se pudo actualizar.' });
     } catch { toast({ variant: 'destructive', title: 'Error', description: 'No se pudo actualizar.' }); }
     finally { setUpdatingId(null); }
   };
 
   const handleSuspender = async (colegioId: string) => {
-    if (!confirm('¿Suspender el convenio? Todos los miembros perderán el acceso premium de inmediato.')) return;
+    if (!confirm('┬┐Suspender el convenio? Todos los miembros perder├ín el acceso premium de inmediato.')) return;
     setSuspendingId(colegioId);
     try {
       const { auth } = await import('@/lib/firebase');
@@ -1394,7 +1395,7 @@ function ColegiosManagement() {
     <Card>
       <CardHeader>
         <CardTitle>Convenios con Colegios</CardTitle>
-        <CardDescription>Creá colegios, asigná admins (emails) para que auto-administren la lista. Subí Excel/CSV (emails + nombres) para dar premium automático. Si se corta el convenio, podés suspender a todos de una vez.</CardDescription>
+        <CardDescription>Cre├í colegios, asign├í admins (emails) para que auto-administren la lista. Sub├¡ Excel/CSV (emails + nombres) para dar premium autom├ítico. Si se corta el convenio, pod├®s suspender a todos de una vez.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         <form onSubmit={handleCreate} className="space-y-2">
@@ -1405,7 +1406,7 @@ function ColegiosManagement() {
           <div>
             <Label className="text-xs font-medium text-muted-foreground">Emails de administradores del colegio (opcional)</Label>
             <Input
-              placeholder="admin@colegio.com, otro@colegio.com — podrán subir la lista de autorizados"
+              placeholder="admin@colegio.com, otro@colegio.com ÔÇö podr├ín subir la lista de autorizados"
               value={newAdminEmails}
               onChange={(e) => setNewAdminEmails(e.target.value)}
               className="mt-1"
@@ -1413,7 +1414,7 @@ function ColegiosManagement() {
           </div>
         </form>
         <div className="space-y-6">
-          {colegios.length === 0 ? <p className="text-muted-foreground">No hay colegios. Creá uno y subí el Excel.</p> : colegios.map((c) => {
+          {colegios.length === 0 ? <p className="text-muted-foreground">No hay colegios. Cre├í uno y sub├¡ el Excel.</p> : colegios.map((c) => {
             const ev = getEditValues(c);
             return (
             <div key={c.id} className="border rounded-lg p-5 space-y-4">
@@ -1424,7 +1425,7 @@ function ColegiosManagement() {
                     <Badge variant={c.convenioActivo ? 'default' : 'secondary'}>{c.convenioActivo ? 'Activo' : 'Suspendido'}</Badge>
                   </div>
                   <p className="text-sm text-muted-foreground mt-1">
-                    {c.members?.length ?? 0} miembros en lista · Si se registran obtienen premium automático
+                    {c.members?.length ?? 0} miembros en lista ┬À Si se registran obtienen premium autom├ítico
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -1478,7 +1479,7 @@ function ColegiosManagement() {
                   </Select>
                 </div>
                 <div>
-                  <Label className="text-xs font-medium">Período facturación</Label>
+                  <Label className="text-xs font-medium">Per├¡odo facturaci├│n</Label>
                   <Select value={ev.periodoFacturacion} onValueChange={(v) => setEditValues((s) => ({ ...s, [c.id]: { ...getDefaults(c), ...(s[c.id] ?? {}), periodoFacturacion: v } }))}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -1496,22 +1497,22 @@ function ColegiosManagement() {
                     value={ev.cuotaMensual}
                     onChange={(e) => setEditValues((s) => ({ ...s, [c.id]: { ...getDefaults(c), ...(s[c.id] ?? {}), cuotaMensual: e.target.value } }))}
                   />
-                  <p className="text-xs text-muted-foreground mt-0.5">Vacío = usa cuota global</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Vac├¡o = usa cuota global</p>
                 </div>
               </div>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 <div>
-                  <Label className="text-xs font-medium">CUIT (para facturación)</Label>
+                  <Label className="text-xs font-medium">CUIT (para facturaci├│n)</Label>
                   <Input
-                    placeholder="20-12345678-9 o 11 dígitos"
+                    placeholder="20-12345678-9 o 11 d├¡gitos"
                     value={ev.cuit}
                     onChange={(e) => setEditValues((s) => ({ ...s, [c.id]: { ...getDefaults(c), ...(s[c.id] ?? {}), cuit: e.target.value } }))}
                   />
                 </div>
                 <div>
-                  <Label className="text-xs font-medium">Contacto facturación</Label>
+                  <Label className="text-xs font-medium">Contacto facturaci├│n</Label>
                   <Input
-                    placeholder="Email o teléfono"
+                    placeholder="Email o tel├®fono"
                     value={ev.contactoFacturacion}
                     onChange={(e) => setEditValues((s) => ({ ...s, [c.id]: { ...getDefaults(c), ...(s[c.id] ?? {}), contactoFacturacion: e.target.value } }))}
                   />
@@ -1528,7 +1529,7 @@ function ColegiosManagement() {
               <div>
                 <Label className="text-xs font-medium">Admins del colegio (emails)</Label>
                 <Input
-                  placeholder="admin@colegio.com, otro@colegio.com — pueden subir lista de autorizados"
+                  placeholder="admin@colegio.com, otro@colegio.com ÔÇö pueden subir lista de autorizados"
                   value={ev.adminEmails}
                   onChange={(e) => setEditValues((s) => ({ ...s, [c.id]: { ...getDefaults(c), ...(s[c.id] ?? {}), adminEmails: e.target.value } }))}
                 />
@@ -1538,7 +1539,7 @@ function ColegiosManagement() {
                   </p>
                 )}
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Los admins verán &quot;Mi colegio&quot; en el menú y podrán subir Excel/CSV. Si el email aún no tiene cuenta en LegalMev, guardá acá y luego enviá la invitación desde la pestaña <strong>Responsables</strong> (creación de contraseña).
+                  Los admins ver├ín &quot;Mi colegio&quot; en el men├║ y podr├ín subir Excel/CSV. Si el email a├║n no tiene cuenta en LegalMev, guard├í ac├í y luego envi├í la invitaci├│n desde la pesta├▒a <strong>Responsables</strong> (creaci├│n de contrase├▒a).
                 </p>
               </div>
               <Button
@@ -1558,7 +1559,7 @@ function ColegiosManagement() {
                   });
                 }}
               >
-                {updatingId === c.id ? 'Guardando...' : 'Guardar configuración'}
+                {updatingId === c.id ? 'Guardando...' : 'Guardar configuraci├│n'}
               </Button>
             </div>
           );})}
@@ -1655,7 +1656,7 @@ function ResendTestCard() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2"><Mail className="h-5 w-5" /> Prueba de Resend</CardTitle>
-          <CardDescription>Enviá un correo de prueba para verificar que Resend (emails de verificación, invitaciones) está funcionando. Variables: RESEND_API_KEY y RESEND_FROM en .env.local</CardDescription>
+          <CardDescription>Envi├í un correo de prueba para verificar que Resend (emails de verificaci├│n, invitaciones) est├í funcionando. Variables: RESEND_API_KEY y RESEND_FROM en .env.local</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {status !== null && (
@@ -1668,10 +1669,10 @@ function ResendTestCard() {
               {status.configured ? (
                 <>
                   <p className="font-medium">Resend configurado correctamente</p>
-                  <p className="text-muted-foreground mt-1">Remitente: <code className="text-primary">{status.from ?? '—'}</code></p>
+                  <p className="text-muted-foreground mt-1">Remitente: <code className="text-primary">{status.from ?? 'ÔÇö'}</code></p>
                 </>
               ) : (
-                <p>Resend no está configurado. Agregá RESEND_API_KEY y RESEND_FROM a .env.local</p>
+                <p>Resend no est├í configurado. Agreg├í RESEND_API_KEY y RESEND_FROM a .env.local</p>
               )}
             </div>
           )}
@@ -1756,7 +1757,7 @@ function PaymentsConfig() {
         body: JSON.stringify(settings),
       });
       const json = await safeResJson(res);
-      if (json.ok) toast({ title: 'Guardado', description: 'Configuración de pagos actualizada.' });
+      if (json.ok) toast({ title: 'Guardado', description: 'Configuraci├│n de pagos actualizada.' });
       else toast({ variant: 'destructive', title: 'Error', description: json.error ?? 'No se pudo guardar.' });
     } catch (err) {
       toast({ variant: 'destructive', title: 'Error', description: 'No se pudo guardar.' });
@@ -1771,7 +1772,7 @@ function PaymentsConfig() {
     <div className="space-y-6">
     <Card>
       <CardHeader>
-        <CardTitle>Configuración de Pagos</CardTitle>
+        <CardTitle>Configuraci├│n de Pagos</CardTitle>
         <CardDescription>Mercado Pago, Stripe y datos de contacto para el plan premium. El Access Token de Mercado Pago se configura en variables de entorno (MERCADOPAGO_ACCESS_TOKEN).</CardDescription>
       </CardHeader>
       <CardContent>
@@ -1784,7 +1785,7 @@ function PaymentsConfig() {
               <p className="text-xs text-muted-foreground mt-1">Access Token: configurarlo en .env como MERCADOPAGO_ACCESS_TOKEN (nunca en esta interfaz).</p>
             </div>
           </div>
-          <div className="text-sm text-muted-foreground">Stripe (opcional, si querés mantenerlo)</div>
+          <div className="text-sm text-muted-foreground">Stripe (opcional, si quer├®s mantenerlo)</div>
           <div>
             <Label htmlFor="stripePk">Stripe Publishable Key</Label>
             <Input id="stripePk" value={settings.stripePublishableKey} onChange={(e) => setSettings((s) => ({ ...s, stripePublishableKey: e.target.value }))} placeholder="pk_live_..." />
@@ -1800,7 +1801,7 @@ function PaymentsConfig() {
           <div>
             <Label htmlFor="premiumQuota">Cuota Premium (expedientes/mes)</Label>
             <Input id="premiumQuota" type="number" min={1} value={settings.premiumQuotaPerMonth ?? 100} onChange={(e) => setSettings((s) => ({ ...s, premiumQuotaPerMonth: Math.max(1, Number(e.target.value) || 100) }))} placeholder="100" />
-            <p className="text-xs text-muted-foreground mt-1">Cantidad máxima de expedientes que puede exportar un usuario premium por mes.</p>
+            <p className="text-xs text-muted-foreground mt-1">Cantidad m├íxima de expedientes que puede exportar un usuario premium por mes.</p>
           </div>
           <div>
             <Label htmlFor="currency">Moneda</Label>
@@ -1880,8 +1881,8 @@ function PagosControl() {
     e.preventDefault();
     if (submitting) return;
     const monto = Number(manualMonto);
-    if (isNaN(monto) || monto <= 0) { toast({ variant: 'destructive', title: 'Monto inválido' }); return; }
-    if (manualTipo === 'colegio' && !manualColegioId && !manualColegioName) { toast({ variant: 'destructive', title: 'Indicá colegio' }); return; }
+    if (isNaN(monto) || monto <= 0) { toast({ variant: 'destructive', title: 'Monto inv├ílido' }); return; }
+    if (manualTipo === 'colegio' && !manualColegioId && !manualColegioName) { toast({ variant: 'destructive', title: 'Indic├í colegio' }); return; }
     setSubmitting(true);
     try {
       const { auth } = await import('@/lib/firebase');
@@ -1912,7 +1913,7 @@ function PagosControl() {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2"><Receipt className="h-5 w-5" /> Control de Pagos</CardTitle>
-        <CardDescription>Pagos de clientes (Mercado Pago) y colegios. Podés registrar pagos manuales (transferencia, convenio).</CardDescription>
+        <CardDescription>Pagos de clientes (Mercado Pago) y colegios. Pod├®s registrar pagos manuales (transferencia, convenio).</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         <div className="flex gap-2 items-center">
@@ -1935,7 +1936,7 @@ function PagosControl() {
                 <TableHead>Fecha</TableHead>
                 <TableHead>Tipo</TableHead>
                 <TableHead>Monto</TableHead>
-                <TableHead>Método</TableHead>
+                <TableHead>M├®todo</TableHead>
                 <TableHead>Usuario</TableHead>
                 <TableHead>Estado</TableHead>
               </TableRow>
@@ -2004,13 +2005,13 @@ function PagosControl() {
                   </Select>
                 </div>
                 <div>
-                  <Label>Período (ej. 2025-03)</Label>
+                  <Label>Per├¡odo (ej. 2025-03)</Label>
                   <Input value={manualPeriodo} onChange={(e) => setManualPeriodo(e.target.value)} placeholder="2025-03" className="w-28" />
                 </div>
               </>
             )}
             <div>
-              <Label>Descripción</Label>
+              <Label>Descripci├│n</Label>
               <Input value={manualDesc} onChange={(e) => setManualDesc(e.target.value)} placeholder="Cuota mensual" className="w-40" />
             </div>
             <Button type="submit" disabled={submitting}>{submitting ? '...' : 'Registrar'}</Button>
@@ -2051,7 +2052,7 @@ function Stats() {
   }, []);
 
   if (loading) return <p className="text-muted-foreground">Cargando...</p>;
-  if (!stats) return <p className="text-muted-foreground">No se pudieron cargar las estadísticas.</p>;
+  if (!stats) return <p className="text-muted-foreground">No se pudieron cargar las estad├¡sticas.</p>;
 
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -2172,7 +2173,7 @@ function AdminDashboard() {
                   </div>
                 </div>
                 <div className="mt-3 flex items-center gap-1 text-xs text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100">
-                  <span>Ver más</span>
+                  <span>Ver m├ís</span>
                   <ArrowRight className="h-3 w-3" />
                 </div>
               </CardContent>
@@ -2186,9 +2187,9 @@ function AdminDashboard() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <TrendingUp className="h-5 w-5 text-primary" />
-              Exportaciones últimos 7 días
+              Exportaciones ├║ltimos 7 d├¡as
             </CardTitle>
-            <CardDescription>Actividad de exportación por día</CardDescription>
+            <CardDescription>Actividad de exportaci├│n por d├¡a</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="h-[220px] w-full">
@@ -2215,7 +2216,7 @@ function AdminDashboard() {
             <div>
               <CardTitle className="flex items-center gap-2">
                 <Receipt className="h-5 w-5 text-primary" />
-                Últimos pagos
+                ├Ültimos pagos
               </CardTitle>
               <CardDescription>Actividad reciente de cobros</CardDescription>
             </div>
@@ -2258,8 +2259,8 @@ function AdminDashboard() {
         <CardContent className="pt-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
-              <h3 className="text-lg font-semibold">Accesos rápidos</h3>
-              <p className="text-sm text-muted-foreground">Gestioná usuarios, colegios y configuración</p>
+              <h3 className="text-lg font-semibold">Accesos r├ípidos</h3>
+              <p className="text-sm text-muted-foreground">Gestion├í usuarios, colegios y configuraci├│n</p>
             </div>
             <div className="flex flex-wrap gap-2">
               <Button variant="outline" asChild>
@@ -2272,7 +2273,7 @@ function AdminDashboard() {
                 <Link href="/admin?tab=payments"><CreditCard className="mr-2 h-4 w-4" /> Pagos</Link>
               </Button>
               <Button variant="outline" asChild>
-                <Link href="/admin?tab=config&configTab=payments"><Settings className="mr-2 h-4 w-4" /> Configuración</Link>
+                <Link href="/admin?tab=config&configTab=payments"><Settings className="mr-2 h-4 w-4" /> Configuraci├│n</Link>
               </Button>
               <Button variant="outline" asChild>
                 <Link href="/admin/users/new"><PlusCircle className="mr-2 h-4 w-4" /> Nuevo usuario</Link>
@@ -2363,14 +2364,17 @@ function ConfigTabs() {
       </TabsContent>
 
       <TabsContent value="email">
-        <ResendTestCard />
+        <div className="space-y-6">
+          <InviteEmailsCard />
+          <ResendTestCard />
+        </div>
       </TabsContent>
 
       <TabsContent value="system">
         <Card>
           <CardHeader>
             <CardTitle>Estado del Sistema</CardTitle>
-            <CardDescription>Un resumen de la salud de los componentes críticos del sistema.</CardDescription>
+            <CardDescription>Un resumen de la salud de los componentes cr├¡ticos del sistema.</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-6 md:grid-cols-2">
             {systemStatus.map(service => (
@@ -2428,7 +2432,7 @@ function AdminTabs() {
           <AdminTabTrigger value="dashboard"><LayoutDashboard className="h-4 w-4 shrink-0"/> Dashboard</AdminTabTrigger>
           <AdminTabTrigger value="users"><Users className="h-4 w-4 shrink-0"/> Usuarios</AdminTabTrigger>
           <AdminTabTrigger value="colegios"><Building2 className="h-4 w-4 shrink-0"/> Colegios</AdminTabTrigger>
-          <AdminTabTrigger value="stats"><BarChart3 className="h-4 w-4 shrink-0"/> Estadísticas</AdminTabTrigger>
+          <AdminTabTrigger value="stats"><BarChart3 className="h-4 w-4 shrink-0"/> Estad├¡sticas</AdminTabTrigger>
           <AdminTabTrigger value="audiencias"><Gavel className="h-4 w-4 shrink-0"/> Uso Audiencias</AdminTabTrigger>
           <AdminTabTrigger value="pruebas"><FileSearch className="h-4 w-4 shrink-0"/> Uso Pruebas</AdminTabTrigger>
           <AdminTabTrigger value="payments"><CreditCard className="h-4 w-4 shrink-0"/> Pagos</AdminTabTrigger>
@@ -2478,7 +2482,7 @@ export default function AdminPage() {
   return (
     <div className="flex min-w-0 max-w-full flex-col gap-6 overflow-x-hidden sm:gap-8">
       <div className="min-w-0">
-        <h1 className="text-2xl font-bold font-headline sm:text-3xl">Panel de Administración</h1>
+        <h1 className="text-2xl font-bold font-headline sm:text-3xl">Panel de Administraci├│n</h1>
         <p className="text-muted-foreground text-sm sm:text-base">Gestiona usuarios, configuraciones y monitorea la salud del sistema.</p>
       </div>
 
