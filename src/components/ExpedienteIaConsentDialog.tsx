@@ -73,8 +73,9 @@ function ExpedienteIaConsentDialogView({
                   modelos de LegalMev);
                 </li>
                 <li>
-                  el sistema procura redactar DNI, CUIT, domicilios, matrículas, teléfonos y
-                  emails, conservando nombres necesarios.
+                  el sistema procura eliminar DNI, CUIT, domicilios, matrículas, teléfonos y
+                  emails antes de guardar o enviar a la IA; conserva nombres necesarios para
+                  la asistencia.
                 </li>
               </ul>
               <p>

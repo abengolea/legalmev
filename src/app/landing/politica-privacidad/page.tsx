@@ -176,8 +176,8 @@ export default function PoliticaPrivacidadPage() {
             vinculadas al proceso, y las instrucciones del usuario responsable.
           </p>
           <p className="text-muted-foreground leading-relaxed mt-4">
-            Antes de almacenar o enviar texto a la IA, el sistema procura{' '}
-            <strong>redactar identificadores sensibles</strong> (DNI, CUIT/CUIL, domicilios,
+            Antes de almacenar o enviar texto a la IA, el sistema procura eliminar{' '}
+            <strong>identificadores sensibles</strong> (DNI, CUIT/CUIL, domicilios,
             matrículas profesionales, teléfonos y correos), conservando nombres necesarios
             para la asistencia. En Control de Pruebas no se solicitan ni guardan domicilios
             de testigos: solo el nombre.
