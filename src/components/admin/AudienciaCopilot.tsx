@@ -41,6 +41,7 @@ import {
   AudienciaCopilotUpgradeDialog,
   type AudienciaCopilotUpgradeReason,
 } from '@/components/AudienciaCopilotUpgradeDialog';
+import { useExpedienteIaConsent } from '@/components/ExpedienteIaConsentDialog';
 import {
   Card,
   CardContent,
@@ -186,6 +187,7 @@ function formatFecha(iso: string) {
 
 export function AudienciaCopilot() {
   const { toast } = useToast();
+  const { ensureConsent, consentDialog } = useExpedienteIaConsent('copiloto');
   const [aiStatus, setAiStatus] = useState<AiStatus | null>(null);
   const [trialLimits, setTrialLimits] = useState<AudienciaCopilotLimits | null>(null);
   const [audienciaPagada, setAudienciaPagada] = useState(false);
@@ -468,9 +470,11 @@ export function AudienciaCopilot() {
   }, []);
 
   const handleNuevaAudiencia = () => {
-    resetParaNuevaAudiencia();
-    setAudienciaPagada(false);
-    fileInputRef.current?.click();
+    ensureConsent(() => {
+      resetParaNuevaAudiencia();
+      setAudienciaPagada(false);
+      fileInputRef.current?.click();
+    });
   };
 
   const applySession = useCallback((session: AudienciaSessionData) => {
@@ -1617,7 +1621,7 @@ export function AudienciaCopilot() {
             type="button"
             variant="default"
             disabled={isLoading}
-            onClick={() => fileInputRef.current?.click()}
+            onClick={() => ensureConsent(() => fileInputRef.current?.click())}
           >
             {isLoading ? (
               <>
@@ -2390,7 +2394,7 @@ export function AudienciaCopilot() {
                         abrirUpsell('documentos');
                         return;
                       }
-                      docAdicionalInputRef.current?.click();
+                      ensureConsent(() => docAdicionalInputRef.current?.click());
                     }}
                   >
                     {subiendoDocumento ? (
@@ -2612,6 +2616,8 @@ export function AudienciaCopilot() {
         reason={upgradeReason}
         limits={trialLimits}
       />
+
+      {consentDialog}
     </div>
   );
 }

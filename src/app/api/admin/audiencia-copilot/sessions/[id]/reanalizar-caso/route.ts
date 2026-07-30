@@ -21,6 +21,7 @@ import {
   formatRepresentacionContexto,
   formatTestimoniosAudienciaContexto,
 } from '@/lib/audiencia-copilot-format';
+import { redactSensitiveIdentifiers } from '@/lib/redact-identifiers';
 
 const COLLECTION = 'audiencia_sessions';
 const MAX_TEXTO_ANALISIS = 120_000;
@@ -30,7 +31,11 @@ export const maxDuration = 300;
 function formatIntercambios(intercambios: AudienciaTestigo['intercambios']): string {
   if (intercambios.length === 0) return '(Aún no hay preguntas registradas.)';
   return intercambios
-    .map((i, n) => `${n + 1}. P: ${i.pregunta}\n   R: ${i.respuesta}`)
+    .map((i, n) => {
+      const p = redactSensitiveIdentifiers(i.pregunta);
+      const r = redactSensitiveIdentifiers(i.respuesta);
+      return `${n + 1}. P: ${p}\n   R: ${r}`;
+    })
     .join('\n\n');
 }
 
@@ -70,12 +75,16 @@ export async function POST(
       );
     }
 
-    const texto = (data.expedienteTexto as string) || '';
+    const texto = redactSensitiveIdentifiers((data.expedienteTexto as string) || '');
     if (!texto.trim()) {
       return NextResponse.json(
         { ok: false, error: 'La sesión no tiene texto del expediente' },
         { status: 400 }
       );
+    }
+
+    if (texto !== (data.expedienteTexto as string)) {
+      await ref.update({ expedienteTexto: texto });
     }
 
     const testigos = (data.testigos as AudienciaTestigo[]) || [];

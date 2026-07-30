@@ -7,6 +7,7 @@ import { cn, safeResJson } from '@/lib/utils';
 import { ControlPruebaItemsTable } from '@/components/admin/ControlPruebaItemsTable';
 import { ControlPruebaImportPreviewDialog } from '@/components/admin/ControlPruebaImportPreviewDialog';
 import { ControlPruebaPartesRepresentadasPicker } from '@/components/admin/ControlPruebaPartesRepresentadasPicker';
+import { useExpedienteIaConsent } from '@/components/ExpedienteIaConsentDialog';
 import { downloadBlob, exportControlPruebaExcel, exportControlPruebaJson, exportControlPruebaPdf, exportControlPruebaRevisionText, exportFilename } from '@/lib/control-prueba-export';
 import { patchItemConHistorial } from '@/lib/control-prueba-item-utils';
 import { progresoExpedienteHeader } from '@/lib/control-prueba-metricas';
@@ -333,6 +334,7 @@ function resetImportWizard() {
 
 export function ControlPruebaPanel() {
   const { toast } = useToast();
+  const { ensureConsent, consentDialog } = useExpedienteIaConsent('control-prueba');
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -2791,7 +2793,7 @@ export function ControlPruebaPanel() {
               Cancelar
             </Button>
             <Button
-              onClick={() => void handleAnalyzeText()}
+              onClick={() => ensureConsent(() => void handleAnalyzeText())}
               disabled={importBusy || !importExtract}
             >
               {analyzing ? (
@@ -2869,6 +2871,8 @@ export function ControlPruebaPanel() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {consentDialog}
     </div>
   );
 }

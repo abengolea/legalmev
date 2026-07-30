@@ -13,6 +13,7 @@ import {
   trialLimitError,
 } from '@/lib/audiencia-copilot-limits';
 import type { DocumentoAdicionalAudiencia } from '@/lib/audiencia-session-types';
+import { redactSensitiveIdentifiers } from '@/lib/redact-identifiers';
 
 const COLLECTION = 'audiencia_sessions';
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
@@ -97,7 +98,7 @@ export async function POST(
       upload.mimeType
     );
 
-    const texto = extracted.texto.slice(0, MAX_TEXTO_POR_DOC);
+    const texto = redactSensitiveIdentifiers(extracted.texto).slice(0, MAX_TEXTO_POR_DOC);
     const now = new Date().toISOString();
     const documento: DocumentoAdicionalAudiencia = {
       id: randomUUID(),

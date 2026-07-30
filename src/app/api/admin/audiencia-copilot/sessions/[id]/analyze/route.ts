@@ -13,6 +13,7 @@ import {
   capTestigosForTrial,
   TRIAL_COPILOT_LIMITS,
 } from '@/lib/audiencia-copilot-limits';
+import { redactSensitiveIdentifiers } from '@/lib/redact-identifiers';
 
 const COLLECTION = 'audiencia_sessions';
 const MAX_TEXTO_ANALISIS = 120_000;
@@ -44,12 +45,17 @@ export async function POST(
       return NextResponse.json({ ok: false, error: 'Sin permiso' }, { status: 403 });
     }
 
-    const texto = (data.expedienteTexto as string) || '';
+    const texto = redactSensitiveIdentifiers((data.expedienteTexto as string) || '');
     if (!texto.trim()) {
       return NextResponse.json(
         { ok: false, error: 'La sesión no tiene texto del expediente' },
         { status: 400 }
       );
+    }
+
+    // Sesiones antiguas pueden tener texto sin redactar: persistimos la versión limpia.
+    if (texto !== (data.expedienteTexto as string)) {
+      await ref.update({ expedienteTexto: texto });
     }
 
     const textoParaAnalisis =

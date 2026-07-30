@@ -14,6 +14,7 @@ import {
 } from '@/ai/flows/audiencia-copilot';
 import { GEMINI_MODEL_ID } from '@/lib/gemini-model';
 import { normalizeTokenUsage, sumTokenUsage } from '@/lib/ai-token-usage';
+import { redactSensitiveIdentifiers } from '@/lib/redact-identifiers';
 
 export async function GET(request: NextRequest) {
   try {
@@ -106,7 +107,14 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const { output: result, usage } = await analyzeAudiencia(parsed.data);
+    const { output: result, usage } = await analyzeAudiencia({
+      ...parsed.data,
+      expedienteContexto: redactSensitiveIdentifiers(parsed.data.expedienteContexto),
+      representacionContexto: redactSensitiveIdentifiers(parsed.data.representacionContexto),
+      contextoDeclarante: redactSensitiveIdentifiers(parsed.data.contextoDeclarante),
+      testimonioPrevio: redactSensitiveIdentifiers(parsed.data.testimonioPrevio),
+      intercambiosTexto: redactSensitiveIdentifiers(parsed.data.intercambiosTexto),
+    });
     const now = new Date().toISOString();
     let tokenUsage = {
       ...usage,

@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminDb } from '@/lib/firebase-admin';
 import { authorizeAudienciaCopilot } from '@/lib/audiencia-copilot-api-auth';
-import type { AudienciaSessionData, AudienciaSessionPatch, RepresentacionCaso } from '@/lib/audiencia-session-types';
+import type {
+  AudienciaSessionData,
+  AudienciaSessionPatch,
+  AudienciaTestigo,
+  RepresentacionCaso,
+} from '@/lib/audiencia-session-types';
 import { EMPTY_REPRESENTACION } from '@/lib/audiencia-session-types';
 import {
   countAudienciaSessionUsage,
@@ -10,8 +15,26 @@ import {
   trialIntercambioLimitForTestigo,
   trialLimitError,
 } from '@/lib/audiencia-copilot-limits';
+import { redactSensitiveIdentifiers } from '@/lib/redact-identifiers';
 
 const COLLECTION = 'audiencia_sessions';
+
+function redactTestigosForStorage(testigos: AudienciaTestigo[]): AudienciaTestigo[] {
+  return testigos.map((t) => ({
+    ...t,
+    contextoDeclarante: t.contextoDeclarante
+      ? redactSensitiveIdentifiers(t.contextoDeclarante)
+      : t.contextoDeclarante,
+    testimonioPrevio: t.testimonioPrevio
+      ? redactSensitiveIdentifiers(t.testimonioPrevio)
+      : t.testimonioPrevio,
+    intercambios: (t.intercambios ?? []).map((i) => ({
+      ...i,
+      pregunta: redactSensitiveIdentifiers(i.pregunta),
+      respuesta: redactSensitiveIdentifiers(i.respuesta),
+    })),
+  }));
+}
 
 async function getOwnedSession(uid: string, sessionId: string) {
   const adminDb = getAdminDb();
@@ -128,12 +151,20 @@ export async function PATCH(
     }
 
     if (body.titulo !== undefined) update.titulo = body.titulo;
-    if (body.testigos !== undefined) update.testigos = body.testigos;
+    if (body.testigos !== undefined) update.testigos = redactTestigosForStorage(body.testigos);
     if (body.testigoActivoId !== undefined) update.testigoActivoId = body.testigoActivoId;
     if (body.analysisByTestigoId !== undefined) update.analysisByTestigoId = body.analysisByTestigoId;
     if (body.preguntasATodos !== undefined) update.preguntasATodos = body.preguntasATodos;
-    if (body.representacion !== undefined) update.representacion = body.representacion;
-    if (body.alegatoGlobal !== undefined) update.alegatoGlobal = body.alegatoGlobal;
+    if (body.representacion !== undefined) {
+      const rep = body.representacion;
+      update.representacion = {
+        ...rep,
+        notas: rep.notas ? redactSensitiveIdentifiers(rep.notas) : rep.notas,
+      };
+    }
+    if (body.alegatoGlobal !== undefined) {
+      update.alegatoGlobal = redactSensitiveIdentifiers(body.alegatoGlobal);
+    }
     if (body.alegatoGlobalMeta !== undefined) update.alegatoGlobalMeta = body.alegatoGlobalMeta;
     if (body.tokenUsage !== undefined) update.tokenUsage = body.tokenUsage;
 

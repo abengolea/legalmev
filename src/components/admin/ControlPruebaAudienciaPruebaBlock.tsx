@@ -55,7 +55,7 @@ export function ControlPruebaAudienciaPruebaBlock({
   };
 
   const addTestigo = () => {
-    onUpdate({ testigos: [...testigos, { id: crypto.randomUUID(), nombre: '', domicilio: null }] });
+    onUpdate({ testigos: [...testigos, { id: crypto.randomUUID(), nombre: '' }] });
   };
 
   const removeTestigo = (id: string) => {
@@ -110,12 +110,6 @@ export function ControlPruebaAudienciaPruebaBlock({
                       value={testigo.nombre}
                       onChange={(e) => updateTestigo(testigo.id, { nombre: e.target.value })}
                       placeholder="Nombre del testigo"
-                      className="h-7 text-xs flex-1 min-w-[140px]"
-                    />
-                    <Input
-                      value={testigo.domicilio ?? ''}
-                      onChange={(e) => updateTestigo(testigo.id, { domicilio: e.target.value || null })}
-                      placeholder="Domicilio (opcional)"
                       className="h-7 text-xs flex-1 min-w-[140px]"
                     />
                     {fijada && testigo.nombre.trim() && cedula && String(cedula.estado) === 'resultado_negativo' && onReintentarCedula && (

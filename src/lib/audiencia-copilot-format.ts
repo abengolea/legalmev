@@ -10,6 +10,7 @@ import type {
   RepresentacionCaso,
   TipoFuero,
 } from '@/lib/audiencia-session-types';
+import { redactSensitiveIdentifiers } from '@/lib/redact-identifiers';
 
 const PARTE_LABEL_CIVIL: Record<string, string> = {
   actor: 'ACTOR (parte demandante)',
@@ -245,7 +246,11 @@ export function mensajeModoRepresentacion(
 function formatIntercambiosLine(intercambios: AudienciaIntercambio[]): string {
   if (intercambios.length === 0) return '(Sin preguntas registradas en audiencia)';
   return intercambios
-    .map((i, n) => `P${n + 1}: ${i.pregunta}\nR: ${i.respuesta}`)
+    .map((i, n) => {
+      const p = redactSensitiveIdentifiers(i.pregunta);
+      const r = redactSensitiveIdentifiers(i.respuesta);
+      return `P${n + 1}: ${p}\nR: ${r}`;
+    })
     .join('\n\n');
 }
 
@@ -267,8 +272,12 @@ export function formatTestimoniosAudienciaContexto(
       const analysis = analysisByTestigoId[t.id];
       const blocks = [
         `=== DECLARANTE ${idx + 1}: ${t.nombre} (${t.rol}) — ${bandejaLabel(t.bandeja)} ===`,
-        t.contextoDeclarante ? `Contexto del abogado: ${t.contextoDeclarante}` : '',
-        t.testimonioPrevio ? `Testimonio previo en expediente: ${t.testimonioPrevio}` : '',
+        t.contextoDeclarante
+          ? `Contexto del abogado: ${redactSensitiveIdentifiers(t.contextoDeclarante)}`
+          : '',
+        t.testimonioPrevio
+          ? `Testimonio previo en expediente: ${redactSensitiveIdentifiers(t.testimonioPrevio)}`
+          : '',
         `PREGUNTAS Y RESPUESTAS EN ESTA AUDIENCIA:\n${formatIntercambiosLine(t.intercambios)}`,
       ];
       if (analysis) {
@@ -302,7 +311,7 @@ export function formatDocumentosAdicionalesContexto(
     const header = doc.descripcion.trim()
       ? `--- ${doc.descripcion.trim()} (${doc.fileName}) ---`
       : `--- ${doc.fileName} ---`;
-    let body = doc.texto.trim();
+    let body = redactSensitiveIdentifiers(doc.texto.trim());
     if (body.length > remaining) {
       body = `${body.slice(0, remaining)}\n[... documento truncado por tamaño ...]`;
       remaining = 0;

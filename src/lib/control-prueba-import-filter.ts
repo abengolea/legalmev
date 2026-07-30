@@ -436,7 +436,6 @@ export function filtrarItemsImportados(
             .map((t) => ({
               id: crypto.randomUUID(),
               nombre: t.nombre.trim(),
-              domicilio: t.domicilio?.trim() || null,
             }))
             .filter((t) => t.nombre.length > 0),
         }),

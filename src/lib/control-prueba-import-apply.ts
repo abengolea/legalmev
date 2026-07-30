@@ -33,6 +33,7 @@ import {
 } from '@/lib/ai-token-usage';
 import { GEMINI_MODEL_ID } from '@/lib/gemini-model';
 import { repairSpanishTextEncoding } from '@/lib/text-encoding-repair';
+import { redactSensitiveIdentifiers } from '@/lib/redact-identifiers';
 
 export type ImportPreviewPayload = {
   caratula: string;
@@ -70,7 +71,7 @@ export type RunImportAnalysisInput = {
 };
 
 export async function runImportAnalysis(input: RunImportAnalysisInput) {
-  const texto = truncateTextoForAnalysis(input.texto.trim());
+  const texto = redactSensitiveIdentifiers(truncateTextoForAnalysis(input.texto.trim()));
   const started = Date.now();
   console.info('[control-prueba/import] Inicio análisis IA', {
     pdfFileName: input.pdfFileName ?? '',

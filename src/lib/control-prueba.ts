@@ -821,7 +821,6 @@ function normalizeTestigos(raw: unknown): ItemTestigo[] | undefined {
     .map((t) => ({
       id: String((t as ItemTestigo).id || crypto.randomUUID()),
       nombre: String((t as ItemTestigo).nombre || '').trim(),
-      domicilio: (t as ItemTestigo).domicilio?.trim() || null,
     }))
     .filter((t) => t.nombre.length > 0);
 }

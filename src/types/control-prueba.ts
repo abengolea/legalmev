@@ -255,7 +255,6 @@ export type ItemSubtarea = {
 export type ItemTestigo = {
   id: string;
   nombre: string;
-  domicilio?: string | null;
 };
 
 export type ItemHistorialEntry = {

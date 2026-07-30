@@ -5,6 +5,7 @@ import {
   extractUsageFromAiResponse,
   type AiFlowResult,
 } from '@/lib/ai-token-usage';
+import { redactSensitiveIdentifiers } from '@/lib/redact-identifiers';
 
 /** Estados que la IA puede sugerir según tipo (unión de los sets del producto). */
 const ESTADOS_SUGERIDOS_IMPORT = [
@@ -133,12 +134,11 @@ const ControlItemSchema = z.object({
     .array(
       z.object({
         nombre: z.string().describe('Nombre completo del testigo tal como figura en el escrito.'),
-        domicilio: z.string().optional().describe('Domicilio del testigo si consta en el escrito.'),
       }),
     )
     .optional()
     .describe(
-      'SOLO si categoria=prueba y tipo=testimonial: testigos ofrecidos en demanda o contestación. No inventar nombres.',
+      'SOLO si categoria=prueba y tipo=testimonial: testigos ofrecidos en demanda o contestación. Solo nombre (sin DNI, domicilio ni matrícula). No inventar nombres.',
     ),
 });
 
@@ -286,7 +286,7 @@ ofrecidaPor: **actor o demandado** (quien ofreció el medio). Excepción: perici
 - **NO** uses categoria=audiencia para la prueba ofrecida.
 - Estados: pendiente_produccion | postpuesta_juez | **audiencia_fijada** | producida | valoracion_judicial | desistida | no_admitida.
 - Si el tribunal **ya fijó fecha** de audiencia → estadoSugerido: **audiencia_fijada**, fechaLimite = fecha. El sistema crea solo el **evento hijo** en Audiencias; vos NO creés ese evento a mano.
-- testimonial → completar \`testigos\` desde demanda/contestación (nombre + domicilio si consta). No inventar.
+- testimonial → completar \`testigos\` desde demanda/contestación (solo nombre; NO domicilio, DNI ni matrícula). No inventar.
 
 ### 2. diligencia (Comunicaciones)
 Tipos: oficio, cedula, mandamiento, exhorto, oficio_electronico, cedula_electronica
@@ -353,6 +353,7 @@ Si el actor ofreció prueba confesional y testimonial, y el juez fijó audiencia
 - Menos ítems pero **correctos** — no listar las 40+ actuaciones procesales del expediente
 - informativa → ofrecidaPor = parte oferente (nunca tribunal)
 - No inventar prueba ni testigos
+- **Minimización:** no extraigas ni copies DNI, CUIT/CUIL, domicilios, matrículas, teléfonos ni emails a ningún campo. Solo nombres cuando sean necesarios (partes, testigos, destinatarios institucionales).
 
 **Texto del expediente:**
 {{{expedienteTexto}}}
@@ -362,13 +363,16 @@ Si el actor ofreció prueba confesional y testimonial, y el juez fijó audiencia
 export async function extractControlPruebaFromText(
   input: ControlPruebaImportInput,
 ): Promise<AiFlowResult<ControlPruebaImportOutput>> {
-  const response = await controlPruebaImportPrompt(input);
+  const safeInput = {
+    expedienteTexto: redactSensitiveIdentifiers(input.expedienteTexto),
+  };
+  const response = await controlPruebaImportPrompt(safeInput);
   const output = response.output!;
   let usage = extractUsageFromAiResponse(response);
   if (usage.totalTokens === 0) {
     // Genkit a veces no reporta usage; estimar para no perder el costo en el admin.
     usage = estimateTokenUsageFromChars(
-      input.expedienteTexto.length,
+      safeInput.expedienteTexto.length,
       JSON.stringify(output).length,
     );
   }

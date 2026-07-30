@@ -15,6 +15,7 @@ import {
   PDF_EXTRACT_CODES,
 } from '@/lib/pdf-text-extract';
 import { EMPTY_REPRESENTACION } from '@/lib/audiencia-session-types';
+import { redactSensitiveIdentifiers } from '@/lib/redact-identifiers';
 
 const COLLECTION = 'audiencia_sessions';
 const MAX_PDF_BYTES = 15 * 1024 * 1024;
@@ -75,7 +76,7 @@ export async function POST(request: NextRequest) {
     const { texto: textoCompleto, numPages, charsPerPage } = await extractTextFromPdfBuffer(
       upload.buffer
     );
-    const texto = textoCompleto.slice(0, MAX_TEXTO_GUARDADO);
+    const texto = redactSensitiveIdentifiers(textoCompleto).slice(0, MAX_TEXTO_GUARDADO);
 
     const now = new Date().toISOString();
     const titulo = upload.name.replace(/\.pdf$/i, '') || 'Audiencia';
