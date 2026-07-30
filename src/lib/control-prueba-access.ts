@@ -51,11 +51,14 @@ export function buildRegistrationControlPruebaTrial(
   };
 }
 
-/** Prueba otorgada por admin: 10 controles por mes. */
-export function buildDefaultControlPruebaTrial(grantedBy = 'admin'): ControlPruebaTrial {
+/** Prueba otorgada por admin: N controles por mes (default 10). */
+export function buildDefaultControlPruebaTrial(
+  grantedBy = 'admin',
+  limit = CONTROL_PRUEBA_TRIAL_ADMIN_LIMIT
+): ControlPruebaTrial {
   const now = new Date();
   return {
-    limit: CONTROL_PRUEBA_TRIAL_ADMIN_LIMIT,
+    limit,
     used: 0,
     grantedAt: now.toISOString(),
     grantedBy,

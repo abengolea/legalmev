@@ -1,4 +1,4 @@
-﻿
+
 'use client';
 
 import { useState, useEffect, useRef, useMemo, type ReactNode } from 'react';
@@ -28,7 +28,7 @@ import {
 } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Cpu, Database, Users, XCircle, FileText, MessageSquare, Bot, Send, PlusCircle, Zap, CreditCard, BarChart3, Building2, Upload, AlertTriangle, Receipt, Link2, UserPlus, LayoutDashboard, TrendingUp, DollarSign, FileOutput, ArrowRight, Settings, Mail, MoreHorizontal, Ban, Unlock, RefreshCw, History, StickyNote, Gavel, Search, FileSearch } from 'lucide-react';
+import { Cpu, Database, Users, XCircle, FileText, MessageSquare, Bot, Send, PlusCircle, Zap, CreditCard, BarChart3, Building2, Upload, AlertTriangle, Receipt, Link2, UserPlus, LayoutDashboard, TrendingUp, DollarSign, FileOutput, ArrowRight, Settings, Mail, MoreHorizontal, Ban, Unlock, RefreshCw, History, StickyNote, Gavel, Search, FileSearch, Minus, Plus } from 'lucide-react';
 import { AudienciaCopilotAdminReport } from '@/components/admin/AudienciaCopilotAdminReport';
 import { CopilotoAnnouncementEmailCard } from '@/components/admin/CopilotoAnnouncementEmailCard';
 import { InviteEmailsCard } from '@/components/admin/InviteEmailsCard';
@@ -41,6 +41,7 @@ import {
   CONTROL_PRUEBA_TRIAL_MONTHLY_LIMIT,
   type ControlPruebaTrial,
 } from '@/lib/control-prueba-access';
+import { PDF_DOWNLOADS_UNLIMITED } from '@/lib/pdf-downloads-policy';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { clientIntakeAutomation } from '@/ai/flows/client-intake-automation';
@@ -66,6 +67,8 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
@@ -335,6 +338,38 @@ function UserManagement() {
   const [notesUserId, setNotesUserId] = useState<string | null>(null);
   const [notesValue, setNotesValue] = useState('');
   const [registrationDates, setRegistrationDates] = useState<Record<string, string>>({});
+  const [trialDialog, setTrialDialog] = useState<{
+    type: 'copilot' | 'control';
+    userId: string;
+    renew: boolean;
+  } | null>(null);
+  const [trialLimit, setTrialLimit] = useState(1);
+
+  const TRIAL_LIMIT_MIN = 1;
+  const TRIAL_LIMIT_MAX = 999;
+
+  const clampTrialLimit = (value: number) =>
+    Math.min(TRIAL_LIMIT_MAX, Math.max(TRIAL_LIMIT_MIN, value));
+
+  const openTrialDialog = (
+    type: 'copilot' | 'control',
+    userId: string,
+    renew = false
+  ) => {
+    const target = users.find((u) => u.id === userId);
+    const current =
+      type === 'copilot'
+        ? target?.audienciaCopilotTrial?.limit
+        : target?.controlPruebaTrial?.limit;
+    const fallback =
+      type === 'copilot'
+        ? AUDIENCIA_COPILOT_TRIAL_SESSIONS
+        : CONTROL_PRUEBA_TRIAL_MONTHLY_LIMIT;
+    setTrialLimit(
+      typeof current === 'number' && current > 0 ? current : fallback
+    );
+    setTrialDialog({ type, userId, renew });
+  };
   const openedHistorialRef = useRef<string | null>(null);
   const { toast } = useToast();
 
@@ -501,13 +536,7 @@ function UserManagement() {
     }
   };
 
-  const handleGrantAudienciaCopilotTrial = async (userId: string, renew = false) => {
-    const target = users.find((u) => u.id === userId);
-    const msg = renew
-      ? `¿Renovar la prueba de copiloto (${AUDIENCIA_COPILOT_TRIAL_SESSIONS} audiencias) para ${target?.email ?? 'este usuario'}?`
-      : `¿Dar prueba gratis del Copiloto de Audiencias (${AUDIENCIA_COPILOT_TRIAL_SESSIONS} audiencias) a ${target?.email ?? 'este usuario'}?`;
-    if (!confirm(msg)) return;
-
+  const handleGrantAudienciaCopilotTrial = async (userId: string, limit: number) => {
     setUpdatingId(userId);
     try {
       const { auth } = await import('@/lib/firebase');
@@ -516,14 +545,19 @@ function UserManagement() {
       const token = await user.getIdToken();
       const res = await fetch(`/api/admin/users/${userId}/audiencia-copilot-trial`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ limit }),
       });
       const json = await safeResJson<{ ok?: boolean; message?: string; error?: string }>(res);
       if (json.ok) {
         toast({
           title: 'Prueba otorgada',
-          description: json.message ?? `${AUDIENCIA_COPILOT_TRIAL_SESSIONS} audiencias disponibles.`,
+          description: json.message ?? `${limit} audiencias disponibles.`,
         });
+        setTrialDialog(null);
       } else {
         toast({ variant: 'destructive', title: 'Error', description: json.error ?? 'No se pudo otorgar.' });
       }
@@ -561,13 +595,7 @@ function UserManagement() {
     }
   };
 
-  const handleGrantControlPruebaTrial = async (userId: string, renew = false) => {
-    const target = users.find((u) => u.id === userId);
-    const msg = renew
-      ? `¿Renovar Control de prueba (${CONTROL_PRUEBA_TRIAL_MONTHLY_LIMIT}/mes) para ${target?.email ?? 'este usuario'}?`
-      : `¿Habilitar Control de prueba (${CONTROL_PRUEBA_TRIAL_MONTHLY_LIMIT} controles/mes) para ${target?.email ?? 'este usuario'}?`;
-    if (!confirm(msg)) return;
-
+  const handleGrantControlPruebaTrial = async (userId: string, limit: number) => {
     setUpdatingId(userId);
     try {
       const { auth } = await import('@/lib/firebase');
@@ -576,14 +604,19 @@ function UserManagement() {
       const token = await user.getIdToken();
       const res = await fetch(`/api/admin/users/${userId}/control-prueba-trial`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ limit }),
       });
       const json = await safeResJson<{ ok?: boolean; message?: string; error?: string }>(res);
       if (json.ok) {
         toast({
           title: 'Control de prueba habilitado',
-          description: json.message ?? `${CONTROL_PRUEBA_TRIAL_MONTHLY_LIMIT} controles por mes.`,
+          description: json.message ?? `${limit} controles por mes.`,
         });
+        setTrialDialog(null);
       } else {
         toast({ variant: 'destructive', title: 'Error', description: json.error ?? 'No se pudo habilitar.' });
       }
@@ -592,6 +625,16 @@ function UserManagement() {
       toast({ variant: 'destructive', title: 'Error', description: 'No se pudo habilitar Control de prueba.' });
     } finally {
       setUpdatingId(null);
+    }
+  };
+
+  const handleConfirmTrialDialog = () => {
+    if (!trialDialog) return;
+    const limit = clampTrialLimit(trialLimit);
+    if (trialDialog.type === 'copilot') {
+      void handleGrantAudienciaCopilotTrial(trialDialog.userId, limit);
+    } else {
+      void handleGrantControlPruebaTrial(trialDialog.userId, limit);
     }
   };
 
@@ -744,7 +787,11 @@ function UserManagement() {
       <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <CardTitle>Gestión de Usuarios</CardTitle>
-          <CardDescription>Asigná tier y gestioná descargas. La cuota premium (expedientes/mes) se configura en la pestaña Configuración.</CardDescription>
+          <CardDescription>
+            {PDF_DOWNLOADS_UNLIMITED
+              ? 'Todos tienen PDFs ilimitados. Los badges Copiloto y Prueba son trials de esos productos, no de descargas.'
+              : 'Asigná tier y gestioná descargas. La cuota premium (expedientes/mes) se configura en la pestaña Configuración.'}
+          </CardDescription>
         </div>
         <Button asChild>
           <Link href="/admin/users/new">
@@ -880,18 +927,27 @@ function UserManagement() {
                     </Select>
                   </TableCell>
                   <TableCell>
-                    <Badge variant={user.tier === 'premium' ? 'default' : 'secondary'}>
-                      {user.tier === 'premium' ? 'Premium' : 'Gratis'}
-                    </Badge>
-                    {user.tier === 'premium' && (
-                      <span className="ml-1 text-xs text-muted-foreground">
-                        {user.premiumSource === 'colegio' ? '(colegio)' : user.premiumSource === 'admin' ? (user.premiumForever ? '(admin, siempre)' : '(admin, 1 mes)') : '(pago)'}
-                      </span>
-                    )}
-                    {user.tier === 'free' && user.status === 'activo' && (
-                      <span className="ml-1 text-xs text-muted-foreground">
-                        ({user.freeDownloadsUsed ?? 0}/5)
-                      </span>
+                    {PDF_DOWNLOADS_UNLIMITED ? (
+                      <>
+                        <Badge variant="default">Premium</Badge>
+                        <span className="ml-1 text-xs text-muted-foreground">· PDFs ilimitados</span>
+                      </>
+                    ) : (
+                      <>
+                        <Badge variant={user.tier === 'premium' ? 'default' : 'secondary'}>
+                          {user.tier === 'premium' ? 'Premium' : 'Gratis'}
+                        </Badge>
+                        {user.tier === 'premium' && (
+                          <span className="ml-1 text-xs text-muted-foreground">
+                            {user.premiumSource === 'colegio' ? '(colegio)' : user.premiumSource === 'admin' ? (user.premiumForever ? '(admin, siempre)' : '(admin, 1 mes)') : '(pago)'}
+                          </span>
+                        )}
+                        {user.tier === 'free' && user.status === 'activo' && (
+                          <span className="ml-1 text-xs text-muted-foreground">
+                            ({user.freeDownloadsUsed ?? 0}/5)
+                          </span>
+                        )}
+                      </>
                     )}
                     {user.audienciaCopilotTrial && user.audienciaCopilotTrial.limit > 0 && (
                       <Badge variant="outline" className="ml-1 text-xs">
@@ -983,8 +1039,8 @@ function UserManagement() {
                           </DropdownMenuItem>
                           {user.audienciaCopilotTrial?.limit ? (
                             <>
-                              <DropdownMenuItem onClick={() => handleGrantAudienciaCopilotTrial(user.id, true)}>
-                                <Gavel className="h-4 w-4 mr-2" /> Renovar prueba Copiloto ({AUDIENCIA_COPILOT_TRIAL_SESSIONS} audiencias)
+                              <DropdownMenuItem onClick={() => openTrialDialog('copilot', user.id, true)}>
+                                <Gavel className="h-4 w-4 mr-2" /> Renovar prueba Copiloto…
                               </DropdownMenuItem>
                               <DropdownMenuItem
                                 className="text-destructive focus:text-destructive"
@@ -994,14 +1050,14 @@ function UserManagement() {
                               </DropdownMenuItem>
                             </>
                           ) : (
-                            <DropdownMenuItem onClick={() => handleGrantAudienciaCopilotTrial(user.id)}>
-                              <Gavel className="h-4 w-4 mr-2" /> Prueba Copiloto ({AUDIENCIA_COPILOT_TRIAL_SESSIONS} audiencias)
+                            <DropdownMenuItem onClick={() => openTrialDialog('copilot', user.id)}>
+                              <Gavel className="h-4 w-4 mr-2" /> Prueba Copiloto…
                             </DropdownMenuItem>
                           )}
                           {user.controlPruebaTrial?.limit ? (
                             <>
-                              <DropdownMenuItem onClick={() => handleGrantControlPruebaTrial(user.id, true)}>
-                                <FileSearch className="h-4 w-4 mr-2" /> Renovar Control de prueba ({CONTROL_PRUEBA_TRIAL_MONTHLY_LIMIT}/mes)
+                              <DropdownMenuItem onClick={() => openTrialDialog('control', user.id, true)}>
+                                <FileSearch className="h-4 w-4 mr-2" /> Renovar Control de prueba…
                               </DropdownMenuItem>
                               <DropdownMenuItem
                                 className="text-destructive focus:text-destructive"
@@ -1011,8 +1067,8 @@ function UserManagement() {
                               </DropdownMenuItem>
                             </>
                           ) : (
-                            <DropdownMenuItem onClick={() => handleGrantControlPruebaTrial(user.id)}>
-                              <FileSearch className="h-4 w-4 mr-2" /> Control de prueba ({CONTROL_PRUEBA_TRIAL_MONTHLY_LIMIT}/mes)
+                            <DropdownMenuItem onClick={() => openTrialDialog('control', user.id)}>
+                              <FileSearch className="h-4 w-4 mr-2" /> Control de prueba…
                             </DropdownMenuItem>
                           )}
                         </DropdownMenuContent>
@@ -1093,6 +1149,104 @@ function UserManagement() {
                 {updatingId === notesUserId ? 'Guardando...' : 'Guardar'}
               </Button>
             </div>
+          </DialogContent>
+        </Dialog>
+        <Dialog
+          open={!!trialDialog}
+          onOpenChange={(o) => {
+            if (!o) setTrialDialog(null);
+          }}
+        >
+          <DialogContent className="sm:max-w-md">
+            {trialDialog && (() => {
+              const target = users.find((u) => u.id === trialDialog.userId);
+              const isCopilot = trialDialog.type === 'copilot';
+              const unitLabel = isCopilot ? 'audiencias' : 'controles/mes';
+              const title = isCopilot
+                ? trialDialog.renew
+                  ? 'Renovar prueba Copiloto'
+                  : 'Otorgar prueba Copiloto'
+                : trialDialog.renew
+                  ? 'Renovar Control de prueba'
+                  : 'Habilitar Control de prueba';
+              const busy = updatingId === trialDialog.userId;
+              return (
+                <>
+                  <DialogHeader>
+                    <DialogTitle>{title}</DialogTitle>
+                    <DialogDescription>
+                      {target?.email ?? 'Usuario'} — elegí cuántas {unitLabel} querés asignar.
+                      Se reinicia el contador de uso.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="flex flex-col items-center gap-3 py-2">
+                    <Label htmlFor="trial-limit-input" className="text-sm text-muted-foreground">
+                      Cantidad ({unitLabel})
+                    </Label>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        disabled={busy || trialLimit <= TRIAL_LIMIT_MIN}
+                        onClick={() => setTrialLimit((n) => clampTrialLimit(n - 1))}
+                        aria-label="Restar"
+                      >
+                        <Minus className="h-4 w-4" />
+                      </Button>
+                      <Input
+                        id="trial-limit-input"
+                        type="number"
+                        min={TRIAL_LIMIT_MIN}
+                        max={TRIAL_LIMIT_MAX}
+                        value={trialLimit}
+                        disabled={busy}
+                        onChange={(e) => {
+                          const next = Number(e.target.value);
+                          if (Number.isNaN(next)) {
+                            setTrialLimit(TRIAL_LIMIT_MIN);
+                            return;
+                          }
+                          setTrialLimit(clampTrialLimit(Math.trunc(next)));
+                        }}
+                        className="w-20 text-center text-lg font-semibold [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        disabled={busy || trialLimit >= TRIAL_LIMIT_MAX}
+                        onClick={() => setTrialLimit((n) => clampTrialLimit(n + 1))}
+                        aria-label="Sumar"
+                      >
+                        <Plus className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={busy}
+                      onClick={() => setTrialDialog(null)}
+                    >
+                      Cancelar
+                    </Button>
+                    <Button
+                      type="button"
+                      disabled={busy}
+                      onClick={handleConfirmTrialDialog}
+                    >
+                      {busy
+                        ? 'Guardando…'
+                        : trialDialog.renew
+                          ? `Renovar (${trialLimit})`
+                          : `Asignar (${trialLimit})`}
+                    </Button>
+                  </DialogFooter>
+                </>
+              );
+            })()}
           </DialogContent>
         </Dialog>
       </CardContent>
@@ -1800,8 +1954,20 @@ function PaymentsConfig() {
           </div>
           <div>
             <Label htmlFor="premiumQuota">Cuota Premium (expedientes/mes)</Label>
-            <Input id="premiumQuota" type="number" min={1} value={settings.premiumQuotaPerMonth ?? 100} onChange={(e) => setSettings((s) => ({ ...s, premiumQuotaPerMonth: Math.max(1, Number(e.target.value) || 100) }))} placeholder="100" />
-            <p className="text-xs text-muted-foreground mt-1">Cantidad máxima de expedientes que puede exportar un usuario premium por mes.</p>
+            <Input
+              id="premiumQuota"
+              type="number"
+              min={1}
+              value={settings.premiumQuotaPerMonth ?? 100}
+              onChange={(e) => setSettings((s) => ({ ...s, premiumQuotaPerMonth: Math.max(1, Number(e.target.value) || 100) }))}
+              placeholder="100"
+              disabled={PDF_DOWNLOADS_UNLIMITED}
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              {PDF_DOWNLOADS_UNLIMITED
+                ? 'No aplica: las descargas PDF son ilimitadas para todos (PDF_DOWNLOADS_UNLIMITED). Este valor queda guardado por si se revierte la política.'
+                : 'Cantidad máxima de expedientes que puede exportar un usuario premium por mes.'}
+            </p>
           </div>
           <div>
             <Label htmlFor="currency">Moneda</Label>

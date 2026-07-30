@@ -2,11 +2,45 @@ import { NextRequest, NextResponse } from 'next/server';
 import { FieldValue } from 'firebase-admin/firestore';
 import { getAdminDb } from '@/lib/firebase-admin';
 import { requirePlatformAdmin } from '@/lib/api-auth';
-import { AUDIENCIA_COPILOT_TRIAL_SESSIONS } from '@/lib/audiencia-copilot-access';
+import {
+  AUDIENCIA_COPILOT_TRIAL_SESSIONS,
+  buildDefaultAudienciaCopilotTrial,
+} from '@/lib/audiencia-copilot-access';
+
+const MIN_LIMIT = 1;
+const MAX_LIMIT = 999;
+
+async function parseLimit(request: NextRequest): Promise<number | NextResponse> {
+  let body: unknown = null;
+  try {
+    body = await request.json();
+  } catch {
+    // Sin body → default
+  }
+
+  const raw =
+    body && typeof body === 'object' && 'limit' in body
+      ? (body as { limit: unknown }).limit
+      : undefined;
+
+  if (raw === undefined || raw === null || raw === '') {
+    return AUDIENCIA_COPILOT_TRIAL_SESSIONS;
+  }
+
+  const limit = typeof raw === 'number' ? raw : Number(raw);
+  if (!Number.isInteger(limit) || limit < MIN_LIMIT || limit > MAX_LIMIT) {
+    return NextResponse.json(
+      { ok: false, error: `El límite debe ser un entero entre ${MIN_LIMIT} y ${MAX_LIMIT}` },
+      { status: 400 }
+    );
+  }
+  return limit;
+}
 
 /**
  * POST /api/admin/users/[id]/audiencia-copilot-trial
- * Otorga prueba gratuita del copiloto de audiencias (1 sesión).
+ * Otorga o renueva la prueba del copiloto de audiencias.
+ * Body opcional: { limit: number } (default: 1).
  */
 export async function POST(
   request: NextRequest,
@@ -21,6 +55,10 @@ export async function POST(
       return NextResponse.json({ ok: false, error: 'ID de usuario requerido' }, { status: 400 });
     }
 
+    const limitOrError = await parseLimit(request);
+    if (limitOrError instanceof NextResponse) return limitOrError;
+    const limit = limitOrError;
+
     const adminDb = getAdminDb();
     const userRef = adminDb.collection('users').doc(targetUserId);
     const userSnap = await userRef.get();
@@ -28,19 +66,14 @@ export async function POST(
       return NextResponse.json({ ok: false, error: 'Usuario no encontrado' }, { status: 404 });
     }
 
-    const now = new Date().toISOString();
     await userRef.update({
-      audienciaCopilotTrial: {
-        limit: AUDIENCIA_COPILOT_TRIAL_SESSIONS,
-        used: 0,
-        grantedAt: now,
-        grantedBy: auth.uid,
-      },
+      audienciaCopilotTrial: buildDefaultAudienciaCopilotTrial(auth.uid, limit),
     });
 
     return NextResponse.json({
       ok: true,
-      message: `Prueba de copiloto otorgada (${AUDIENCIA_COPILOT_TRIAL_SESSIONS} audiencias)`,
+      message: `Prueba de copiloto otorgada (${limit} audiencias)`,
+      limit,
     });
   } catch (err) {
     console.error('[admin/users/audiencia-copilot-trial] POST error:', err);

@@ -4,10 +4,11 @@ import { normalizeEmail } from '@/lib/platform-admin';
 export const AUDIENCIA_COPILOT_TRIAL_SESSIONS = 1;
 
 export function buildDefaultAudienciaCopilotTrial(
-  grantedBy = 'registration'
+  grantedBy = 'registration',
+  limit = AUDIENCIA_COPILOT_TRIAL_SESSIONS
 ): AudienciaCopilotTrial {
   return {
-    limit: AUDIENCIA_COPILOT_TRIAL_SESSIONS,
+    limit,
     used: 0,
     grantedAt: new Date().toISOString(),
     grantedBy,
