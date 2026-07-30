@@ -40,6 +40,7 @@ export function DashboardNav() {
     email?: string;
     role?: string;
     isPlatformAdmin?: boolean;
+    hasPagos?: boolean;
     canAccessControlPrueba?: boolean;
     controlPrueba?: { hasAccess?: boolean };
   } | null>(null);
@@ -122,6 +123,9 @@ export function DashboardNav() {
   }, [canUseControlPrueba]);
 
   const isColegioOnly = isColegioAdmin && !userData?.isPlatformAdmin;
+  // Responsables de colegio siempre ven el ítem (historial de cuotas del colegio).
+  // El resto solo si ya tiene al menos un pago personal registrado.
+  const showPagosYFacturas = isColegioOnly || !!userData?.hasPagos;
 
   const isActive = (path: string) => {
     if (path === '/dashboard') {
@@ -158,6 +162,7 @@ export function DashboardNav() {
                   <Link href="/dashboard/colegio">Mi colegio</Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
+              {showPagosYFacturas && (
               <SidebarMenuItem>
                 <SidebarMenuButton
                   asChild
@@ -168,6 +173,7 @@ export function DashboardNav() {
                   <Link href="/dashboard/pagos">Pagos y facturas</Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
+              )}
             </>
           ) : (
             <>
@@ -181,6 +187,7 @@ export function DashboardNav() {
               <Link href="/dashboard">Panel</Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
+          {showPagosYFacturas && (
           <SidebarMenuItem>
             <SidebarMenuButton
               asChild
@@ -191,6 +198,7 @@ export function DashboardNav() {
               <Link href="/dashboard/pagos">Pagos y facturas</Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
+          )}
           <SidebarMenuItem>
             <SidebarMenuButton
               asChild

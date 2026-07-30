@@ -49,6 +49,13 @@ export async function GET(request: NextRequest) {
         | undefined,
     });
 
+    const pagosSnap = await adminDb
+      .collection('pagos')
+      .where('clienteId', '==', uid)
+      .limit(1)
+      .get();
+    const hasPagos = !pagosSnap.empty;
+
     return NextResponse.json({
       ok: true,
       user: {
@@ -61,6 +68,7 @@ export async function GET(request: NextRequest) {
         cuit: data.cuit ?? '',
         isPlatformAdmin,
         isColegioAdmin,
+        hasPagos,
         canAccessControlPrueba: controlPrueba.hasAccess,
         controlPrueba,
         controlPruebaTrial: data.controlPruebaTrial ?? null,
