@@ -16,7 +16,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { PasswordInput } from '@/components/ui/password-input';
-import { Gavel } from 'lucide-react';
+import { FileSearch, Gavel } from 'lucide-react';
 import Image from 'next/image';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useToast } from '@/hooks/use-toast';
@@ -135,23 +135,46 @@ export default function LoginPage() {
             )}
           </div>
 
-          <div className="rounded-xl border border-primary/40 bg-gradient-to-br from-primary/10 to-accent/5 p-4 text-left shadow-sm">
-            <div className="flex items-start gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/15">
-                <Gavel className="h-5 w-5 text-primary" />
+          <div className="grid gap-3">
+            <div className="rounded-xl border border-primary/40 bg-gradient-to-br from-primary/10 to-accent/5 p-4 text-left shadow-sm">
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/15">
+                  <Gavel className="h-5 w-5 text-primary" />
+                </div>
+                <div className="space-y-1.5 min-w-0">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-primary">
+                    Nuevo — fase de prueba
+                  </p>
+                  <p className="font-semibold text-foreground leading-snug">
+                    Probá el Copiloto de Audiencias
+                  </p>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    Asistente con IA para audiencias: sugerencias en vivo, contradicciones y alegatos.
+                    Al entrar, tenés{' '}
+                    <strong className="text-foreground">1 audiencia de prueba incluida</strong>.
+                  </p>
+                </div>
               </div>
-              <div className="space-y-1.5 min-w-0">
-                <p className="text-xs font-semibold uppercase tracking-wide text-primary">
-                  Nuevo — fase de prueba
-                </p>
-                <p className="font-semibold text-foreground leading-snug">
-                  Probá el Copiloto de Audiencias
-                </p>
-                <p className="text-sm text-muted-foreground leading-relaxed">
-                  Asistente con IA para audiencias: sugerencias en vivo, contradicciones y alegatos.
-                  Al entrar, tenés{' '}
-                  <strong className="text-foreground">1 audiencia de prueba incluida</strong>.
-                </p>
+            </div>
+
+            <div className="rounded-xl border border-primary/40 bg-gradient-to-br from-primary/10 to-accent/5 p-4 text-left shadow-sm">
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/15">
+                  <FileSearch className="h-5 w-5 text-primary" />
+                </div>
+                <div className="space-y-1.5 min-w-0">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-primary">
+                    Etapa beta
+                  </p>
+                  <p className="font-semibold text-foreground leading-snug">
+                    Probá el Control de pruebas
+                  </p>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    Armá y seguí el control del expediente con IA: plazos, diligencias y subprocesos.
+                    Tu cuenta incluye{' '}
+                    <strong className="text-foreground">5 controles de prueba gratis</strong>.
+                  </p>
+                </div>
               </div>
             </div>
           </div>
