@@ -27,7 +27,7 @@ export default function PoliticaPrivacidadPage() {
           Política de Privacidad – LegalMev
         </h1>
         <p className="mt-2 text-muted-foreground">
-          <strong>Última actualización:</strong> 30 de julio de 2026
+          <strong>Última actualización:</strong> 31 de julio de 2026
         </p>
       </header>
 
@@ -58,6 +58,11 @@ export default function PoliticaPrivacidadPage() {
               {CONTACT_EMAIL}
             </a>
           </address>
+          <p className="text-muted-foreground leading-relaxed mt-4">
+            La base de datos de LegalMev se encuentra inscripta en el Registro Nacional de
+            Bases de Datos Privadas (AAIP), legajo N.º{' '}
+            <strong>RL-2026-73972672-APN-DNPDP#AAIP</strong>.
+          </p>
         </section>
 
         <section>
