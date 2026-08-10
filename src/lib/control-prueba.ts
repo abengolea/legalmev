@@ -25,6 +25,7 @@ import {
 } from '@/lib/control-prueba-import-meta';
 import { normalizePartesRepresentadas } from '@/lib/control-prueba-partes-representadas';
 import { repairSpanishTextEncoding } from '@/lib/text-encoding-repair';
+import { normalizeSharedWith } from '@/lib/resource-sharing';
 import {
   PRUEBA_ESTADOS,
   DILIGENCIA_ESTADOS,
@@ -1331,6 +1332,10 @@ export function serializeControlPruebaDoc(
     createdAt: data.createdAt?.toDate?.()?.toISOString?.() ?? data.createdAt ?? undefined,
     updatedAt: data.updatedAt?.toDate?.()?.toISOString?.() ?? data.updatedAt ?? undefined,
     createdBy: data.createdBy ?? undefined,
+    sharedWith: normalizeSharedWith(data.sharedWith),
+    sharedWithUids: Array.isArray(data.sharedWithUids)
+      ? (data.sharedWithUids as string[]).filter((u) => typeof u === 'string' && u)
+      : undefined,
     tokenUsage: data.tokenUsage ?? undefined,
   };
 }

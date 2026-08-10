@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminDb } from '@/lib/firebase-admin';
 import { authorizeAudienciaCopilot } from '@/lib/audiencia-copilot-api-auth';
+import { assertAudienciaSessionAccess } from '@/lib/audiencia-session-access';
 import type {
   AudienciaSessionData,
   AudienciaSessionPatch,
@@ -16,6 +17,7 @@ import {
   trialLimitError,
 } from '@/lib/audiencia-copilot-limits';
 import { redactSensitiveIdentifiers } from '@/lib/redact-identifiers';
+import { normalizeSharedWith } from '@/lib/resource-sharing';
 
 const COLLECTION = 'audiencia_sessions';
 
@@ -36,14 +38,35 @@ function redactTestigosForStorage(testigos: AudienciaTestigo[]): AudienciaTestig
   }));
 }
 
-async function getOwnedSession(uid: string, sessionId: string) {
-  const adminDb = getAdminDb();
-  const ref = adminDb.collection(COLLECTION).doc(sessionId);
-  const snap = await ref.get();
-  if (!snap.exists) return { error: 'Sesión no encontrada', status: 404 as const };
-  const data = snap.data();
-  if (data?.userId !== uid) return { error: 'Sin permiso', status: 403 as const };
-  return { ref, data, id: snap.id };
+function toSessionData(
+  id: string,
+  data: FirebaseFirestore.DocumentData,
+): AudienciaSessionData {
+  return {
+    id,
+    userId: data.userId as string,
+    titulo: (data.titulo as string) || 'Audiencia',
+    pdfFileName: data.pdfFileName as string | undefined,
+    analysisStatus: (data.analysisStatus as AudienciaSessionData['analysisStatus']) ?? 'ready',
+    expedienteAnalysis: data.expedienteAnalysis ?? null,
+    expedienteTexto: data.expedienteTexto as string | undefined,
+    testigos: (data.testigos as AudienciaSessionData['testigos']) || [],
+    testigoActivoId: (data.testigoActivoId as string | null) ?? null,
+    analysisByTestigoId:
+      (data.analysisByTestigoId as AudienciaSessionData['analysisByTestigoId']) || {},
+    preguntasATodos: (data.preguntasATodos as AudienciaSessionData['preguntasATodos']) || [],
+    representacion: (data.representacion as RepresentacionCaso) ?? { ...EMPTY_REPRESENTACION },
+    alegatoGlobal: data.alegatoGlobal as string | undefined,
+    alegatoGlobalMeta: data.alegatoGlobalMeta as AudienciaSessionData['alegatoGlobalMeta'],
+    documentosAdicionales:
+      (data.documentosAdicionales as AudienciaSessionData['documentosAdicionales']) || [],
+    tokenUsage: data.tokenUsage as AudienciaSessionData['tokenUsage'],
+    audienciaPagada: data.audienciaPagada === true,
+    audienciaPagoMeta: data.audienciaPagoMeta as AudienciaSessionData['audienciaPagoMeta'],
+    sharedWith: normalizeSharedWith(data.sharedWith),
+    createdAt: (data.createdAt as string) || '',
+    updatedAt: (data.updatedAt as string) || '',
+  };
 }
 
 /** Obtiene una sesión completa. */
@@ -56,39 +79,18 @@ export async function GET(
     if (auth instanceof NextResponse) return auth;
 
     const { id } = await params;
-    const result = await getOwnedSession(auth.uid, id);
-    if ('error' in result) {
+    const adminDb = getAdminDb();
+    const result = await assertAudienciaSessionAccess(adminDb, id, auth.uid, 'view');
+    if (!result.ok) {
       return NextResponse.json({ ok: false, error: result.error }, { status: result.status });
     }
 
-    const session: AudienciaSessionData = {
-      id: result.id,
-      userId: result.data!.userId as string,
-      titulo: (result.data!.titulo as string) || 'Audiencia',
-      pdfFileName: result.data!.pdfFileName as string | undefined,
-      analysisStatus: (result.data!.analysisStatus as AudienciaSessionData['analysisStatus']) ?? 'ready',
-      expedienteAnalysis: result.data!.expedienteAnalysis ?? null,
-      expedienteTexto: result.data!.expedienteTexto as string | undefined,
-      testigos: (result.data!.testigos as AudienciaSessionData['testigos']) || [],
-      testigoActivoId: (result.data!.testigoActivoId as string | null) ?? null,
-      analysisByTestigoId:
-        (result.data!.analysisByTestigoId as AudienciaSessionData['analysisByTestigoId']) || {},
-      preguntasATodos: (result.data!.preguntasATodos as AudienciaSessionData['preguntasATodos']) || [],
-      representacion: (result.data!.representacion as RepresentacionCaso) ?? { ...EMPTY_REPRESENTACION },
-      alegatoGlobal: result.data!.alegatoGlobal as string | undefined,
-      alegatoGlobalMeta: result.data!.alegatoGlobalMeta as AudienciaSessionData['alegatoGlobalMeta'],
-      documentosAdicionales:
-        (result.data!.documentosAdicionales as AudienciaSessionData['documentosAdicionales']) || [],
-      tokenUsage: result.data!.tokenUsage as AudienciaSessionData['tokenUsage'],
-      audienciaPagada: result.data!.audienciaPagada === true,
-      audienciaPagoMeta: result.data!.audienciaPagoMeta as AudienciaSessionData['audienciaPagoMeta'],
-      createdAt: (result.data!.createdAt as string) || '',
-      updatedAt: (result.data!.updatedAt as string) || '',
-    };
+    const session = toSessionData(result.id, result.data);
 
     return NextResponse.json({
       ok: true,
       session,
+      myAccess: result.access,
       audienciaPagada: session.audienciaPagada === true,
     });
   } catch (err) {
@@ -110,25 +112,41 @@ export async function PATCH(
     if (auth instanceof NextResponse) return auth;
 
     const { id } = await params;
-    const result = await getOwnedSession(auth.uid, id);
-    if ('error' in result) {
+    const adminDb = getAdminDb();
+    const result = await assertAudienciaSessionAccess(adminDb, id, auth.uid, 'edit');
+    if (!result.ok) {
       return NextResponse.json({ ok: false, error: result.error }, { status: result.status });
     }
 
     const body = (await request.json()) as AudienciaSessionPatch;
     const update: Record<string, unknown> = { updatedAt: new Date().toISOString() };
 
-    const limits = getCopilotLimitsForContext(
-      auth.unlimited,
+    // Límites según dueño (cuota / ilimitado del owner) y si la sesión está pagada.
+    let ownerUnlimited = result.access === 'owner' ? auth.unlimited : false;
+    if (result.access !== 'owner' && result.ownerUid) {
+      const ownerSnap = await adminDb.collection('users').doc(result.ownerUid).get();
+      const ownerData = ownerSnap.data();
+      if (ownerData) {
+        const { resolveAudienciaCopilotAccess } = await import('@/lib/audiencia-copilot-access');
+        ownerUnlimited = resolveAudienciaCopilotAccess({
+          email: ownerData.email as string | undefined,
+          audienciaCopilotTrial: ownerData.audienciaCopilotTrial,
+        }).unlimited;
+      }
+    }
+
+    const effectiveLimits = getCopilotLimitsForContext(
+      ownerUnlimited,
       isAudienciaSessionPaid(result.data)
     );
-    if (limits && body.testigos !== undefined) {
-      if (body.testigos.length > limits.maxTestigos) {
+
+    if (effectiveLimits && body.testigos !== undefined) {
+      if (body.testigos.length > effectiveLimits.maxTestigos) {
         return NextResponse.json(
           {
             ok: false,
             error: trialLimitError(
-              limits,
+              effectiveLimits,
               { testigos: body.testigos.length, intercambiosTotal: 0, documentosAdicionales: 0 },
               'add_testigo'
             ),
@@ -138,12 +156,12 @@ export async function PATCH(
         );
       }
       const usage = countAudienciaSessionUsage({ testigos: body.testigos });
-      const totalErr = trialLimitError(limits, usage, 'add_intercambio');
+      const totalErr = trialLimitError(effectiveLimits, usage, 'add_intercambio');
       if (totalErr) {
         return NextResponse.json({ ok: false, error: totalErr, code: 'TRIAL_LIMIT' }, { status: 403 });
       }
       for (const testigo of body.testigos) {
-        const perErr = trialIntercambioLimitForTestigo(limits, testigo);
+        const perErr = trialIntercambioLimitForTestigo(effectiveLimits, testigo);
         if (perErr) {
           return NextResponse.json({ ok: false, error: perErr, code: 'TRIAL_LIMIT' }, { status: 403 });
         }
@@ -168,9 +186,9 @@ export async function PATCH(
     if (body.alegatoGlobalMeta !== undefined) update.alegatoGlobalMeta = body.alegatoGlobalMeta;
     if (body.tokenUsage !== undefined) update.tokenUsage = body.tokenUsage;
 
-    await result.ref!.update(update);
+    await result.ref.update(update);
 
-    return NextResponse.json({ ok: true, updatedAt: update.updatedAt });
+    return NextResponse.json({ ok: true, updatedAt: update.updatedAt, myAccess: result.access });
   } catch (err) {
     console.error('[audiencia-copilot/sessions/[id] PATCH]', err);
     return NextResponse.json(
@@ -190,12 +208,13 @@ export async function DELETE(
     if (auth instanceof NextResponse) return auth;
 
     const { id } = await params;
-    const result = await getOwnedSession(auth.uid, id);
-    if ('error' in result) {
+    const adminDb = getAdminDb();
+    const result = await assertAudienciaSessionAccess(adminDb, id, auth.uid, 'owner');
+    if (!result.ok) {
       return NextResponse.json({ ok: false, error: result.error }, { status: result.status });
     }
 
-    await result.ref!.delete();
+    await result.ref.delete();
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error('[audiencia-copilot/sessions/[id] DELETE]', err);

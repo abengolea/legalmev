@@ -91,7 +91,10 @@ import {
   User,
   Wifi,
   WifiOff,
+  Share2,
 } from 'lucide-react';
+import { ShareResourceDialog } from '@/components/ShareResourceDialog';
+import type { ResourceAccessLevel } from '@/lib/resource-sharing';
 
 function sameRepresentacion(a: RepresentacionCaso, b: RepresentacionCaso): boolean {
   return a.parte === b.parte && a.clienteNombre === b.clienteNombre && a.notas === b.notas;
@@ -201,6 +204,8 @@ export function AudienciaCopilot() {
   const analysisTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const analysisGenRef = useRef<Record<string, number>>({});
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [myAccess, setMyAccess] = useState<ResourceAccessLevel>('owner');
+  const [shareOpen, setShareOpen] = useState(false);
   const [sessions, setSessions] = useState<AudienciaSessionSummary[]>([]);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [representacion, setRepresentacion] = useState<RepresentacionCaso>(EMPTY_REPRESENTACION);
@@ -265,6 +270,8 @@ export function AudienciaCopilot() {
   const progresoTestimonios =
     testigos.length > 0 ? Math.round((testimoniosCerrados / testigos.length) * 100) : 0;
   const puedeReanalizarCaso = !!expedienteAnalysis && !!representacion.parte && !!sessionId;
+  const canEditSession = myAccess === 'owner' || myAccess === 'edit';
+  const isOwnerSession = myAccess === 'owner';
   const intercambiosTotales = testigos.reduce((n, t) => n + t.intercambios.length, 0);
   const intercambiosTestigoActivo = testigoActivo?.intercambios.length ?? 0;
   const alcanzoLimiteTestigos =
@@ -446,6 +453,7 @@ export function AudienciaCopilot() {
   const resetParaNuevaAudiencia = useCallback(() => {
     skipSaveRef.current = true;
     setSessionId(null);
+    setMyAccess('owner');
     setExpedienteAnalysis(null);
     setTestigos([]);
     setTestigoActivoId(null);
@@ -591,10 +599,14 @@ export function AudienciaCopilot() {
         const res = await fetch(`/api/admin/audiencia-copilot/sessions/${id}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
-        const json = await safeResJson<{ ok: boolean; session?: AudienciaSessionData; error?: string }>(
-          res
-        );
+        const json = await safeResJson<{
+          ok: boolean;
+          session?: AudienciaSessionData;
+          myAccess?: ResourceAccessLevel;
+          error?: string;
+        }>(res);
         if (!json.ok || !json.session) throw new Error(json.error || 'No se pudo cargar la sesión');
+        setMyAccess(json.myAccess ?? (json.session.userId === user.uid ? 'owner' : 'view'));
 
         if (json.session.analysisStatus === 'pending' && json.session.id) {
           startLoadTimer(json.session.pdfFileName || json.session.titulo, 1, LOAD_STEPS[1].label);
@@ -643,7 +655,7 @@ export function AudienciaCopilot() {
   );
 
   const saveSession = useCallback(async () => {
-    if (!sessionId) return;
+    if (!sessionId || !canEditSession) return;
     const user = auth.currentUser;
     if (!user) return;
     setSaveStatus('saving');
@@ -672,7 +684,7 @@ export function AudienciaCopilot() {
     } catch {
       setSaveStatus('error');
     }
-  }, [sessionId, testigos, testigoActivoId, analysisByTestigoId, preguntasATodos, alegatoGlobal, alegatoGlobalMeta, tokenUsage, fetchSessions]);
+  }, [sessionId, canEditSession, testigos, testigoActivoId, analysisByTestigoId, preguntasATodos, alegatoGlobal, alegatoGlobalMeta, tokenUsage, fetchSessions]);
 
   const actualizarParteRepresentada = (parte: ParteRepresentada) => {
     setRepresentacion((prev) => ({ ...prev, parte }));
@@ -798,7 +810,7 @@ export function AudienciaCopilot() {
   }, [fetchSessions, loadSessionById]);
 
   useEffect(() => {
-    if (!sessionId) return;
+    if (!sessionId || !canEditSession) return;
     if (skipSaveRef.current) {
       skipSaveRef.current = false;
       return;
@@ -808,7 +820,7 @@ export function AudienciaCopilot() {
       void saveSession();
     }, 1200);
     return () => clearTimeout(timer);
-  }, [sessionId, testigos, testigoActivoId, analysisByTestigoId, preguntasATodos, alegatoGlobal, alegatoGlobalMeta, tokenUsage, saveSession]);
+  }, [sessionId, canEditSession, testigos, testigoActivoId, analysisByTestigoId, preguntasATodos, alegatoGlobal, alegatoGlobalMeta, tokenUsage, saveSession]);
 
   const handleLoadPdf = async (file: File) => {
     setIsLoading(true);
@@ -879,6 +891,7 @@ export function AudienciaCopilot() {
 
       skipSaveRef.current = true;
       setSessionId(analyzeJson.sessionId);
+      setMyAccess('owner');
       setExpedienteAnalysis(analyzeJson.analysis);
       setTestigos(normalizeTestigos(analyzeJson.testigos ?? []));
       setTestigoActivoId(analyzeJson.testigoActivoId ?? null);
@@ -1564,11 +1577,30 @@ export function AudienciaCopilot() {
                     {sessions.map((s) => (
                       <SelectItem key={s.id} value={s.id}>
                         {s.titulo} — {formatFecha(s.updatedAt)}
+                        {s.myAccess && s.myAccess !== 'owner'
+                          ? ` · compartido (${s.myAccess === 'edit' ? 'editar' : 'ver'})`
+                          : ''}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
+            )}
+            {sessionId && isOwnerSession && (
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full shrink-0 sm:w-auto"
+                onClick={() => setShareOpen(true)}
+              >
+                <Share2 className="mr-2 h-4 w-4" />
+                Compartir
+              </Button>
+            )}
+            {sessionId && !canEditSession && (
+              <Badge variant="secondary" className="h-9 px-3 font-normal">
+                Solo lectura
+              </Badge>
             )}
             <Button
               type="button"
@@ -2616,6 +2648,20 @@ export function AudienciaCopilot() {
         reason={upgradeReason}
         limits={trialLimits}
       />
+
+      {sessionId && isOwnerSession && (
+        <ShareResourceDialog
+          open={shareOpen}
+          onOpenChange={setShareOpen}
+          shareApiPath={`/api/admin/audiencia-copilot/sessions/${sessionId}/share`}
+          resourceTitle={
+            sessions.find((s) => s.id === sessionId)?.titulo ||
+            expedienteAnalysis?.caratula ||
+            'Audiencia'
+          }
+          resourceKindLabel="copiloto de audiencias"
+        />
+      )}
 
       {consentDialog}
     </div>

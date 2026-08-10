@@ -11,18 +11,27 @@ export async function GET(request: NextRequest) {
     if (auth instanceof NextResponse) return auth;
 
     const adminDb = getAdminDb();
-    const snap = await adminDb
-      .collection(CONTROL_PRUEBA_COLLECTION)
-      .where('createdBy', '==', auth.uid)
-      .limit(100)
-      .get();
+    const [ownedSnap, sharedSnap] = await Promise.all([
+      adminDb.collection(CONTROL_PRUEBA_COLLECTION).where('createdBy', '==', auth.uid).limit(100).get(),
+      adminDb
+        .collection(CONTROL_PRUEBA_COLLECTION)
+        .where('sharedWithUids', 'array-contains', auth.uid)
+        .limit(100)
+        .get(),
+    ]);
+    const seen = new Set<string>();
+    const docs = [...ownedSnap.docs, ...sharedSnap.docs].filter((d) => {
+      if (seen.has(d.id)) return false;
+      seen.add(d.id);
+      return true;
+    });
 
     let totalRiesgo = 0;
     let rojo = 0;
     let amarillo = 0;
     const expedientesConRiesgo: { id: string; caratula: string; riesgo: number }[] = [];
 
-    for (const doc of snap.docs) {
+    for (const doc of docs) {
       const data = doc.data();
       const items = normalizeItems(data.items);
       const alertas = listarAlertasItems(items);

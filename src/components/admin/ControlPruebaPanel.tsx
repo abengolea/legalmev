@@ -87,6 +87,7 @@ import {
   ordenGruposTercero,
 } from '@/lib/control-prueba-terceros';
 import { extractTextFromPdfFile, PdfExtractError } from '@/lib/pdf-text-extract-client';
+import type { ImportPreviewPayload } from '@/lib/control-prueba-import-apply';
 import type {
   ControlPruebaExpediente,
   ControlPruebaItem,
@@ -156,7 +157,10 @@ import {
   Calendar,
   Gavel,
   Mail,
+  Share2,
 } from 'lucide-react';
+import { ShareResourceDialog } from '@/components/ShareResourceDialog';
+import type { ResourceAccessLevel } from '@/lib/resource-sharing';
 
 const CONTROL_PRUEBA_PATH = '/dashboard/control-prueba';
 
@@ -355,6 +359,7 @@ export function ControlPruebaPanel() {
   const pickerRef = useRef<HTMLDivElement>(null);
   const [hitosDraft, setHitosDraft] = useState<ExpedienteHito[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const [createForm, setCreateForm] = useState(EMPTY_FORM);
   const [importOpen, setImportOpen] = useState(false);
   const [importDragOver, setImportDragOver] = useState(false);
@@ -404,6 +409,20 @@ export function ControlPruebaPanel() {
     () => expedientes.find((e) => e.id === selectedId) ?? null,
     [expedientes, selectedId],
   );
+
+  const myAccess: ResourceAccessLevel = useMemo(() => {
+    if (!selected) return 'owner';
+    if (selected.myAccess) return selected.myAccess;
+    const uid = auth.currentUser?.uid;
+    if (uid && selected.createdBy && selected.createdBy !== uid) {
+      const collab = selected.sharedWith?.find((c) => c.uid === uid);
+      return collab?.role ?? 'view';
+    }
+    return 'owner';
+  }, [selected]);
+
+  const canEditSelected = myAccess === 'owner' || myAccess === 'edit';
+  const isOwnerSelected = myAccess === 'owner';
 
   const oficiosDraft = useMemo(() => collectOficiosAutenticidadFromItems(draftItems), [draftItems]);
 
@@ -910,7 +929,7 @@ export function ControlPruebaPanel() {
   const isDirty = selectedId != null && persistSnapshotValue !== lastSavedSnapshotRef.current;
 
   useEffect(() => {
-    if (!selectedId) return;
+    if (!selectedId || !canEditSelected) return;
     if (persistSnapshotValue === lastSavedSnapshotRef.current) return;
 
     setSaveStatus('pending');
@@ -918,7 +937,7 @@ export function ControlPruebaPanel() {
       void handleSaveRef.current({ silent: true });
     }, 1200);
     return () => window.clearTimeout(timer);
-  }, [selectedId, persistSnapshotValue]);
+  }, [selectedId, persistSnapshotValue, canEditSelected]);
 
   useEffect(() => {
     if (saveStatus !== 'saved') return;
@@ -2041,6 +2060,11 @@ export function ControlPruebaPanel() {
                             <Badge variant="outline" className="text-[10px] px-1.5 py-0">
                               {sistemaLabel(exp.sistema)}
                             </Badge>
+                            {exp.myAccess && exp.myAccess !== 'owner' && (
+                              <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                                Compartido · {exp.myAccess === 'edit' ? 'editar' : 'ver'}
+                              </Badge>
+                            )}
                             {pend > 0 && (
                               <Badge className="bg-amber-100 text-amber-900 border-amber-300 text-[10px] px-1.5 py-0">
                                 {pend} pend.
@@ -2188,6 +2212,22 @@ export function ControlPruebaPanel() {
                       />
                     </div>
                     <div className="flex shrink-0 flex-wrap gap-2">
+                      {isOwnerSelected && selectedId && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setShareOpen(true)}
+                          title="Compartir con otro usuario de LegalMev"
+                        >
+                          <Share2 className="mr-1.5 h-3.5 w-3.5" />
+                          Compartir
+                        </Button>
+                      )}
+                      {!canEditSelected && (
+                        <Badge variant="secondary" className="h-8 px-2.5 font-normal">
+                          Solo lectura
+                        </Badge>
+                      )}
                       <Button
                         variant="outline"
                         size="sm"
@@ -2225,7 +2265,7 @@ export function ControlPruebaPanel() {
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
-                      <Button variant="outline" onClick={() => setImportOpen(true)} disabled={saving}>
+                      <Button variant="outline" onClick={() => setImportOpen(true)} disabled={saving || !canEditSelected}>
                         <FileUp className="mr-2 h-4 w-4" />
                         Importar PDF
                       </Button>
@@ -2252,7 +2292,7 @@ export function ControlPruebaPanel() {
                           variant="outline"
                           size="sm"
                           onClick={() => void handleSave()}
-                          disabled={saving || !isDirty}
+                          disabled={saving || !isDirty || !canEditSelected}
                         >
                           {saving ? (
                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -2262,9 +2302,11 @@ export function ControlPruebaPanel() {
                           Guardar ahora
                         </Button>
                       </div>
-                      <Button variant="destructive" size="icon" onClick={() => void handleDeleteExpediente()} disabled={saving}>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      {isOwnerSelected && (
+                        <Button variant="destructive" size="icon" onClick={() => void handleDeleteExpediente()} disabled={saving}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
                     </div>
                   </div>
                   <div className="mt-3 space-y-1">
@@ -2873,6 +2915,29 @@ export function ControlPruebaPanel() {
       </Dialog>
 
       {consentDialog}
+
+      {selectedId && isOwnerSelected && (
+        <ShareResourceDialog
+          open={shareOpen}
+          onOpenChange={setShareOpen}
+          shareApiPath={`/api/admin/control-prueba/${selectedId}/share`}
+          resourceTitle={selected?.caratula || 'Control de prueba'}
+          resourceKindLabel="control de prueba"
+          onSharedWithChange={(sharedWith) => {
+            setExpedientes((prev) =>
+              prev.map((e) =>
+                e.id === selectedId
+                  ? {
+                      ...e,
+                      sharedWith,
+                      sharedWithUids: sharedWith.map((c) => c.uid),
+                    }
+                  : e,
+              ),
+            );
+          }}
+        />
+      )}
     </div>
   );
 }

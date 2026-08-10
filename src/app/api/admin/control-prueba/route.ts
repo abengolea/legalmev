@@ -15,6 +15,7 @@ import {
 } from '@/lib/control-prueba';
 import { repairSpanishTextEncoding } from '@/lib/text-encoding-repair';
 import type { ControlPruebaExpedienteInput } from '@/types/control-prueba';
+import { resolveResourceAccess } from '@/lib/resource-sharing';
 
 function serializeDoc(id: string, data: FirebaseFirestore.DocumentData) {
   return serializeControlPruebaDoc(id, data);
@@ -35,14 +36,29 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const q = searchParams.get('q')?.trim().toLowerCase();
 
-    // Cada usuario solo ve sus propios expedientes (también superadmin / cuota ilimitada).
-    // El listado global de todos los usuarios está en /api/admin/control-prueba/report.
-    const snap = await adminDb
-      .collection(CONTROL_PRUEBA_COLLECTION)
-      .where('createdBy', '==', auth.uid)
-      .limit(100)
-      .get();
-    let expedientes = snap.docs.map((d) => serializeDoc(d.id, d.data()));
+    // Propios + compartidos conmigo
+    const [ownedSnap, sharedSnap] = await Promise.all([
+      adminDb.collection(CONTROL_PRUEBA_COLLECTION).where('createdBy', '==', auth.uid).limit(100).get(),
+      adminDb
+        .collection(CONTROL_PRUEBA_COLLECTION)
+        .where('sharedWithUids', 'array-contains', auth.uid)
+        .limit(100)
+        .get(),
+    ]);
+
+    const byId = new Map<string, ReturnType<typeof serializeDoc>>();
+    for (const d of ownedSnap.docs) {
+      const exp = serializeDoc(d.id, d.data());
+      exp.myAccess = 'owner';
+      byId.set(d.id, exp);
+    }
+    for (const d of sharedSnap.docs) {
+      if (byId.has(d.id)) continue;
+      const exp = serializeDoc(d.id, d.data());
+      exp.myAccess = resolveResourceAccess(d.data(), auth.uid, 'createdBy') ?? 'view';
+      byId.set(d.id, exp);
+    }
+    let expedientes = Array.from(byId.values());
 
     expedientes.sort((a, b) => {
       const ta = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
@@ -100,6 +116,13 @@ export async function POST(request: NextRequest) {
           ok: false,
           error: `Alcanzaste el límite de ${auth.access.limit ?? 10} controles este mes. Se renueva automáticamente.`,
         },
+        { status: 403 },
+      );
+    }
+
+    if (!auth.access.hasAccess) {
+      return NextResponse.json(
+        { ok: false, error: 'Acceso restringido a Control de prueba' },
         { status: 403 },
       );
     }

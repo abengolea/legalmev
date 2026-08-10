@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAdminDb } from '@/lib/firebase-admin';
 import { authorizeControlPrueba } from '@/lib/control-prueba-api-auth';
 import {
-  assertControlPruebaExpedienteOwner,
+  assertControlPruebaExpedienteAccess,
   consumeControlPruebaQuota,
   type ControlPruebaTrial,
 } from '@/lib/control-prueba-access';
@@ -74,10 +74,11 @@ export async function POST(request: NextRequest) {
       const adminDb = getAdminDb();
 
       if (expedienteId) {
-        const owned = await assertControlPruebaExpedienteOwner(
+        const owned = await assertControlPruebaExpedienteAccess(
           adminDb,
           expedienteId,
           auth.uid,
+          'edit',
         );
         if (!owned.ok) {
           return NextResponse.json({ ok: false, error: owned.error }, { status: owned.status });

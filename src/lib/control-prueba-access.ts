@@ -1,5 +1,13 @@
 import type { Firestore } from 'firebase-admin/firestore';
 import { isControlPruebaSuperAdminUser } from '@/lib/platform-admin';
+import {
+  canEditResource,
+  canViewResource,
+  getOwnerUid,
+  isResourceOwner,
+  resolveResourceAccess,
+  type ResourceAccessLevel,
+} from '@/lib/resource-sharing';
 
 /** Controles incluidos al registrarse (prueba para todos). */
 export const CONTROL_PRUEBA_TRIAL_DEFAULT_LIMIT = 5;
@@ -243,15 +251,44 @@ export async function assertControlPruebaExpedienteOwner(
   expedienteId: string,
   uid: string,
 ): Promise<{ ok: true; data: FirebaseFirestore.DocumentData } | { ok: false; error: string; status: number }> {
+  const access = await assertControlPruebaExpedienteAccess(adminDb, expedienteId, uid, 'owner');
+  if (!access.ok) return access;
+  return { ok: true, data: access.data };
+}
+
+export async function assertControlPruebaExpedienteAccess(
+  adminDb: Firestore,
+  expedienteId: string,
+  uid: string,
+  min: 'view' | 'edit' | 'owner' = 'view',
+): Promise<
+  | {
+      ok: true;
+      data: FirebaseFirestore.DocumentData;
+      access: ResourceAccessLevel;
+      ownerUid: string;
+    }
+  | { ok: false; error: string; status: number }
+> {
   const snap = await adminDb.collection('controlPrueba').doc(expedienteId).get();
   if (!snap.exists) {
     return { ok: false, error: 'Expediente no encontrado', status: 404 };
   }
 
   const data = snap.data() ?? {};
-  if (data.createdBy !== uid) {
+  const access = resolveResourceAccess(data, uid, 'createdBy');
+  const ownerUid = getOwnerUid(data, 'createdBy') ?? '';
+
+  const allowed =
+    min === 'owner'
+      ? isResourceOwner(access)
+      : min === 'edit'
+        ? canEditResource(access)
+        : canViewResource(access);
+
+  if (!allowed || !access) {
     return { ok: false, error: 'Sin permiso sobre este expediente', status: 403 };
   }
 
-  return { ok: true, data };
+  return { ok: true, data, access, ownerUid };
 }

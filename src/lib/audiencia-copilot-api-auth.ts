@@ -3,12 +3,20 @@ import { getAdminDb } from '@/lib/firebase-admin';
 import { verifyUidFromRequest } from '@/lib/api-auth';
 import {
   resolveAudienciaCopilotAccess,
+  type AudienciaCopilotAccess,
   type AudienciaCopilotTrial,
 } from '@/lib/audiencia-copilot-access';
 
+export type AudienciaCopilotAuth = {
+  uid: string;
+  unlimited: boolean;
+  access: AudienciaCopilotAccess;
+  userData: Record<string, unknown>;
+};
+
 export async function authorizeAudienciaCopilot(
   request: NextRequest
-): Promise<{ uid: string; unlimited: boolean } | NextResponse> {
+): Promise<AudienciaCopilotAuth | NextResponse> {
   const auth = await verifyUidFromRequest(request);
   if (auth instanceof NextResponse) return auth;
 
@@ -20,17 +28,21 @@ export async function authorizeAudienciaCopilot(
     return NextResponse.json({ ok: false, error: 'Usuario no encontrado' }, { status: 404 });
   }
 
+  const status = String(userData.status ?? 'activo').trim().toLowerCase();
+  if (status === 'bloqueado' || status === 'inactivo') {
+    return NextResponse.json({ ok: false, error: 'Usuario inactivo' }, { status: 403 });
+  }
+
   const access = resolveAudienciaCopilotAccess({
     email: userData.email as string | undefined,
     audienciaCopilotTrial: userData.audienciaCopilotTrial as AudienciaCopilotTrial | undefined,
   });
 
-  if (!access.hasAccess) {
-    return NextResponse.json(
-      { ok: false, error: 'Acceso restringido al copiloto de audiencias' },
-      { status: 403 }
-    );
-  }
-
-  return { uid: auth.uid, unlimited: access.unlimited, access };
+  // Usuarios registrados pueden abrir sesiones compartidas aunque no tengan cupo propio.
+  return {
+    uid: auth.uid,
+    unlimited: access.unlimited,
+    access,
+    userData,
+  };
 }

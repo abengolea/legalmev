@@ -142,6 +142,7 @@ export type AudienciaSessionSummary = {
   createdAt: string;
   testigoCount: number;
   pdfFileName?: string;
+  myAccess?: import('@/lib/resource-sharing').ResourceAccessLevel;
 };
 
 export type DocumentoAdicionalAudiencia = {
@@ -185,6 +186,7 @@ export type AudienciaSessionData = {
     moneda?: string;
     paidAt?: string;
   };
+  sharedWith?: import('@/lib/resource-sharing').SharedCollaborator[];
   createdAt: string;
   updatedAt: string;
 };

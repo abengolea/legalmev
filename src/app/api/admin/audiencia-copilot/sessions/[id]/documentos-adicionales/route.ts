@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
 import { getAdminDb } from '@/lib/firebase-admin';
 import { authorizeAudienciaCopilot } from '@/lib/audiencia-copilot-api-auth';
+import { assertAudienciaSessionAccess } from '@/lib/audiencia-session-access';
 import {
   extractTextFromAudienciaDocument,
   PdfExtractError,
@@ -46,17 +47,12 @@ export async function POST(
 
     const { id: sessionId } = await params;
     const adminDb = getAdminDb();
-    const ref = adminDb.collection(COLLECTION).doc(sessionId);
-    const snap = await ref.get();
-
-    if (!snap.exists) {
-      return NextResponse.json({ ok: false, error: 'Sesión no encontrada' }, { status: 404 });
+    const accessResult = await assertAudienciaSessionAccess(adminDb, sessionId, auth.uid, 'edit');
+    if (!accessResult.ok) {
+      return NextResponse.json({ ok: false, error: accessResult.error }, { status: accessResult.status });
     }
-
-    const data = snap.data()!;
-    if (data.userId !== auth.uid) {
-      return NextResponse.json({ ok: false, error: 'Sin permiso' }, { status: 403 });
-    }
+    const ref = accessResult.ref;
+    const data = accessResult.data;
 
     const existing = (data.documentosAdicionales as DocumentoAdicionalAudiencia[]) || [];
     const limits = getCopilotLimitsForContext(auth.unlimited, isAudienciaSessionPaid(data));

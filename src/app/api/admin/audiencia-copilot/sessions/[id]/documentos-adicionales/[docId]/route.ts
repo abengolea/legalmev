@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminDb } from '@/lib/firebase-admin';
 import { authorizeAudienciaCopilot } from '@/lib/audiencia-copilot-api-auth';
+import { assertAudienciaSessionAccess } from '@/lib/audiencia-session-access';
 import type { DocumentoAdicionalAudiencia } from '@/lib/audiencia-session-types';
 
 const COLLECTION = 'audiencia_sessions';
@@ -16,17 +17,12 @@ export async function DELETE(
 
     const { id: sessionId, docId } = await params;
     const adminDb = getAdminDb();
-    const ref = adminDb.collection(COLLECTION).doc(sessionId);
-    const snap = await ref.get();
-
-    if (!snap.exists) {
-      return NextResponse.json({ ok: false, error: 'Sesión no encontrada' }, { status: 404 });
+    const accessResult = await assertAudienciaSessionAccess(adminDb, sessionId, auth.uid, 'edit');
+    if (!accessResult.ok) {
+      return NextResponse.json({ ok: false, error: accessResult.error }, { status: accessResult.status });
     }
-
-    const data = snap.data()!;
-    if (data.userId !== auth.uid) {
-      return NextResponse.json({ ok: false, error: 'Sin permiso' }, { status: 403 });
-    }
+    const ref = accessResult.ref;
+    const data = accessResult.data;
 
     const existing = (data.documentosAdicionales as DocumentoAdicionalAudiencia[]) || [];
     const documentosAdicionales = existing.filter((d) => d.id !== docId);

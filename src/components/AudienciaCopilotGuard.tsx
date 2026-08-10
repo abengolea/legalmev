@@ -5,7 +5,7 @@ import { auth } from '@/lib/firebase';
 import { useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 
-/** Permite acceso al copiloto de audiencias (prueba incluida en el registro o acceso ilimitado). */
+/** Permite acceso al copiloto (cupo propio o sesión compartida). */
 export function AudienciaCopilotGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [allowed, setAllowed] = useState(false);
@@ -25,7 +25,9 @@ export function AudienciaCopilotGuard({ children }: { children: React.ReactNode 
           headers: { Authorization: `Bearer ${token}` },
         });
         const json = await res.json();
-        if (json.ok && json.user?.audienciaCopilot?.hasAccess) {
+        const hasOwn = json.ok && json.user?.audienciaCopilot?.hasAccess;
+        const hasShared = json.ok && json.user?.audienciaCopilotSharedAccess;
+        if (hasOwn || hasShared) {
           setAllowed(true);
         } else {
           router.replace('/dashboard');

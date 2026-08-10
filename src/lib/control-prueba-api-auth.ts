@@ -28,18 +28,17 @@ export async function authorizeControlPrueba(
     return NextResponse.json({ ok: false, error: 'Usuario no encontrado' }, { status: 404 });
   }
 
+  const status = String(userData.status ?? 'activo').trim().toLowerCase();
+  if (status === 'bloqueado' || status === 'inactivo') {
+    return NextResponse.json({ ok: false, error: 'Usuario inactivo' }, { status: 403 });
+  }
+
   const access = await resolveControlPruebaAccessForUser(adminDb, auth.uid, {
     email: userData.email as string | undefined,
     controlPruebaTrial: userData.controlPruebaTrial as ControlPruebaTrial | undefined,
   });
 
-  if (!access.hasAccess) {
-    return NextResponse.json(
-      { ok: false, error: 'Acceso restringido a Control de prueba' },
-      { status: 403 },
-    );
-  }
-
+  // Usuarios registrados pueden abrir recursos compartidos aunque no tengan cupo propio.
   return {
     uid: auth.uid,
     unlimited: access.unlimited,

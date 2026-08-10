@@ -56,6 +56,19 @@ export async function GET(request: NextRequest) {
       .get();
     const hasPagos = !pagosSnap.empty;
 
+    const [cpShared, audShared] = await Promise.all([
+      adminDb
+        .collection('controlPrueba')
+        .where('sharedWithUids', 'array-contains', uid)
+        .limit(1)
+        .get(),
+      adminDb
+        .collection('audiencia_sessions')
+        .where('sharedWithUids', 'array-contains', uid)
+        .limit(1)
+        .get(),
+    ]);
+
     return NextResponse.json({
       ok: true,
       user: {
@@ -72,8 +85,10 @@ export async function GET(request: NextRequest) {
         canAccessControlPrueba: controlPrueba.hasAccess,
         controlPrueba,
         controlPruebaTrial: data.controlPruebaTrial ?? null,
+        controlPruebaSharedAccess: !cpShared.empty,
         audienciaCopilot,
         audienciaCopilotTrial: data.audienciaCopilotTrial ?? null,
+        audienciaCopilotSharedAccess: !audShared.empty,
         premiumSource: data.premiumSource ?? null,
         colegioName: typeof data.colegioName === 'string' ? data.colegioName : null,
       },

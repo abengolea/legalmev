@@ -452,6 +452,12 @@ export type ControlPruebaExpediente = {
   createdAt?: string;
   updatedAt?: string;
   createdBy?: string;
+  /** Colaboradores con acceso (solo el dueño gestiona el share). */
+  sharedWith?: import('@/lib/resource-sharing').SharedCollaborator[];
+  /** Índice para consultas array-contains. */
+  sharedWithUids?: string[];
+  /** Rol del usuario actual respecto al expediente (solo en respuestas API). */
+  myAccess?: import('@/lib/resource-sharing').ResourceAccessLevel;
 };
 
 export type ControlPruebaExpedienteInput = {

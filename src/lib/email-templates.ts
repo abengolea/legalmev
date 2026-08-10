@@ -218,6 +218,39 @@ export function buildConvenioSuspendedHtml(params: { colegioName: string }): str
   return emailWrapper(emailHeader() + emailCard(content) + emailFooter());
 }
 
+export function buildResourceShareEmailHtml(params: {
+  recipientName?: string;
+  sharerName: string;
+  resourceLabel: string;
+  resourceTitle: string;
+  role: 'view' | 'edit';
+  actionUrl: string;
+}): string {
+  const recipient = params.recipientName?.trim();
+  const greeting = recipient ? `Hola ${escapeHtml(recipient.split(' ')[0])},` : 'Hola,';
+  const sharer = escapeHtml(params.sharerName.trim() || 'Un usuario de LegalMev');
+  const title = escapeHtml(params.resourceTitle.trim() || 'Sin título');
+  const label = escapeHtml(params.resourceLabel);
+  const roleText = params.role === 'edit' ? 'editar' : 'ver';
+
+  const content = `
+    <p style="margin:0 0 16px;font-size:16px;">${greeting}</p>
+    <p style="margin:0 0 24px;">
+      <strong>${sharer}</strong> te compartió un <strong>${label}</strong> en LegalMev
+      con permiso para <strong>${roleText}</strong>.
+    </p>
+    <div style="margin:0 0 24px;padding:16px 18px;background:#f0f7f8;border-radius:8px;border-left:4px solid #2A6A78;">
+      <p style="margin:0;font-size:15px;color:#374151;line-height:1.6;">
+        <strong style="color:#2A6A78;">${title}</strong>
+      </p>
+    </div>
+    ${ctaButton(params.actionUrl, 'Abrir en LegalMev')}
+    <p style="margin:0;font-size:14px;color:#6b7280;">Si no esperabas este correo, podés ignorarlo.</p>
+    <p style="margin:24px 0 0;font-size:14px;color:#9ca3af;">— El equipo de LegalMev</p>
+  `;
+  return emailWrapper(emailHeader() + emailCard(content) + emailFooter());
+}
+
 export function buildCopilotoAudienciaAnnouncementHtml(params: {
   firstName?: string;
   copilotUrl?: string;

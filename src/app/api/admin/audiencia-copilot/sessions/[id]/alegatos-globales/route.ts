@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminDb } from '@/lib/firebase-admin';
 import { authorizeAudienciaCopilot } from '@/lib/audiencia-copilot-api-auth';
+import { assertAudienciaSessionAccess } from '@/lib/audiencia-session-access';
 import { requireGoogleGenAiApiKey } from '@/lib/google-ai-key';
 import { GEMINI_MODEL_ID } from '@/lib/gemini-model';
 import { normalizeTokenUsage, sumTokenUsage } from '@/lib/ai-token-usage';
@@ -33,17 +34,12 @@ export async function POST(
 
     const { id: sessionId } = await params;
     const adminDb = getAdminDb();
-    const ref = adminDb.collection(COLLECTION).doc(sessionId);
-    const snap = await ref.get();
-
-    if (!snap.exists) {
-      return NextResponse.json({ ok: false, error: 'Sesión no encontrada' }, { status: 404 });
+    const accessResult = await assertAudienciaSessionAccess(adminDb, sessionId, auth.uid, 'edit');
+    if (!accessResult.ok) {
+      return NextResponse.json({ ok: false, error: accessResult.error }, { status: accessResult.status });
     }
-
-    const data = snap.data()!;
-    if (data.userId !== auth.uid) {
-      return NextResponse.json({ ok: false, error: 'Sin permiso' }, { status: 403 });
-    }
+    const ref = accessResult.ref;
+    const data = accessResult.data;
 
     const testigos = (data.testigos as AudienciaSessionData['testigos']) || [];
     const representacion = (data.representacion as RepresentacionCaso) ?? EMPTY_REPRESENTACION;

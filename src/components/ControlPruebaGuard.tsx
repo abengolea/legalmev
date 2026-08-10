@@ -5,7 +5,7 @@ import { auth } from '@/lib/firebase';
 import { useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 
-/** Permite acceso a Control de prueba (prueba habilitada por admin o superadmin). */
+/** Permite acceso a Control de prueba (cupo propio o recurso compartido). */
 export function ControlPruebaGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [allowed, setAllowed] = useState(false);
@@ -25,7 +25,9 @@ export function ControlPruebaGuard({ children }: { children: React.ReactNode }) 
           headers: { Authorization: `Bearer ${token}` },
         });
         const json = await res.json();
-        if (json.ok && json.user?.controlPrueba?.hasAccess) {
+        const hasOwn = json.ok && json.user?.controlPrueba?.hasAccess;
+        const hasShared = json.ok && json.user?.controlPruebaSharedAccess;
+        if (hasOwn || hasShared) {
           setAllowed(true);
         } else {
           router.replace('/dashboard');

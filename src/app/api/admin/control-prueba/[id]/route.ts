@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { FieldValue } from 'firebase-admin/firestore';
 import { getAdminDb } from '@/lib/firebase-admin';
 import { authorizeControlPrueba } from '@/lib/control-prueba-api-auth';
-import { assertControlPruebaExpedienteOwner } from '@/lib/control-prueba-access';
+import { assertControlPruebaExpedienteAccess } from '@/lib/control-prueba-access';
 import {
   CONTROL_PRUEBA_COLLECTION,
   detectSistemaFromUrl,
@@ -12,6 +12,7 @@ import {
 } from '@/lib/control-prueba';
 import { repairSpanishTextEncoding } from '@/lib/text-encoding-repair';
 import type { ControlPruebaExpedienteInput } from '@/types/control-prueba';
+import { resolveResourceAccess } from '@/lib/resource-sharing';
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -27,12 +28,19 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
     const { id } = await context.params;
     const adminDb = getAdminDb();
-    const owned = await assertControlPruebaExpedienteOwner(adminDb, id, auth.uid);
-    if (!owned.ok) {
-      return NextResponse.json({ ok: false, error: owned.error }, { status: owned.status });
+    const access = await assertControlPruebaExpedienteAccess(adminDb, id, auth.uid, 'view');
+    if (!access.ok) {
+      return NextResponse.json({ ok: false, error: access.error }, { status: access.status });
     }
 
-    return NextResponse.json({ ok: true, expediente: serializeDoc(id, owned.data) });
+    const expediente = serializeDoc(id, access.data);
+    expediente.myAccess = access.access;
+
+    return NextResponse.json({
+      ok: true,
+      expediente,
+      myAccess: access.access,
+    });
   } catch (err) {
     return NextResponse.json(
       { ok: false, error: err instanceof Error ? err.message : 'Error' },
@@ -50,13 +58,12 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     const { id } = await context.params;
     const body = (await request.json()) as Partial<ControlPruebaExpedienteInput>;
     const adminDb = getAdminDb();
-    const owned = await assertControlPruebaExpedienteOwner(adminDb, id, auth.uid);
-    if (!owned.ok) {
-      return NextResponse.json({ ok: false, error: owned.error }, { status: owned.status });
+    const access = await assertControlPruebaExpedienteAccess(adminDb, id, auth.uid, 'edit');
+    if (!access.ok) {
+      return NextResponse.json({ ok: false, error: access.error }, { status: access.status });
     }
 
     const ref = adminDb.collection(CONTROL_PRUEBA_COLLECTION).doc(id);
-    const snap = await ref.get();
 
     const update: Record<string, unknown> = { updatedAt: FieldValue.serverTimestamp() };
 
@@ -113,8 +120,13 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
     await ref.update(update);
     const updated = await ref.get();
+    const myAccess = resolveResourceAccess(updated.data() ?? access.data, auth.uid, 'createdBy');
 
-    return NextResponse.json({ ok: true, expediente: serializeDoc(updated.id, updated.data() ?? {}) });
+    return NextResponse.json({
+      ok: true,
+      expediente: serializeDoc(updated.id, updated.data() ?? {}),
+      myAccess,
+    });
   } catch (err) {
     return NextResponse.json(
       { ok: false, error: err instanceof Error ? err.message : 'Error' },
@@ -131,7 +143,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
 
     const { id } = await context.params;
     const adminDb = getAdminDb();
-    const owned = await assertControlPruebaExpedienteOwner(adminDb, id, auth.uid);
+    const owned = await assertControlPruebaExpedienteAccess(adminDb, id, auth.uid, 'owner');
     if (!owned.ok) {
       return NextResponse.json({ ok: false, error: owned.error }, { status: owned.status });
     }
