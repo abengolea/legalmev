@@ -396,6 +396,14 @@ export function filtrarItemsImportados(
         },
       }),
       ...(catFinal === 'prueba' &&
+        tipoFinal === 'informativa' && {
+          diligencia: {
+            destinatario: raw.destinatarioOficio?.trim() || undefined,
+            objeto: descripcion,
+            plazoContestacion: raw.fechaLimite ?? null,
+          },
+        }),
+      ...(catFinal === 'prueba' &&
         tipoFinal === 'pericial' && {
           pericial: {
             especialidad: inferirEspecialidadPericial(descripcion) ?? 'otra',

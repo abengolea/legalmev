@@ -490,6 +490,8 @@ export function ControlPruebaItemsTable({
                           ? DESCRIPCION_PERICIAL_PLACEHOLDER
                           : item.tipo === 'documental_en_poder'
                             ? 'Ej: extractos bancarios en poder de la demandada...'
+                          : item.tipo === 'informativa'
+                            ? 'Qué se pide informar (objeto del oficio)…'
                           : categoria === 'diligencia'
                             ? 'Ej: Oficio al Banco Galicia...'
                             : categoria === 'audiencia'
@@ -497,6 +499,28 @@ export function ControlPruebaItemsTable({
                               : 'Ej: Extracto bancario, testigo García...'
                       }
                     />
+                  )}
+                  {item.tipo === 'informativa' && categoria === 'prueba' && (
+                    <div className="mt-1.5 space-y-0.5">
+                      <p className="text-[10px] font-medium text-sky-900/80">Entidad a oficiar</p>
+                      <Input
+                        value={item.diligencia?.destinatario ?? ''}
+                        onChange={(e) =>
+                          onUpdate(item.id, {
+                            diligencia: {
+                              ...(item.diligencia ?? {}),
+                              destinatario: e.target.value,
+                              objeto: item.diligencia?.objeto ?? item.descripcion,
+                            },
+                          })
+                        }
+                        className={cn(
+                          'text-xs border-sky-200 bg-sky-50/40 focus-visible:ring-sky-300',
+                          compact ? 'h-6' : 'h-7',
+                        )}
+                        placeholder="Ej: BCRA, AFIP, Veraz, Banco Galicia…"
+                      />
+                    </div>
                   )}
                   {prog.total > 0 && (
                     <p className="text-[10px] text-muted-foreground mt-0.5">

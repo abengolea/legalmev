@@ -482,13 +482,20 @@ export function ControlPruebaItemDetail({
             </div>
           )}
           <div>
-            <Label className="text-xs">Destinatario</Label>
+            <Label className="text-xs">
+              {esPruebaInformativa(item) ? 'Entidad a oficiar' : 'Destinatario'}
+            </Label>
             <Input
               value={item.diligencia?.destinatario ?? ''}
               onChange={(e) =>
                 onUpdate({ diligencia: { ...item.diligencia, destinatario: e.target.value } })
               }
               className="h-8 text-xs mt-0.5"
+              placeholder={
+                esPruebaInformativa(item)
+                  ? 'Ej: BCRA, AFIP, Veraz, Banco Galicia…'
+                  : undefined
+              }
             />
           </div>
           <div>
