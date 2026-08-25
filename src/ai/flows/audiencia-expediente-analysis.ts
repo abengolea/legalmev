@@ -12,6 +12,12 @@ export const ExpedienteAnalysisInputSchema = z.object({
     .string()
     .optional()
     .describe('Resumen de lo declarado en audiencia hasta el momento, si existe.'),
+  contextoAdicionalAbogado: z
+    .string()
+    .optional()
+    .describe(
+      'Notas extra del abogado: de qué va la causa, lista de testigos de la audiencia y qué se espera de cada uno. No es un alta manual de testigos sueltos.'
+    ),
 });
 
 export const DeclaracionPreviaSchema = z.object({
@@ -117,6 +123,13 @@ El abogado ya indicó a quién representa y su objetivo. NO repitas un resumen n
 **Lo ya declarado en esta audiencia (incorporá al reencuadre):**
 {{{testimoniosAudienciaContexto}}}
 {{/if}}
+{{/if}}
+
+{{#if contextoAdicionalAbogado}}
+**CONTEXTO ADICIONAL DEL ABOGADO (prioritario para completar declarantes):**
+El abogado pegó notas extra: de qué va la causa y/o la lista de quienes declaran. NO inventes personas que no figuren acá ni en el expediente. Cruzá nombres con el expediente, completá testigosIdentificados (nombre, rol, relevancia concreta de DE QUÉ VA cada uno, parteProcesal) y enriquecé el mapa del caso. Si lista 4 testigos, esos 4 deben quedar identificados con relevancia útil para armar preguntas.
+
+{{{contextoAdicionalAbogado}}}
 {{/if}}
 
 **Expediente:**

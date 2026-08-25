@@ -22,10 +22,15 @@ import {
   formatRepresentacionContexto,
   formatTestimoniosAudienciaContexto,
 } from '@/lib/audiencia-copilot-format';
+import { mergeTestigosConIdentificados } from '@/lib/audiencia-merge-testigos';
+import {
+  getCopilotLimitsForContext,
+  isAudienciaSessionPaid,
+} from '@/lib/audiencia-copilot-limits';
 import { redactSensitiveIdentifiers } from '@/lib/redact-identifiers';
 
-const COLLECTION = 'audiencia_sessions';
 const MAX_TEXTO_ANALISIS = 120_000;
+const MAX_CONTEXTO_ADICIONAL = 12_000;
 
 export const maxDuration = 300;
 
@@ -60,7 +65,11 @@ export async function POST(
     const ref = accessResult.ref;
     const data = accessResult.data;
 
-    const body = (await request.json().catch(() => ({}))) as { representacion?: RepresentacionCaso };
+    const body = (await request.json().catch(() => ({}))) as {
+      representacion?: RepresentacionCaso;
+      contextoAdicionalAbogado?: string;
+      generarPreguntasIniciales?: boolean;
+    };
     const representacion: RepresentacionCaso =
       body.representacion ?? (data.representacion as RepresentacionCaso) ?? EMPTY_REPRESENTACION;
 
@@ -70,6 +79,15 @@ export async function POST(
         { status: 400 }
       );
     }
+
+    const contextoAdicionalRaw =
+      typeof body.contextoAdicionalAbogado === 'string'
+        ? body.contextoAdicionalAbogado
+        : ((data.contextoAdicionalAbogado as string | undefined) ?? '');
+    const contextoAdicionalAbogado = redactSensitiveIdentifiers(
+      contextoAdicionalRaw.slice(0, MAX_CONTEXTO_ADICIONAL)
+    ).trim();
+    const generarPreguntasIniciales = body.generarPreguntasIniciales === true;
 
     const texto = redactSensitiveIdentifiers((data.expedienteTexto as string) || '');
     if (!texto.trim()) {
@@ -111,6 +129,7 @@ export async function POST(
         testimoniosAudienciaContexto && testimoniosAudienciaContexto.trim()
           ? testimoniosAudienciaContexto
           : undefined,
+      contextoAdicionalAbogado: contextoAdicionalAbogado || undefined,
     });
     const expedienteAnalysis = expedienteResult.output;
     let tokenUsage = sumTokenUsage(
@@ -118,16 +137,39 @@ export async function POST(
       expedienteResult.usage
     );
 
-    const expedienteContexto = formatExpedienteContexto(expedienteAnalysis);
+    const limits = getCopilotLimitsForContext(auth.unlimited, isAudienciaSessionPaid(data));
+    let testigosMerged = testigos;
+    let testigosAgregados = 0;
+    let testigosActualizados = 0;
+    if (contextoAdicionalAbogado || generarPreguntasIniciales) {
+      const merged = mergeTestigosConIdentificados({
+        existing: testigos,
+        identified: expedienteAnalysis.testigosIdentificados ?? [],
+        declaracionesPrevias: expedienteAnalysis.declaracionesPrevias ?? [],
+        representacion,
+        tipoFuero: expedienteAnalysis.tipoFuero,
+        maxTestigos: limits?.maxTestigos ?? Number.POSITIVE_INFINITY,
+      });
+      testigosMerged = merged.testigos;
+      testigosAgregados = merged.agregados;
+      testigosActualizados = merged.actualizados;
+    }
+
+    const expedienteContexto = formatExpedienteContexto(
+      expedienteAnalysis,
+      contextoAdicionalAbogado
+    );
     const repCtx = formatRepresentacionContexto(representacion, expedienteAnalysis);
 
     const nextAnalysisMap = { ...analysisByTestigoId };
     let preguntasATodos = normalizeRepreguntas(
       (data.preguntasATodos as RepreguntaItem[] | undefined) ?? []
     );
-    const testigosAReanalizar = testigos.filter(
-      (t) => t.intercambios.length > 0 || !!analysisByTestigoId[t.id]
-    );
+    const testigosAReanalizar = generarPreguntasIniciales
+      ? testigosMerged
+      : testigosMerged.filter(
+          (t) => t.intercambios.length > 0 || !!analysisByTestigoId[t.id]
+        );
 
     for (const testigo of testigosAReanalizar) {
       const rawResult = await analyzeAudiencia({
@@ -163,9 +205,18 @@ export async function POST(
       lastUpdatedAt: now,
     };
 
+    const testigoActivoId =
+      (data.testigoActivoId as string | null) &&
+      testigosMerged.some((t) => t.id === data.testigoActivoId)
+        ? (data.testigoActivoId as string)
+        : (testigosMerged[0]?.id ?? null);
+
     await ref.update({
       representacion,
+      contextoAdicionalAbogado,
       expedienteAnalysis,
+      testigos: testigosMerged,
+      testigoActivoId,
       analysisByTestigoId: migrated.analysisByTestigoId,
       preguntasATodos: migrated.preguntasATodos,
       alegatoGlobal: '',
@@ -180,8 +231,13 @@ export async function POST(
       expedienteAnalysis,
       analysisByTestigoId: migrated.analysisByTestigoId,
       preguntasATodos: migrated.preguntasATodos,
+      testigos: testigosMerged,
+      testigoActivoId,
       testigosReanalizados: testigosAReanalizar.length,
+      testigosAgregados,
+      testigosActualizados,
       representacion,
+      contextoAdicionalAbogado,
       meta: { provider: 'Google Gemini', model: GEMINI_MODEL_ID, usage: tokenUsage },
       tokenUsage: tokenUsageMeta,
     });

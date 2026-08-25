@@ -31,13 +31,13 @@ const PASOS = [
     icon: Scale,
     titulo: '2. Indicá a quién representás',
     texto:
-      'Elegí si actuás por el actor o demandado (civil) o por la defensa o fiscalía (penal). Las sugerencias de la IA se adaptan a tu rol en la causa.',
+      'Elegí si actuás por el actor o demandado (civil) o por la defensa o fiscalía (penal). Después de la lectura podés pegar más contexto (de qué va la causa o la lista de testigos) y actualizar: la IA completa cada declarante y sugiere las preguntas.',
   },
   {
     icon: Users,
     titulo: '3. Organizá los declarantes',
     texto:
-      'Revisá los testigos que detectó el expediente, agregá otros si hace falta y marcá la bandeja de cada uno (tu parte, contraria o neutral). Elegí el declarante activo antes de anotar preguntas.',
+      'Revisá los testigos del expediente. Preferí completarlos con el contexto extra del paso 1, no cargarlos uno por uno. Marcá la bandeja (tu parte, contraria o sin clasificar) y elegí el declarante activo para ver las preguntas sugeridas.',
   },
   {
     icon: MessageSquare,

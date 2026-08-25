@@ -88,8 +88,12 @@ export function nombreClienteSugerido(
   return '';
 }
 
-export function formatExpedienteContexto(ctx: ExpedienteAnalysisOutput): string {
+export function formatExpedienteContexto(
+  ctx: ExpedienteAnalysisOutput,
+  contextoAdicionalAbogado?: string
+): string {
   const penal = esFueroPenal(ctx.tipoFuero);
+  const extra = contextoAdicionalAbogado?.trim();
   const lines = [
     `FUERO: ${tipoFueroLabel(ctx.tipoFuero)}`,
     `RESUMEN: ${ctx.resumen}`,
@@ -118,6 +122,7 @@ export function formatExpedienteContexto(ctx: ExpedienteAnalysisOutput): string 
       : `TEORÍA ACTOR: ${ctx.teoríaActor}\nTEORÍA DEMANDADO: ${ctx.teoríaDemandado}`,
     `PUNTOS CONTROVERTIDOS:\n${ctx.puntosControvertidos.map((p) => `- ${p}`).join('\n')}`,
     `DECLARACIONES PREVIAS:\n${ctx.declaracionesPrevias.map((d) => `- ${d.nombre} (${d.rol}): ${d.resumen}`).join('\n')}`,
+    extra ? `CONTEXTO ADICIONAL DEL ABOGADO:\n${extra}` : '',
   ];
   return lines.filter(Boolean).join('\n\n');
 }

@@ -85,7 +85,7 @@ FUNCIONES:
 1. Detectar contradicciones entre las respuestas actuales y: expediente, demanda, contestación, documental, pericias, testimonio previo de este declarante, o respuestas anteriores en esta audiencia.
 2. Detectar evasivas, omisiones y ambigüedades en la última respuesta.
 3. Identificar admisiones relevantes.
-4. Proponer repreguntas concretas, breves y litigables (preguntas literales listas para leer en audiencia). Para cada una indicá destinatario: "testigo" si va solo al declarante activo, "todos" si es pregunta general a quienes están en audiencia (partes, letrados, juez).
+4. Proponer repreguntas concretas, breves y litigables (preguntas literales listas para leer en audiencia). Para cada una indicá destinatario: "testigo" si va solo al declarante activo, "todos" si es pregunta general a quienes están en audiencia (partes, letrados, juez). Si aún NO hay preguntas registradas, devolvé un plan de interrogatorio completo: 6 a 10 repreguntas listas para usar con este declarante (según quién es, de qué va y nuestra estrategia), más 3 a 6 preguntasIneludibles.
 5. Listar preguntas ineludibles antes de cerrar esta declaración.
 6. Alertas: ROJA (contradicción/admisión), AMARILLA (evasiva/incompleta), AZUL (tema no explorado).
 7. Sacar conclusiones provisionales sobre lo declarado hasta el momento (2-4 bullets concretos).

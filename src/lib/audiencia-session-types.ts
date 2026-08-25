@@ -178,6 +178,8 @@ export type AudienciaSessionData = {
     ultimasInstrucciones?: string;
   };
   documentosAdicionales?: DocumentoAdicionalAudiencia[];
+  /** Notas extra del abogado (lista de testigos, de qué va cada uno, hechos) para reanalizar. */
+  contextoAdicionalAbogado?: string;
   tokenUsage?: AiTokenUsageMeta;
   audienciaPagada?: boolean;
   audienciaPagoMeta?: {
@@ -198,6 +200,7 @@ export type AudienciaSessionPatch = Partial<{
   analysisByTestigoId: Record<string, AudienciaCopilotOutput>;
   preguntasATodos: RepreguntaItem[];
   representacion: RepresentacionCaso;
+  contextoAdicionalAbogado?: string;
   alegatoGlobal?: string;
   alegatoGlobalMeta?: AudienciaSessionData['alegatoGlobalMeta'];
   tokenUsage?: AiTokenUsageMeta;

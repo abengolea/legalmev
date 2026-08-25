@@ -90,7 +90,10 @@ export async function POST(
       puntosFuertesActuales,
       debilidadesContrariaActuales,
       representacionContexto: formatRepresentacionContexto(representacion, expedienteAnalysis),
-      expedienteContexto: formatExpedienteContexto(expedienteAnalysis),
+      expedienteContexto: formatExpedienteContexto(
+        expedienteAnalysis,
+        data.contextoAdicionalAbogado as string | undefined
+      ),
       testimoniosAudienciaTexto: formatTestimoniosAudienciaContexto(
         testigos,
         analysisByTestigoId,

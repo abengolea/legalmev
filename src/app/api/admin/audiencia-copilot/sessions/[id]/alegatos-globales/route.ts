@@ -81,7 +81,10 @@ export async function POST(
       (data.analysisByTestigoId as Record<string, AudienciaCopilotOutput>) || {};
 
     const alegatosResult = await generarAlegatosGlobales({
-      expedienteContexto: formatExpedienteContexto(expedienteAnalysis),
+      expedienteContexto: formatExpedienteContexto(
+        expedienteAnalysis,
+        data.contextoAdicionalAbogado as string | undefined
+      ),
       representacionContexto: formatRepresentacionContexto(representacion, expedienteAnalysis),
       testimoniosAudienciaTexto: formatTestimoniosAudienciaContexto(
         testigos,

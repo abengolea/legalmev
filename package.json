@@ -14,6 +14,8 @@
     "lint:src": "eslint src",
     "lint:next": "next lint",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run --config vitest.config.mts",
+    "test:watch": "vitest --config vitest.config.mts",
     "create-admin": "node scripts/create-admin.js",
     "check-credentials": "node scripts/check-firebase-credentials.js",
     "check-env": "node scripts/inspect-env.js",
@@ -84,11 +86,13 @@
     "@types/qrcode": "^1.5.6",
     "@types/react": "^18",
     "@types/react-dom": "^18",
+    "@vitest/coverage-v8": "^4.1.10",
     "eslint": "^9.39.4",
     "eslint-config-next": "^16.2.3",
     "genkit-cli": "^1.14.1",
     "postcss": "^8",
     "tailwindcss": "^3.4.1",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.10"
   }
 }

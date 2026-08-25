@@ -60,6 +60,7 @@ function toSessionData(
     alegatoGlobalMeta: data.alegatoGlobalMeta as AudienciaSessionData['alegatoGlobalMeta'],
     documentosAdicionales:
       (data.documentosAdicionales as AudienciaSessionData['documentosAdicionales']) || [],
+    contextoAdicionalAbogado: (data.contextoAdicionalAbogado as string | undefined) ?? '',
     tokenUsage: data.tokenUsage as AudienciaSessionData['tokenUsage'],
     audienciaPagada: data.audienciaPagada === true,
     audienciaPagoMeta: data.audienciaPagoMeta as AudienciaSessionData['audienciaPagoMeta'],
@@ -185,6 +186,11 @@ export async function PATCH(
     }
     if (body.alegatoGlobalMeta !== undefined) update.alegatoGlobalMeta = body.alegatoGlobalMeta;
     if (body.tokenUsage !== undefined) update.tokenUsage = body.tokenUsage;
+    if (body.contextoAdicionalAbogado !== undefined) {
+      update.contextoAdicionalAbogado = body.contextoAdicionalAbogado
+        ? redactSensitiveIdentifiers(body.contextoAdicionalAbogado)
+        : body.contextoAdicionalAbogado;
+    }
 
     await result.ref.update(update);
 

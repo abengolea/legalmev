@@ -240,6 +240,7 @@ export function AudienciaCopilot() {
   const [pdfEscaneadoOpen, setPdfEscaneadoOpen] = useState(false);
   const [pdfEscaneadoMensaje, setPdfEscaneadoMensaje] = useState('');
   const [reanalizandoCaso, setReanalizandoCaso] = useState(false);
+  const [contextoAdicionalAbogado, setContextoAdicionalAbogado] = useState('');
   const [tokenUsage, setTokenUsage] = useState<AiTokenUsageMeta>({ ...EMPTY_TOKEN_USAGE });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const docAdicionalInputRef = useRef<HTMLInputElement>(null);
@@ -255,7 +256,9 @@ export function AudienciaCopilot() {
   const testigoActivo = testigos.find((t) => t.id === testigoActivoId) ?? null;
   const tipoFuero = expedienteAnalysis?.tipoFuero ?? 'civil';
   const esPenal = esFueroPenal(tipoFuero);
-  const expedienteContexto = expedienteAnalysis ? formatExpedienteContexto(expedienteAnalysis) : '';
+  const expedienteContexto = expedienteAnalysis
+    ? formatExpedienteContexto(expedienteAnalysis, contextoAdicionalAbogado)
+    : '';
   const representacionContexto = formatRepresentacionContexto(representacion, expedienteAnalysis);
   const representacionDirty = !sameRepresentacion(representacion, representacionGuardada);
   const bandejaLabels = etiquetasBandejaDeclarante(representacion, tipoFuero);
@@ -363,7 +366,9 @@ export function AudienciaCopilot() {
     [expedienteContexto, sessionId, aplicarTokenUsage]
   );
 
-  const sincronizarYReanalizarCaso = useCallback(async () => {
+  const sincronizarYReanalizarCaso = useCallback(async (opts?: {
+    generarPreguntasIniciales?: boolean;
+  }) => {
     if (!sessionId || !expedienteAnalysis) return;
     if (!representacion.parte) {
       toast({
@@ -371,6 +376,15 @@ export function AudienciaCopilot() {
         description: esPenal
           ? 'Seleccioná Defensa o Fiscalía antes de reanalizar.'
           : 'Seleccioná actor o demandado antes de reanalizar.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (opts?.generarPreguntasIniciales && !contextoAdicionalAbogado.trim()) {
+      toast({
+        title: 'Pegá el contexto extra',
+        description:
+          'Escribí de qué va la causa o la lista de testigos (quiénes son y qué esperás de cada uno).',
         variant: 'destructive',
       });
       return;
@@ -390,7 +404,11 @@ export function AudienciaCopilot() {
             Authorization: `Bearer ${token}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ representacion }),
+          body: JSON.stringify({
+            representacion,
+            contextoAdicionalAbogado,
+            generarPreguntasIniciales: opts?.generarPreguntasIniciales === true,
+          }),
         }
       );
       const json = await safeResJson<{
@@ -398,8 +416,13 @@ export function AudienciaCopilot() {
         expedienteAnalysis?: ExpedienteAnalysisOutput;
         analysisByTestigoId?: Record<string, AudienciaCopilotOutput>;
         preguntasATodos?: RepreguntaItem[];
+        testigos?: Testigo[];
+        testigoActivoId?: string | null;
         testigosReanalizados?: number;
+        testigosAgregados?: number;
+        testigosActualizados?: number;
         representacion?: RepresentacionCaso;
+        contextoAdicionalAbogado?: string;
         tokenUsage?: AiTokenUsageMeta;
         error?: string;
       }>(res);
@@ -410,7 +433,17 @@ export function AudienciaCopilot() {
 
       if (json.tokenUsage) aplicarTokenUsage(json.tokenUsage);
 
+      skipSaveRef.current = true;
       setExpedienteAnalysis(json.expedienteAnalysis);
+      if (json.testigos) {
+        setTestigos(normalizeTestigos(json.testigos));
+      }
+      if (json.testigoActivoId !== undefined) {
+        setTestigoActivoId(json.testigoActivoId);
+      }
+      if (typeof json.contextoAdicionalAbogado === 'string') {
+        setContextoAdicionalAbogado(json.contextoAdicionalAbogado);
+      }
       if (json.analysisByTestigoId) {
         const migrated = migrateSessionRepreguntas({
           preguntasATodos: json.preguntasATodos,
@@ -418,8 +451,9 @@ export function AudienciaCopilot() {
         });
         setAnalysisByTestigoId(migrated.analysisByTestigoId);
         setPreguntasATodos(migrated.preguntasATodos);
-        if (testigoActivoId && migrated.analysisByTestigoId[testigoActivoId]) {
-          setAnalysis(migrated.analysisByTestigoId[testigoActivoId]);
+        const activeId = json.testigoActivoId ?? testigoActivoId;
+        if (activeId && migrated.analysisByTestigoId[activeId]) {
+          setAnalysis(migrated.analysisByTestigoId[activeId]);
         }
       } else if (json.preguntasATodos) {
         setPreguntasATodos(json.preguntasATodos);
@@ -432,12 +466,20 @@ export function AudienciaCopilot() {
       setAlegatoGlobalMeta(undefined);
 
       const declarantes = json.testigosReanalizados ?? 0;
+      const extras = [
+        json.testigosAgregados ? `${json.testigosAgregados} declarante(s) incorporado(s)` : '',
+        json.testigosActualizados ? `${json.testigosActualizados} con contexto actualizado` : '',
+      ].filter(Boolean);
       toast({
-        title: 'Caso reanalizado',
+        title: opts?.generarPreguntasIniciales
+          ? 'Contexto aplicado'
+          : 'Caso reanalizado',
         description:
-          declarantes > 0
-            ? `Mapa del expediente actualizado y sugerencias revisadas para ${declarantes} declarante(s).`
-            : 'Mapa del expediente actualizado según tu objetivo estratégico.',
+          opts?.generarPreguntasIniciales
+            ? `Mapa actualizado${extras.length ? ` (${extras.join('; ')})` : ''}. Preguntas sugeridas listas para ${declarantes} declarante(s).`
+            : declarantes > 0
+              ? `Mapa del expediente actualizado y sugerencias revisadas para ${declarantes} declarante(s).`
+              : 'Mapa del expediente actualizado según tu objetivo estratégico.',
       });
     } catch (err) {
       toast({
@@ -448,7 +490,16 @@ export function AudienciaCopilot() {
     } finally {
       setReanalizandoCaso(false);
     }
-  }, [sessionId, expedienteAnalysis, representacion, testigoActivoId, esPenal, toast, aplicarTokenUsage]);
+  }, [
+    sessionId,
+    expedienteAnalysis,
+    representacion,
+    contextoAdicionalAbogado,
+    testigoActivoId,
+    esPenal,
+    toast,
+    aplicarTokenUsage,
+  ]);
 
   const resetParaNuevaAudiencia = useCallback(() => {
     skipSaveRef.current = true;
@@ -467,6 +518,7 @@ export function AudienciaCopilot() {
     setInstruccionesAlegato('');
     setDocumentosAdicionales([]);
     setDescripcionDocumento('');
+    setContextoAdicionalAbogado('');
     setTokenUsage({ ...EMPTY_TOKEN_USAGE });
     setNuevaPregunta('');
     setNuevaRespuesta('');
@@ -503,6 +555,7 @@ export function AudienciaCopilot() {
     setAlegatoGlobal(session.alegatoGlobal ?? '');
     setAlegatoGlobalMeta(session.alegatoGlobalMeta);
     setDocumentosAdicionales(session.documentosAdicionales ?? []);
+    setContextoAdicionalAbogado(session.contextoAdicionalAbogado ?? '');
     setAudienciaPagada(session.audienciaPagada === true);
     setTokenUsage(
       session.tokenUsage
@@ -674,6 +727,7 @@ export function AudienciaCopilot() {
           preguntasATodos,
           alegatoGlobal,
           alegatoGlobalMeta,
+          contextoAdicionalAbogado,
           tokenUsage,
         }),
       });
@@ -684,7 +738,7 @@ export function AudienciaCopilot() {
     } catch {
       setSaveStatus('error');
     }
-  }, [sessionId, canEditSession, testigos, testigoActivoId, analysisByTestigoId, preguntasATodos, alegatoGlobal, alegatoGlobalMeta, tokenUsage, fetchSessions]);
+  }, [sessionId, canEditSession, testigos, testigoActivoId, analysisByTestigoId, preguntasATodos, alegatoGlobal, alegatoGlobalMeta, contextoAdicionalAbogado, tokenUsage, fetchSessions]);
 
   const actualizarParteRepresentada = (parte: ParteRepresentada) => {
     setRepresentacion((prev) => ({ ...prev, parte }));
@@ -820,7 +874,7 @@ export function AudienciaCopilot() {
       void saveSession();
     }, 1200);
     return () => clearTimeout(timer);
-  }, [sessionId, canEditSession, testigos, testigoActivoId, analysisByTestigoId, preguntasATodos, alegatoGlobal, alegatoGlobalMeta, tokenUsage, saveSession]);
+  }, [sessionId, canEditSession, testigos, testigoActivoId, analysisByTestigoId, preguntasATodos, alegatoGlobal, alegatoGlobalMeta, contextoAdicionalAbogado, tokenUsage, saveSession]);
 
   const handleLoadPdf = async (file: File) => {
     setIsLoading(true);
@@ -1008,6 +1062,9 @@ export function AudienciaCopilot() {
                   <p className="text-xs text-muted-foreground">{t.rol}</p>
                   <p className="mt-1 text-xs text-muted-foreground">
                     {t.intercambios.length} pregunta(s) en audiencia
+                    {(analysisByTestigoId[t.id]?.repreguntas?.length ?? 0) > 0
+                      ? ` · ${analysisByTestigoId[t.id].repreguntas.length} sugerida(s)`
+                      : ''}
                   </p>
                 </div>
                 {t.testimonioCerrado && (
@@ -1871,7 +1928,7 @@ export function AudienciaCopilot() {
                 <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-background/50">
                   <div className="flex items-center gap-2 text-sm font-medium text-primary">
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    Reencuadrando mapa del caso...
+                    Reencuadrando el caso y armando preguntas sugeridas...
                   </div>
                 </div>
               )}
@@ -1904,6 +1961,56 @@ export function AudienciaCopilot() {
               </div>
             </div>
           )}
+
+          {expedienteAnalysis && (
+            <div className="rounded-lg border border-dashed border-primary/40 bg-background p-4 space-y-3">
+              <div className="space-y-1">
+                <Label htmlFor="contexto-adicional-caso" className="text-sm font-semibold">
+                  Agregar más contexto
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  No hace falta cargar testigos uno por uno. Pegá de qué va la causa o la lista de
+                  declarantes (quién es cada uno y qué esperás obtener). La IA actualiza el mapa y
+                  arma las preguntas sugeridas para cada uno.
+                </p>
+              </div>
+              <Textarea
+                id="contexto-adicional-caso"
+                value={contextoAdicionalAbogado}
+                onChange={(e) => setContextoAdicionalAbogado(e.target.value)}
+                disabled={!canEditSession || reanalizandoCaso}
+                placeholder={
+                  'Ejemplo:\n1) Juan Pérez — vecino. Vio quién estaba el día del hecho.\n2) María Gómez — empleada de la actora. Puede confirmar horarios.\n3) …'
+                }
+                className="min-h-[120px] resize-y text-sm"
+              />
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-[11px] text-muted-foreground">
+                  Indicá primero a quién representás. La actualización puede tardar unos minutos si
+                  hay varios declarantes.
+                </p>
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={
+                    reanalizandoCaso ||
+                    isLoading ||
+                    !canEditSession ||
+                    !representacion.parte ||
+                    !contextoAdicionalAbogado.trim()
+                  }
+                  onClick={() => void sincronizarYReanalizarCaso({ generarPreguntasIniciales: true })}
+                >
+                  {reanalizandoCaso ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="mr-2 h-4 w-4" />
+                  )}
+                  Actualizar con este contexto
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -1920,7 +2027,10 @@ export function AudienciaCopilot() {
                   </span>
                   <Badge variant="secondary">{testigos.length}</Badge>
                 </CardTitle>
-                <CardDescription>Testigos detectados en el expediente o agregados manualmente</CardDescription>
+                <CardDescription>
+                  Detectados en el expediente. Preferí completarlos con «Agregar más contexto» en el
+                  paso 1; el alta manual es solo para un nombre suelto.
+                </CardDescription>
               </CardHeader>
               <CardContent className="flex flex-col gap-3">
                 <div className="space-y-2 shrink-0">
@@ -2220,7 +2330,8 @@ export function AudienciaCopilot() {
                   )}
                 </CardTitle>
                 <CardDescription>
-                  Análisis en tiempo real del declarante activo
+                  Preguntas sugeridas y alertas del declarante activo. Se arman al actualizar con
+                  contexto extra o al anotar preguntas en audiencia.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
