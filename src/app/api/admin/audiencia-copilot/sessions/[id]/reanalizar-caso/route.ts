@@ -6,6 +6,7 @@ import { requireGoogleGenAiApiKey } from '@/lib/google-ai-key';
 import { GEMINI_MODEL_ID } from '@/lib/gemini-model';
 import { normalizeTokenUsage, sumTokenUsage } from '@/lib/ai-token-usage';
 import { analyzeExpediente, type ExpedienteAnalysisOutput } from '@/ai/flows/audiencia-expediente-analysis';
+import { extraerDeclarantesDesdeContexto } from '@/ai/flows/audiencia-contexto-declarantes';
 import { analyzeAudiencia, type AudienciaCopilotOutput } from '@/ai/flows/audiencia-copilot';
 import type { AudienciaTestigo, RepresentacionCaso } from '@/lib/audiencia-session-types';
 import {
@@ -31,9 +32,13 @@ import {
 import { redactSensitiveIdentifiers } from '@/lib/redact-identifiers';
 
 const MAX_TEXTO_ANALISIS = 120_000;
-const MAX_CONTEXTO_ADICIONAL = 12_000;
+const MAX_CONTEXTO_ADICIONAL = 8_000;
 
-export const maxDuration = 300;
+export const maxDuration = 180;
+
+function toFirestore<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
 
 function formatIntercambios(intercambios: AudienciaTestigo['intercambios']): string {
   if (intercambios.length === 0) return '(Aún no hay preguntas registradas.)';
@@ -44,6 +49,16 @@ function formatIntercambios(intercambios: AudienciaTestigo['intercambios']): str
       return `${n + 1}. P: ${p}\n   R: ${r}`;
     })
     .join('\n\n');
+}
+
+function testigoActivoTrasMerge(
+  idsAgregados: string[],
+  testigosMerged: AudienciaTestigo[],
+  actual: string | null
+): string | null {
+  if (idsAgregados[0]) return idsAgregados[0];
+  if (actual && testigosMerged.some((t) => t.id === actual)) return actual;
+  return testigosMerged[0]?.id ?? null;
 }
 
 /** Reanaliza mapa del expediente y sugerencias según representación y objetivo estratégico. */
@@ -105,13 +120,103 @@ export async function POST(
     const testigos = (data.testigos as AudienciaTestigo[]) || [];
     const analysisByTestigoId =
       (data.analysisByTestigoId as Record<string, AudienciaCopilotOutput>) || {};
+    const expedientePrevio = (data.expedienteAnalysis as ExpedienteAnalysisOutput | undefined) ?? null;
+    const limits = getCopilotLimitsForContext(auth.unlimited, isAudienciaSessionPaid(data));
+    const maxTestigos = limits?.maxTestigos ?? Number.POSITIVE_INFINITY;
+
+    if (generarPreguntasIniciales) {
+      if (!contextoAdicionalAbogado) {
+        return NextResponse.json(
+          { ok: false, error: 'Pegá el contexto extra (lista de testigos y de qué va cada uno)' },
+          { status: 400 }
+        );
+      }
+      if (!expedientePrevio) {
+        return NextResponse.json(
+          { ok: false, error: 'Esperá a que termine la lectura del expediente antes de agregar contexto' },
+          { status: 400 }
+        );
+      }
+
+      const extractResult = await extraerDeclarantesDesdeContexto({
+        expedienteResumen: formatExpedienteContexto(expedientePrevio).slice(0, 24_000),
+        representacionContexto: formatRepresentacionContexto(representacion, expedientePrevio),
+        contextoAdicionalAbogado,
+        testigosYaCargados:
+          testigos.length > 0
+            ? testigos.map((t) => `${t.nombre} (${t.rol})`).join('\n')
+            : '(Ninguno cargado aún)',
+      });
+
+      const identified = extractResult.output.testigosIdentificados;
+      const merged = mergeTestigosConIdentificados({
+        existing: testigos,
+        identified,
+        declaracionesPrevias: expedientePrevio.declaracionesPrevias ?? [],
+        representacion,
+        tipoFuero: expedientePrevio.tipoFuero,
+        maxTestigos,
+      });
+      const nextAnalysisMap = seedAnalisisDesdeIdentificados({
+        testigos: merged.testigos,
+        identified,
+        analysisByTestigoId,
+      });
+      const migrated = migrateSessionRepreguntas({
+        preguntasATodos: normalizeRepreguntas(
+          (data.preguntasATodos as RepreguntaItem[] | undefined) ?? []
+        ),
+        analysisByTestigoId: nextAnalysisMap,
+      });
+      const testigoActivoId = testigoActivoTrasMerge(
+        merged.idsAgregados,
+        merged.testigos,
+        (data.testigoActivoId as string | null) ?? null
+      );
+      const now = new Date().toISOString();
+      const tokenUsage = {
+        ...sumTokenUsage(normalizeTokenUsage(data.tokenUsage), extractResult.usage),
+        model: GEMINI_MODEL_ID,
+        lastUpdatedAt: now,
+      };
+
+      await ref.update(
+        toFirestore({
+          representacion,
+          contextoAdicionalAbogado,
+          testigos: merged.testigos,
+          testigoActivoId,
+          analysisByTestigoId: migrated.analysisByTestigoId,
+          preguntasATodos: migrated.preguntasATodos,
+          tokenUsage,
+          updatedAt: now,
+        })
+      );
+
+      return NextResponse.json({
+        ok: true,
+        sessionId,
+        expedienteAnalysis: expedientePrevio,
+        analysisByTestigoId: migrated.analysisByTestigoId,
+        preguntasATodos: migrated.preguntasATodos,
+        testigos: merged.testigos,
+        testigoActivoId,
+        testigosReanalizados: merged.testigos.filter((t) => migrated.analysisByTestigoId[t.id]?.repreguntas?.length)
+          .length,
+        testigosAgregados: merged.agregados,
+        testigosActualizados: merged.actualizados,
+        representacion,
+        contextoAdicionalAbogado,
+        meta: { provider: 'Google Gemini', model: GEMINI_MODEL_ID, usage: extractResult.usage },
+        tokenUsage,
+      });
+    }
 
     const textoParaAnalisis =
       texto.length > MAX_TEXTO_ANALISIS
         ? `${texto.slice(0, MAX_TEXTO_ANALISIS)}\n\n[... expediente truncado por tamaño ...]`
         : texto;
 
-    const expedientePrevio = (data.expedienteAnalysis as ExpedienteAnalysisOutput | undefined) ?? null;
     const representacionContexto = formatRepresentacionContexto(representacion, expedientePrevio);
     const testimoniosAudienciaContexto =
       testigos.length > 0
@@ -130,26 +235,19 @@ export async function POST(
         testimoniosAudienciaContexto && testimoniosAudienciaContexto.trim()
           ? testimoniosAudienciaContexto
           : undefined,
-      contextoAdicionalAbogado: contextoAdicionalAbogado || undefined,
     });
     const expedienteAnalysis = expedienteResult.output;
-    let tokenUsage = sumTokenUsage(
-      normalizeTokenUsage(data.tokenUsage),
-      expedienteResult.usage
-    );
+    let tokenUsage = sumTokenUsage(normalizeTokenUsage(data.tokenUsage), expedienteResult.usage);
 
-    const limits = getCopilotLimitsForContext(auth.unlimited, isAudienciaSessionPaid(data));
     const merged = mergeTestigosConIdentificados({
       existing: testigos,
       identified: expedienteAnalysis.testigosIdentificados ?? [],
       declaracionesPrevias: expedienteAnalysis.declaracionesPrevias ?? [],
       representacion,
       tipoFuero: expedienteAnalysis.tipoFuero,
-      maxTestigos: limits?.maxTestigos ?? Number.POSITIVE_INFINITY,
+      maxTestigos,
     });
     const testigosMerged = merged.testigos;
-    const testigosAgregados = merged.agregados;
-    const testigosActualizados = merged.actualizados;
 
     let nextAnalysisMap = seedAnalisisDesdeIdentificados({
       testigos: testigosMerged,
@@ -157,47 +255,15 @@ export async function POST(
       analysisByTestigoId,
     });
 
-    const expedienteContexto = formatExpedienteContexto(
-      expedienteAnalysis,
-      contextoAdicionalAbogado
-    );
+    const expedienteContexto = formatExpedienteContexto(expedienteAnalysis, contextoAdicionalAbogado);
     const repCtx = formatRepresentacionContexto(representacion, expedienteAnalysis);
 
     let preguntasATodos = normalizeRepreguntas(
       (data.preguntasATodos as RepreguntaItem[] | undefined) ?? []
     );
-
-    const idsNuevos = new Set(merged.idsAgregados);
-    const generarTodos =
-      generarPreguntasIniciales || Boolean(contextoAdicionalAbogado);
-    const testigosAReanalizar = generarTodos
-      ? testigosMerged
-      : testigosMerged.filter(
-          (t) =>
-            t.intercambios.length > 0 ||
-            !!analysisByTestigoId[t.id] ||
-            idsNuevos.has(t.id) ||
-            !(nextAnalysisMap[t.id]?.repreguntas?.length)
-        );
-
-    const testigoActivoId =
-      merged.idsAgregados[0] ||
-      ((data.testigoActivoId as string | null) &&
-      testigosMerged.some((t) => t.id === data.testigoActivoId)
-        ? (data.testigoActivoId as string)
-        : (testigosMerged[0]?.id ?? null));
-
-    const nowSeed = new Date().toISOString();
-    await ref.update({
-      representacion,
-      contextoAdicionalAbogado,
-      expedienteAnalysis,
-      testigos: testigosMerged,
-      testigoActivoId,
-      analysisByTestigoId: nextAnalysisMap,
-      preguntasATodos,
-      updatedAt: nowSeed,
-    });
+    const testigosAReanalizar = testigosMerged.filter(
+      (t) => t.intercambios.length > 0 || !!analysisByTestigoId[t.id]
+    );
 
     for (const testigo of testigosAReanalizar) {
       try {
@@ -214,6 +280,7 @@ export async function POST(
         });
         tokenUsage = sumTokenUsage(tokenUsage, rawResult.usage);
         const raw = rawResult.output;
+        if (!raw) continue;
         const rawSplit = splitRepreguntas(normalizeRepreguntas(raw.repreguntas));
         preguntasATodos = mergePreguntasATodos(preguntasATodos, rawSplit.todos);
         const prev = nextAnalysisMap[testigo.id];
@@ -241,20 +308,27 @@ export async function POST(
       model: GEMINI_MODEL_ID,
       lastUpdatedAt: now,
     };
+    const testigoActivoId = testigoActivoTrasMerge(
+      merged.idsAgregados,
+      testigosMerged,
+      (data.testigoActivoId as string | null) ?? null
+    );
 
-    await ref.update({
-      representacion,
-      contextoAdicionalAbogado,
-      expedienteAnalysis,
-      testigos: testigosMerged,
-      testigoActivoId,
-      analysisByTestigoId: migrated.analysisByTestigoId,
-      preguntasATodos: migrated.preguntasATodos,
-      alegatoGlobal: '',
-      alegatoGlobalMeta: null,
-      tokenUsage: tokenUsageMeta,
-      updatedAt: now,
-    });
+    await ref.update(
+      toFirestore({
+        representacion,
+        contextoAdicionalAbogado,
+        expedienteAnalysis,
+        testigos: testigosMerged,
+        testigoActivoId,
+        analysisByTestigoId: migrated.analysisByTestigoId,
+        preguntasATodos: migrated.preguntasATodos,
+        alegatoGlobal: '',
+        alegatoGlobalMeta: null,
+        tokenUsage: tokenUsageMeta,
+        updatedAt: now,
+      })
+    );
 
     return NextResponse.json({
       ok: true,
@@ -265,8 +339,8 @@ export async function POST(
       testigos: testigosMerged,
       testigoActivoId,
       testigosReanalizados: testigosAReanalizar.length,
-      testigosAgregados,
-      testigosActualizados,
+      testigosAgregados: merged.agregados,
+      testigosActualizados: merged.actualizados,
       representacion,
       contextoAdicionalAbogado,
       meta: { provider: 'Google Gemini', model: GEMINI_MODEL_ID, usage: tokenUsage },

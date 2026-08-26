@@ -86,8 +86,12 @@ export async function analyzeExpediente(
   input: ExpedienteAnalysisInput
 ): Promise<AiFlowResult<ExpedienteAnalysisOutput>> {
   const response = await expedienteAnalysisPrompt(input);
+  const output = response.output;
+  if (!output) {
+    throw new Error('La IA no devolvió un análisis válido del expediente. Reintentá en un momento.');
+  }
   return {
-    output: response.output!,
+    output,
     usage: normalizeTokenUsage(response.usage),
   };
 }
@@ -142,8 +146,6 @@ OBLIGATORIO:
 - relevancia: de qué va ese testigo (hechos que puede acreditar, relación con las partes).
 
 {{{contextoAdicionalAbogado}}}
-{{else}}
-Para cada testigoIdentificado del expediente, si podés, incluí preguntasSugeridas (6 a 10 preguntas literales a formular).
 {{/if}}
 
 **Expediente:**

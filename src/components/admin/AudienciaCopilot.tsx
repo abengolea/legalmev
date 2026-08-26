@@ -1986,8 +1986,8 @@ export function AudienciaCopilot() {
               />
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-[11px] text-muted-foreground">
-                  Indicá primero a quién representás. La actualización puede tardar unos minutos si
-                  hay varios declarantes.
+                  Indicá primero a quién representás. Suele tardar menos de un minuto: una sola
+                  lectura de la lista, sin reanalizar todo el expediente.
                 </p>
                 <Button
                   type="button"
