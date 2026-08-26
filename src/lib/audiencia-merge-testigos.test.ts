@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mergeTestigosConIdentificados, normalizeNombreDeclarante } from '@/lib/audiencia-merge-testigos';
+import { mergeTestigosConIdentificados, normalizeNombreDeclarante, seedAnalisisDesdeIdentificados } from '@/lib/audiencia-merge-testigos';
 import type { AudienciaTestigo } from '@/lib/audiencia-session-types';
 
 function testigo(partial: Partial<AudienciaTestigo> & Pick<AudienciaTestigo, 'nombre'>): AudienciaTestigo {
@@ -81,6 +81,7 @@ describe('mergeTestigosConIdentificados', () => {
 
     expect(result.testigos).toHaveLength(2);
     expect(result.agregados).toBe(1);
+    expect(result.idsAgregados).toHaveLength(1);
     expect(result.testigos[1].nombre).toBe('Ana Lopez');
     expect(result.testigos[1].contextoDeclarante).toBe('Pericia mecánica.');
   });
@@ -109,5 +110,30 @@ describe('mergeTestigosConIdentificados', () => {
     expect(result.testigos[0].nombre).toBe('A');
     expect(result.testigos[0].intercambios).toHaveLength(1);
     expect(result.agregados).toBe(0);
+  });
+});
+
+describe('seedAnalisisDesdeIdentificados', () => {
+  it('carga las preguntas sugeridas en el análisis de cada testigo', () => {
+    const existing = [testigo({ id: 't1', nombre: 'Ana Lopez' })];
+    const analysis = seedAnalisisDesdeIdentificados({
+      testigos: existing,
+      identified: [
+        {
+          nombre: 'Ana López',
+          rol: 'Perito',
+          relevancia: 'Pericia mecánica.',
+          parteProcesal: 'neutro',
+          preguntasSugeridas: [
+            '¿Qué metodología usó para la pericia?',
+            '¿Revisó el vehículo el mismo día del hecho?',
+          ],
+        },
+      ],
+      analysisByTestigoId: {},
+    });
+
+    expect(analysis.t1.repreguntas).toHaveLength(2);
+    expect(analysis.t1.repreguntas[0].texto).toContain('metodología');
   });
 });

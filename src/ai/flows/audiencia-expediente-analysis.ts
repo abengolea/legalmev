@@ -70,6 +70,12 @@ export const ExpedienteAnalysisOutputSchema = z.object({
         .describe(
           'Civil: actor o demandado. Penal: defensa (propuesto por/defensor del imputado) o fiscalia (propuesto por el MP). neutro: perito u oficial. desconocido si no se determina.'
         ),
+      preguntasSugeridas: z
+        .array(z.string())
+        .optional()
+        .describe(
+          'Preguntas literales a formular a este declarante en audiencia (6 a 10), listas para leer.'
+        ),
     })
   ),
 });
@@ -126,10 +132,18 @@ El abogado ya indicó a quién representa y su objetivo. NO repitas un resumen n
 {{/if}}
 
 {{#if contextoAdicionalAbogado}}
-**CONTEXTO ADICIONAL DEL ABOGADO (prioritario para completar declarantes):**
-El abogado pegó notas extra: de qué va la causa y/o la lista de quienes declaran. NO inventes personas que no figuren acá ni en el expediente. Cruzá nombres con el expediente, completá testigosIdentificados (nombre, rol, relevancia concreta de DE QUÉ VA cada uno, parteProcesal) y enriquecé el mapa del caso. Si lista 4 testigos, esos 4 deben quedar identificados con relevancia útil para armar preguntas.
+**CONTEXTO ADICIONAL DEL ABOGADO (prioridad máxima para declarantes y preguntas):**
+El abogado pegó notas extra: de qué va la causa y/o la lista de quienes declaran.
+
+OBLIGATORIO:
+- Incluí en testigosIdentificados a TODAS las personas que el abogado nombre en estas notas, aunque no figuren en el expediente. Las notas del abogado mandan.
+- No omitas un testigo de la lista: si hay 4 nombres, deben ser 4 entradas (más los del expediente que no estén en la lista).
+- Para CADA testigoIdentificado completá preguntasSugeridas: 6 a 10 preguntas literales, concretas, listas para formular en audiencia, según de qué va ese declarante y la representación.
+- relevancia: de qué va ese testigo (hechos que puede acreditar, relación con las partes).
 
 {{{contextoAdicionalAbogado}}}
+{{else}}
+Para cada testigoIdentificado del expediente, si podés, incluí preguntasSugeridas (6 a 10 preguntas literales a formular).
 {{/if}}
 
 **Expediente:**

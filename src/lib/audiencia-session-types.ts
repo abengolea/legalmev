@@ -59,6 +59,22 @@ export function mergePreguntasATodos(
   return Array.from(map.values());
 }
 
+export function unionRepreguntas(
+  existing: RepreguntaItem[],
+  incoming: RepreguntaItem[]
+): RepreguntaItem[] {
+  const map = new Map<string, RepreguntaItem>();
+  for (const item of [...existing, ...incoming]) {
+    const key = item.texto.trim().toLowerCase();
+    if (!key) continue;
+    map.set(key, {
+      texto: item.texto.trim(),
+      destinatario: item.destinatario === 'todos' ? 'todos' : 'testigo',
+    });
+  }
+  return Array.from(map.values());
+}
+
 export function normalizeAudienciaAnalysis<T extends { repreguntas?: unknown }>(
   analysis: T
 ): T & { repreguntas: RepreguntaItem[] } {

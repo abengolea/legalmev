@@ -476,7 +476,7 @@ export function AudienciaCopilot() {
           : 'Caso reanalizado',
         description:
           opts?.generarPreguntasIniciales
-            ? `Mapa actualizado${extras.length ? ` (${extras.join('; ')})` : ''}. Preguntas sugeridas listas para ${declarantes} declarante(s).`
+            ? `Se cargaron ${json.testigos?.length ?? 0} declarante(s)${extras.length ? ` (${extras.join('; ')})` : ''} y las preguntas a realizar.`
             : declarantes > 0
               ? `Mapa del expediente actualizado y sugerencias revisadas para ${declarantes} declarante(s).`
               : 'Mapa del expediente actualizado según tu objetivo estratégico.',
@@ -1969,9 +1969,9 @@ export function AudienciaCopilot() {
                   Agregar más contexto
                 </Label>
                 <p className="text-xs text-muted-foreground">
-                  No hace falta cargar testigos uno por uno. Pegá de qué va la causa o la lista de
-                  declarantes (quién es cada uno y qué esperás obtener). La IA actualiza el mapa y
-                  arma las preguntas sugeridas para cada uno.
+                  No hace falta cargarlos a mano. Pegá la lista de testigos (quién es cada uno y de
+                  qué va). Al actualizar, la IA los suma al paso 2 y carga las preguntas a formular
+                  en el copiloto.
                 </p>
               </div>
               <Textarea
@@ -2230,7 +2230,30 @@ export function AudienciaCopilot() {
 
                     <ScrollArea className="h-[200px] rounded-lg border p-3">
                       {testigoActivo.intercambios.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">Sin preguntas aún.</p>
+                        analysis.repreguntas.length > 0 ? (
+                          <div className="space-y-2">
+                            <p className="text-xs font-semibold text-primary">
+                              Preguntas a realizar ({analysis.repreguntas.length})
+                            </p>
+                            <p className="text-[11px] text-muted-foreground">
+                              Cargadas por la IA. Tocá una para usarla en el recuadro de pregunta.
+                            </p>
+                            {analysis.repreguntas.map((item, i) => (
+                              <button
+                                key={`${item.texto}-${i}`}
+                                type="button"
+                                className="block w-full rounded-md border bg-background px-2 py-1.5 text-left text-sm hover:bg-muted/60"
+                                onClick={() => setNuevaPregunta(item.texto)}
+                              >
+                                {i + 1}. {item.texto}
+                              </button>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-muted-foreground">
+                            Sin preguntas cargadas aún. Actualizá con contexto extra en el paso 1.
+                          </p>
+                        )
                       ) : (
                         <div className="space-y-4">
                           {testigoActivo.intercambios.map((i, n) => (
@@ -2353,7 +2376,7 @@ export function AudienciaCopilot() {
                       }}
                       itemClassName="border-primary/30 bg-primary/5"
                       addPlaceholder="Agregar pregunta manual..."
-                      emptyMessage="Sin preguntas aún. La IA las sugerirá al registrar P/R, o agregá una acá."
+                      emptyMessage="Sin preguntas aún. Actualizá con contexto extra en el paso 1 para que la IA las cargue, o agregá una acá."
                     />
                   )}
                   {preguntasATodos.length > 0 && (

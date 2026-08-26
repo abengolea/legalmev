@@ -37,7 +37,7 @@ const PASOS = [
     icon: Users,
     titulo: '3. Organizá los declarantes',
     texto:
-      'Revisá los testigos del expediente. Preferí completarlos con el contexto extra del paso 1, no cargarlos uno por uno. Marcá la bandeja (tu parte, contraria o sin clasificar) y elegí el declarante activo para ver las preguntas sugeridas.',
+      'Revisá los testigos del expediente. Preferí completarlos con el contexto extra del paso 1: la IA debe sumar a los declarantes nuevos y cargar las preguntas a realizar. Marcá la bandeja y elegí el declarante activo para verlas.',
   },
   {
     icon: MessageSquare,
