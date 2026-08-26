@@ -9,11 +9,15 @@ const DeclaranteDesdeContextoSchema = z.object({
   parteProcesal: z.enum(['actor', 'demandado', 'defensa', 'fiscalia', 'neutro', 'desconocido']),
   preguntasSugeridas: z
     .array(z.string())
-    .describe('5 a 8 preguntas literales listas para formular a este declarante.'),
+    .describe(
+      '5 a 8 preguntas literales alineadas al eje estratégico; al menos 2 no obvias pero todavía dentro del eje.'
+    ),
 });
 
 export const ExtraerDeclarantesContextoInputSchema = z.object({
-  expedienteResumen: z.string().describe('Mapa breve del expediente ya analizado.'),
+  ejeEstrategico: z
+    .string()
+    .describe('Eje estratégico, objeto y puntos controvertidos ya analizados. No es el expediente completo.'),
   representacionContexto: z.string(),
   contextoAdicionalAbogado: z.string(),
   testigosYaCargados: z.string().describe('Nombres ya cargados en la audiencia, si hay.'),
@@ -46,21 +50,27 @@ const extraerDeclarantesContextoPrompt = ai.definePrompt({
   name: 'extraerDeclarantesContextoPrompt',
   input: { schema: ExtraerDeclarantesContextoInputSchema },
   output: { schema: ExtraerDeclarantesContextoOutputSchema },
-  prompt: `Sos copiloto litigante en una audiencia argentina. El expediente YA fue leído. El abogado pegó notas extra (lista de testigos y de qué va cada uno).
+  prompt: `Sos copiloto litigante en una audiencia argentina. El expediente YA fue leído: NO lo releyés. Trabajás SOLO con el eje estratégico del caso y las notas del abogado.
 
-Tu ÚNICA tarea: extraer los declarantes de esas notas y armar preguntas a formular.
+Tu tarea: extraer los declarantes de las notas y armar preguntas a formular.
 
-REGLAS:
-- Incluí a TODA persona nombrada en las notas del abogado, aunque no esté en el resumen del expediente.
-- Si un nombre ya figura en "Ya cargados", igual devolvelo (para completar rol, relevancia y preguntas).
+REGLAS DE DECLARANTES:
+- Incluí a TODA persona nombrada en las notas del abogado.
+- Si un nombre ya figura en "Ya cargados", igual devolvelo (rol, relevancia y preguntas).
 - No inventes personas que el abogado no haya nombrado.
-- Para cada uno: nombre, rol, relevancia (de qué va), parteProcesal, y 5 a 8 preguntasSugeridas literales, breves, litigables, a favor de la parte que representamos.
+
+REGLAS DE PREGUNTAS (obligatorio):
+- TODA pregunta debe servir al EJE ESTRATÉGICO. Descartá lo que se desvíe (anécdotas, trámites, hechos que no mueven ese eje).
+- 5 a 8 preguntasSugeridas por declarante, literales, breves, listas para leer.
+- La mayoría: las que un litigante atento haría sobre ese eje.
+- Al menos 2 deben ser NO OBVIAS: ángulos que suelen pasarse por alto (omisión, cadena de conocimiento, contradicción futura, hecho periférico que cierra el eje). Siguen siendo del eje, no ocurrencias sueltas.
+- A favor de la parte que representamos.
 
 **Nuestra representación:**
 {{{representacionContexto}}}
 
-**Mapa del expediente (ya analizado):**
-{{{expedienteResumen}}}
+**Eje estratégico del caso (única brújula; no hay expediente completo):**
+{{{ejeEstrategico}}}
 
 **Ya cargados en esta audiencia:**
 {{{testigosYaCargados}}}

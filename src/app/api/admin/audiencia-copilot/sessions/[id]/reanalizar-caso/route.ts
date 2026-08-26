@@ -20,6 +20,7 @@ import {
 } from '@/lib/audiencia-session-types';
 import type { RepreguntaItem } from '@/lib/audiencia-session-types';
 import {
+  formatEjeEstrategicoParaPreguntas,
   formatExpedienteContexto,
   formatRepresentacionContexto,
   formatTestimoniosAudienciaContexto,
@@ -139,7 +140,7 @@ export async function POST(
       }
 
       const extractResult = await extraerDeclarantesDesdeContexto({
-        expedienteResumen: formatExpedienteContexto(expedientePrevio).slice(0, 24_000),
+        ejeEstrategico: formatEjeEstrategicoParaPreguntas(expedientePrevio, representacion),
         representacionContexto: formatRepresentacionContexto(representacion, expedientePrevio),
         contextoAdicionalAbogado,
         testigosYaCargados:

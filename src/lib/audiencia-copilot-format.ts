@@ -127,6 +127,28 @@ export function formatExpedienteContexto(
   return lines.filter(Boolean).join('\n\n');
 }
 
+/** Solo eje del caso (sin reenviar el expediente). Para armar preguntas al cargar contexto extra. */
+export function formatEjeEstrategicoParaPreguntas(
+  ctx: ExpedienteAnalysisOutput,
+  representacion?: RepresentacionCaso | null
+): string {
+  const puntos = (ctx.puntosControvertidos ?? []).slice(0, 5);
+  const lines = [
+    ctx.caratula ? `CARÁTULA: ${ctx.caratula}` : '',
+    `OBJETO: ${ctx.objetoLitigio}`,
+    ctx.ejeEstrategico?.trim()
+      ? `EJE ESTRATÉGICO: ${ctx.ejeEstrategico.trim()}`
+      : 'EJE ESTRATÉGICO: (aún no reencuadrado; usá objeto, puntos controvertidos y el objetivo del abogado)',
+    representacion?.notas?.trim()
+      ? `OBJETIVO DEL ABOGADO: ${representacion.notas.trim()}`
+      : '',
+    puntos.length
+      ? `PUNTOS CONTROVERTIDOS:\n${puntos.map((p) => `- ${p}`).join('\n')}`
+      : '',
+  ];
+  return lines.filter(Boolean).join('\n\n');
+}
+
 export function formatRepresentacionContexto(
   rep: RepresentacionCaso,
   expediente?: ExpedienteAnalysisOutput | null

@@ -1970,8 +1970,8 @@ export function AudienciaCopilot() {
                 </Label>
                 <p className="text-xs text-muted-foreground">
                   No hace falta cargarlos a mano. Pegá la lista de testigos (quién es cada uno y de
-                  qué va). Al actualizar, la IA los suma al paso 2 y carga las preguntas a formular
-                  en el copiloto.
+                  qué va). La IA no relee el expediente: usa el eje estratégico, suma declarantes y
+                  arma preguntas de ese eje, incluidas algunas poco obvias.
                 </p>
               </div>
               <Textarea
@@ -1986,8 +1986,8 @@ export function AudienciaCopilot() {
               />
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-[11px] text-muted-foreground">
-                  Indicá primero a quién representás. Suele tardar menos de un minuto: una sola
-                  lectura de la lista, sin reanalizar todo el expediente.
+                  Indicá primero a quién representás (así hay eje estratégico). Una sola lectura de
+                  tu lista: no vuelve a procesar el PDF.
                 </p>
                 <Button
                   type="button"
