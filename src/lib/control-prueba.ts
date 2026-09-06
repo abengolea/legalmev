@@ -36,6 +36,7 @@ import {
   TIPOS_DILIGENCIA,
   TIPOS_AUDIENCIA,
   TIPOS_TRAMITE_PERICIAL,
+  TIPO_ROGATORIO_SEDE,
   TIPOS_MEJOR_PROVEER,
   MEJOR_PROVEER_ESTADOS,
   PRUEBA_PARTES,
@@ -65,6 +66,11 @@ import {
   syncFechaLimiteDocumentalEnPoder,
 } from '@/lib/control-prueba-documental-poder';
 import { ensureDocumentalMeta } from '@/lib/control-prueba-documental-autenticidad';
+import {
+  esTramiteSedeRogatoria,
+  estadosParaTramiteRogatorio,
+  normalizeRogatorio,
+} from '@/lib/control-prueba-rogatorio';
 import { migrateExpedienteInformativaAOficio } from '@/lib/control-prueba-informativa-migrate';
 import { migrateModeloAudienciaPrueba } from '@/lib/control-prueba-audiencia-migrate';
 import {
@@ -202,6 +208,7 @@ export const TIPO_LABELS: Record<string, string> = {
   dictamen_complementario: 'Dictamen complementario',
   dictamen_pericial: 'Dictamen pericial',
   traslado_puntos: 'Traslado de puntos',
+  rogatorio_sede: 'Rogatorio — sede oficiada (Ley 22.172)',
   documentacion: 'Aportar documentación',
   informacion: 'Aportar información',
   comparendo: 'Comparendo / audiencia',
@@ -229,7 +236,7 @@ export const CATEGORIA_CONFIG: Record<
   },
   tramite: {
     titulo: 'Trámites vinculados',
-    descripcion: 'Movimientos periciales (impugnaciones, aclaraciones, dictámenes)',
+    descripcion: 'Movimientos periciales y trámites de sede oficiada (Rogatorio Ley 22.172)',
     accent: 'border-l-teal-500',
   },
   mejor_proveer: {
@@ -243,7 +250,7 @@ export const TIPOS_POR_CATEGORIA: Record<ItemCategoria, readonly string[]> = {
   prueba: TIPOS_PRUEBA,
   diligencia: TIPOS_DILIGENCIA,
   audiencia: TIPOS_AUDIENCIA,
-  tramite: TIPOS_TRAMITE_PERICIAL,
+  tramite: [...TIPOS_TRAMITE_PERICIAL, TIPO_ROGATORIO_SEDE],
   mejor_proveer: TIPOS_MEJOR_PROVEER,
 };
 
@@ -392,7 +399,9 @@ export function getEstadoConfig(categoria: ItemCategoria, estado: string, item?:
 }
 
 export function inferCategoriaFromTipo(tipo: string): ItemCategoria {
-  if ((TIPOS_TRAMITE_PERICIAL as readonly string[]).includes(tipo)) return 'tramite';
+  if ((TIPOS_TRAMITE_PERICIAL as readonly string[]).includes(tipo) || tipo === TIPO_ROGATORIO_SEDE) {
+    return 'tramite';
+  }
   if ((TIPOS_DILIGENCIA as readonly string[]).includes(tipo)) return 'diligencia';
   if ((TIPOS_AUDIENCIA as readonly string[]).includes(tipo)) return 'audiencia';
   if ((TIPOS_MEJOR_PROVEER as readonly string[]).includes(tipo)) return 'mejor_proveer';
@@ -621,6 +630,7 @@ export function estadosParaItem(item: ControlPruebaItem): readonly string[] {
   if (esAudienciaOfrecida(item)) return PRUEBA_ESTADOS;
   if (item.tipo === 'informativa' && resolveCategoria(item) === 'prueba') return INFORMATIVA_ESTADOS;
   if (item.tipo === 'pericial' && resolveCategoria(item) === 'prueba') return estadosPericialPadre();
+  if (esTramiteSedeRogatoria(item)) return estadosParaTramiteRogatorio();
   if (esMovimientoPericial(item)) return estadosParaMovimientoPericial(item);
   if (usaEstadosComunicacionEspeciales(item)) return estadosComunicacion(item);
   return ESTADOS_POR_CATEGORIA[resolveCategoria(item)];
@@ -926,6 +936,7 @@ function normalizeAudienciaPrueba(raw: unknown): AudienciaPruebaMeta | undefined
     horaAudiencia: a.horaAudiencia?.trim() || null,
     sala: a.sala?.trim() || null,
     motivoPostergacion: a.motivoPostergacion?.trim() || null,
+    extrañaJurisdiccion: Boolean(a.extrañaJurisdiccion),
   };
 }
 
@@ -1037,6 +1048,10 @@ export function normalizeItems(items: ControlPruebaItem[] | undefined): ControlP
         audienciaPrueba: normalizeAudienciaPrueba(item.audienciaPrueba),
         documentalEnPoder: normalizeDocumentalEnPoder(item.documentalEnPoder),
         documental: normalizeDocumental(item.documental),
+        rogatorio:
+          tipo === TIPO_ROGATORIO_SEDE || item.vinculo?.rol === 'tramite_sede_rogatoria'
+            ? normalizeRogatorio(item.rogatorio)
+            : undefined,
         vinculo: normalizeVinculo(item.vinculo),
       };
       const withSubtareas =
@@ -1284,6 +1299,8 @@ export function serializeControlPruebaDoc(
     notas: repairSpanishTextEncoding(String(data.notas ?? '')),
     pdfFileName: data.pdfFileName ?? undefined,
     pdfImportedAt: data.pdfImportedAt ?? undefined,
+    controlPruebaVersion:
+      data.controlPruebaVersion === 2 ? 2 : data.controlPruebaVersion === 1 ? 1 : undefined,
     actor: data.actor ? repairSpanishTextEncoding(String(data.actor)) : undefined,
     demandado: data.demandado ? repairSpanishTextEncoding(String(data.demandado)) : undefined,
     terceros: Array.isArray(data.terceros)

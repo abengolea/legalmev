@@ -299,6 +299,18 @@ export const TRAMITE_ESTADO_STYLE: Record<string, EstadoStyle> = {
     rowClass: 'border-l-amber-500',
     dotClass: 'bg-amber-500',
   },
+  en_tramite: {
+    label: 'En trámite (sede)',
+    badgeClass: 'bg-sky-100 text-sky-900 border-sky-300',
+    rowClass: 'border-l-sky-500',
+    dotClass: 'bg-sky-500',
+  },
+  remitido: {
+    label: 'Remitido a origen',
+    badgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-300',
+    rowClass: 'border-l-emerald-500 bg-emerald-50/50',
+    dotClass: 'bg-emerald-500',
+  },
   presentada: {
     label: 'Presentada',
     badgeClass: 'bg-sky-100 text-sky-800 border-sky-300',

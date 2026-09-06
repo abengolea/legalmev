@@ -53,6 +53,7 @@ import {
   usaFlujoAutenticidadDocumental,
 } from '@/lib/control-prueba-documental-autenticidad';
 import { ControlPruebaOficiosAutenticidadEnlaces } from '@/components/admin/ControlPruebaDocumentalAutenticidadBlock';
+import { ControlPruebaRogatorioEnlaces } from '@/components/admin/ControlPruebaRogatorioEnlaces';
 import { ControlPruebaCedulasIntimacionDocumentalEnlaces } from '@/components/admin/ControlPruebaDocumentalEnPoderBlock';
 import { ControlPruebaCedulasAudienciaEnlaces } from '@/components/admin/ControlPruebaCedulasAudienciaEnlaces';
 import { ControlPruebaAudienciaEventoEnlaces } from '@/components/admin/ControlPruebaAudienciaEventoEnlaces';
@@ -65,6 +66,8 @@ import { ControlPruebaAutoTextarea } from '@/components/admin/ControlPruebaAutoT
 import { ControlPruebaDateField } from '@/components/admin/ControlPruebaDateField';
 import { ControlPruebaDeferredInput } from '@/components/admin/ControlPruebaDeferredInput';
 import { ControlPruebaItemDetail } from '@/components/admin/ControlPruebaItemDetail';
+import type { RogatorioHito } from '@/types/control-prueba';
+import { puedeTenerRogatorio, esRogatorioMarcado } from '@/lib/control-prueba-rogatorio';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -101,6 +104,8 @@ export type ControlItemsTableProps = {
   onRemove: (id: string) => void;
   onAddCedulaVinculada?: (parentId: string, destinatario?: string) => void;
   onAddOficioAutenticidad?: (parentId: string, destinatario?: string) => void;
+  onCrearRogatorio?: (parentId: string, destinatario?: string) => void;
+  onUpdateRogatorioHitos?: (tramiteId: string, hitos: RogatorioHito[]) => void;
   onReintentarCedulaTestigo?: (parentId: string, destinatario: string) => void;
   onCrearMandamientoTestigo?: (parentId: string, testigoNombre: string) => void;
   onCrearOficioAclaracion?: (parentId: string) => void;
@@ -228,6 +233,8 @@ export function ControlPruebaItemsTable({
   onRemove,
   onAddCedulaVinculada,
   onAddOficioAutenticidad,
+  onCrearRogatorio,
+  onUpdateRogatorioHitos,
   onReintentarCedulaTestigo,
   onCrearMandamientoTestigo,
   onCrearOficioAclaracion,
@@ -603,6 +610,16 @@ export function ControlPruebaItemsTable({
                       onFocusSubproceso={onFocusItem}
                     />
                   )}
+                  {puedeTenerRogatorio(item) && esRogatorioMarcado(item) && (
+                    <ControlPruebaRogatorioEnlaces
+                      item={item}
+                      allItems={allItems}
+                      onCrearRogatorio={
+                        onCrearRogatorio ? () => onCrearRogatorio(item.id) : undefined
+                      }
+                      onFocusSubproceso={onFocusItem}
+                    />
+                  )}
                   {categoria === 'prueba' && usaFlujoAudienciaParte(item) && (
                     <ControlPruebaAudienciaEventoEnlaces
                       item={item}
@@ -840,6 +857,8 @@ export function ControlPruebaItemsTable({
                       onUpdate={(patch) => onUpdate(item.id, patch)}
                       onAddCedulaVinculada={onAddCedulaVinculada}
                       onAddOficioAutenticidad={onAddOficioAutenticidad}
+                      onCrearRogatorio={onCrearRogatorio}
+                      onUpdateRogatorioHitos={onUpdateRogatorioHitos}
                       onReintentarCedulaTestigo={onReintentarCedulaTestigo}
                       onCrearMandamientoTestigo={onCrearMandamientoTestigo}
                       onCrearOficioAclaracion={onCrearOficioAclaracion}

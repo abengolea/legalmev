@@ -1,7 +1,8 @@
 'use client';
 
+import { useState } from 'react';
 import { cn } from '@/lib/utils';
-import type { ControlPruebaItem, ControlPruebaExpediente } from '@/types/control-prueba';
+import type { ControlPruebaItem, ControlPruebaExpediente, RogatorioHito } from '@/types/control-prueba';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -23,6 +24,18 @@ import type { CedulaNotifMedio } from '@/types/control-prueba';
 import { ControlPruebaAudienciaPruebaBlock, muestraBloqueAudienciaPrueba } from '@/components/admin/ControlPruebaAudienciaPruebaBlock';
 import { ControlPruebaDocumentalEnPoderBlock } from '@/components/admin/ControlPruebaDocumentalEnPoderBlock';
 import { ControlPruebaPericialMovimientosBlock } from '@/components/admin/ControlPruebaPericialMovimientosBlock';
+import {
+  ControlPruebaRogatorioCrearForm,
+} from '@/components/admin/ControlPruebaRogatorioEnlaces';
+import { ControlPruebaRogatorioTramiteBlock } from '@/components/admin/ControlPruebaRogatorioTramiteBlock';
+import {
+  esOficioLey22172,
+  esRogatorioMarcado,
+  esTramiteSedeRogatoria,
+  patchMarcarRogatorio,
+  puedeTenerRogatorio,
+  ROGATORIO_UI_LABEL,
+} from '@/lib/control-prueba-rogatorio';
 import type { TipoTramitePericial } from '@/types/control-prueba';
 import { ExternalLink, FileText, History, Link2, Plus, Trash2 } from 'lucide-react';
 
@@ -35,6 +48,8 @@ type Props = {
   onUpdate: (patch: Partial<ControlPruebaItem>) => void;
   onAddCedulaVinculada?: (parentId: string, destinatario?: string) => void;
   onAddOficioAutenticidad?: (parentId: string, destinatario?: string) => void;
+  onCrearRogatorio?: (parentId: string, destinatario?: string) => void;
+  onUpdateRogatorioHitos?: (tramiteId: string, hitos: RogatorioHito[]) => void;
   onReintentarCedulaTestigo?: (parentId: string, destinatario: string) => void;
   onCrearMandamientoTestigo?: (parentId: string, testigoNombre: string) => void;
   onCrearOficioAclaracion?: (parentId: string) => void;
@@ -55,6 +70,8 @@ export function ControlPruebaItemDetail({
   onUpdate,
   onAddCedulaVinculada,
   onAddOficioAutenticidad,
+  onCrearRogatorio,
+  onUpdateRogatorioHitos,
   onReintentarCedulaTestigo,
   onCrearMandamientoTestigo,
   onCrearOficioAclaracion,
@@ -67,6 +84,7 @@ export function ControlPruebaItemDetail({
 }: Props) {
   const cat = resolveCategoria(item);
   const prog = progresoSubtareas(item);
+  const [destinatarioRogatorio, setDestinatarioRogatorio] = useState('');
 
   const updateSubtarea = (subId: string, patch: { completada?: boolean; observaciones?: string | null }) => {
     const subs = (item.subtareas ?? []).map((s) => (s.id === subId ? { ...s, ...patch } : s));
@@ -181,12 +199,23 @@ export function ControlPruebaItemDetail({
                   }
                   className="rounded border-input"
                 />
-                Pericia en extraña jurisdicción (rogatoria)
+                Rogatorio — Oficio Ley 22.172 (sede oficiada)
               </label>
+              {esRogatorioMarcado(item) && onCrearRogatorio && (
+                <ControlPruebaRogatorioCrearForm
+                  value={destinatarioRogatorio}
+                  onChange={setDestinatarioRogatorio}
+                  onCrear={() => {
+                    onCrearRogatorio(item.id, destinatarioRogatorio || undefined);
+                    setDestinatarioRogatorio('');
+                  }}
+                  compact={compact}
+                />
+              )}
               {(item.pericial?.extrañaJurisdiccion || item.pericial?.expedienteRogatoria) && (
                 <div className="grid gap-2 sm:grid-cols-2">
                   <div>
-                    <Label className="text-[10px]">Expte. formado (rogatoria)</Label>
+                    <Label className="text-[10px]">Expte. formado (rogatoria) — resumen en madre</Label>
                     <Input
                       value={item.pericial?.expedienteRogatoria ?? ''}
                       onChange={(e) =>
@@ -199,7 +228,7 @@ export function ControlPruebaItemDetail({
                     />
                   </div>
                   <div>
-                    <Label className="text-[10px]">Juzgado oficiado</Label>
+                    <Label className="text-[10px]">Juzgado oficiado — resumen en madre</Label>
                     <Input
                       value={item.pericial?.juzgadoOficiado ?? ''}
                       onChange={(e) =>
@@ -235,6 +264,60 @@ export function ControlPruebaItemDetail({
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {puedeTenerRogatorio(item) && item.tipo !== 'pericial' && (
+        <div className="space-y-2 rounded-lg border border-teal-200 bg-teal-50/30 p-3">
+          <label className="flex items-center gap-2 text-xs">
+            <input
+              type="checkbox"
+              checked={esRogatorioMarcado(item)}
+              onChange={(e) => onUpdate(patchMarcarRogatorio(item, e.target.checked))}
+              className="rounded border-input"
+            />
+            Rogatorio — Oficio Ley 22.172 (sede oficiada)
+          </label>
+          {esRogatorioMarcado(item) && onCrearRogatorio && (
+            <ControlPruebaRogatorioCrearForm
+              value={destinatarioRogatorio}
+              onChange={setDestinatarioRogatorio}
+              onCrear={() => {
+                onCrearRogatorio(item.id, destinatarioRogatorio || undefined);
+                setDestinatarioRogatorio('');
+              }}
+              compact={compact}
+            />
+          )}
+        </div>
+      )}
+
+      {esTramiteSedeRogatoria(item) && (
+        <ControlPruebaRogatorioTramiteBlock
+          item={item}
+          allItems={allItems}
+          onUpdate={onUpdate}
+          onUpdateHitos={(hitos) =>
+            onUpdateRogatorioHitos
+              ? onUpdateRogatorioHitos(item.id, hitos)
+              : onUpdate({
+                  rogatorio: item.rogatorio ? { ...item.rogatorio, hitos } : item.rogatorio,
+                })
+          }
+          onFocusItem={onFocusItem}
+          compact={compact}
+        />
+      )}
+
+      {esOficioLey22172(item) && (
+        <div className="rounded-lg border border-teal-200 bg-teal-50/40 px-3 py-2 space-y-1">
+          <Label className="text-xs font-medium flex items-center gap-1.5">
+            <Link2 className="h-3.5 w-3.5" />
+            {ROGATORIO_UI_LABEL}
+          </Label>
+          <p className="text-[10px] text-muted-foreground">
+            Diligenciar como cualquier oficio. El trámite de sede oficiada está vinculado a esta comunicación.
+          </p>
         </div>
       )}
 

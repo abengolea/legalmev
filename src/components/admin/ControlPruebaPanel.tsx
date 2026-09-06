@@ -41,6 +41,10 @@ import {
   marcarHijosSinEfectoPorPadreEliminado,
   parteEfectivaItem,
 } from '@/lib/control-prueba-subprocesos';
+import {
+  crearRogatorioLey22172,
+  syncMadreTrasHitoRogatorio,
+} from '@/lib/control-prueba-rogatorio';
 import { itemEsNuestraParte } from '@/lib/control-prueba-resumen';
 import { migrateExpedienteInformativaAOficio } from '@/lib/control-prueba-informativa-migrate';
 import { migrateModeloAudienciaPrueba } from '@/lib/control-prueba-audiencia-migrate';
@@ -52,7 +56,7 @@ import {
 } from '@/lib/control-prueba-oficio';
 import { crearMovimientoPericial, estadoAgregadoPruebaChip, itemVisibleConFiltroEstado } from '@/lib/control-prueba-pericial-movimientos';
 import { patchEstadoPruebaOfrecida, esCierrePrueba } from '@/lib/control-prueba-cierre';
-import type { TipoTramitePericial } from '@/types/control-prueba';
+import type { TipoTramitePericial, RogatorioHito } from '@/types/control-prueba';
 import {
   CATEGORIA_CONFIG,
   countByEstado,
@@ -1463,6 +1467,38 @@ export function ControlPruebaPanel() {
     }
   };
 
+  const addRogatorioLey22172 = (parentId: string, destinatario?: string) => {
+    let oficioId: string | null = null;
+    setDraftItems((prev) => {
+      const result = crearRogatorioLey22172(prev, parentId, { destinatario });
+      if (!result.oficio) return prev;
+      oficioId = result.oficio.id;
+      return result.items.map((item, index) => ({ ...item, orden: index + 1 }));
+    });
+    if (oficioId) {
+      toast({
+        title: 'Rogatorio Ley 22.172 creado',
+        description: 'Oficio + trámite de sede oficiada. Diligenciá el oficio como cualquier otro.',
+      });
+      handleFocusItem(oficioId);
+    } else {
+      toast({
+        title: 'No se pudo crear el rogatorio',
+        description: 'Marcá “Rogatorio — Oficio Ley 22.172” en la prueba antes de crear.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const updateRogatorioHitos = (tramiteId: string, hitos: RogatorioHito[]) => {
+    setDraftItems((prev) =>
+      syncMadreTrasHitoRogatorio(prev, tramiteId, hitos).map((item, index) => ({
+        ...item,
+        orden: index + 1,
+      })),
+    );
+  };
+
   const reintentarCedulaTestigo = (parentId: string, destinatario: string) => {
     let creado = false;
     setDraftItems((prev) => {
@@ -1666,6 +1702,8 @@ export function ControlPruebaPanel() {
             onAddCedulaVinculada={addCedulaVinculada}
             onNuevaAudienciaVinculada={addNuevaAudienciaVinculada}
             onAddOficioAutenticidad={addOficioAutenticidad}
+            onCrearRogatorio={addRogatorioLey22172}
+            onUpdateRogatorioHitos={updateRogatorioHitos}
             onReintentarCedulaTestigo={reintentarCedulaTestigo}
             onCrearMandamientoTestigo={crearMandamientoTestigo}
             onCrearOficioAclaracion={addOficioAclaracion}

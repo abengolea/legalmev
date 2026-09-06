@@ -138,6 +138,31 @@ export const TIPOS_TRAMITE_PERICIAL = [
 ] as const;
 export type TipoTramitePericial = (typeof TIPOS_TRAMITE_PERICIAL)[number];
 
+/** Trámite de producción en sede oficiada (Rogatorio Ley 22.172). */
+export const TIPO_ROGATORIO_SEDE = 'rogatorio_sede' as const;
+
+export const ROGATORIO_SEDE_ESTADOS = ['pendiente', 'en_tramite', 'remitido'] as const;
+export type RogatorioSedeEstado = (typeof ROGATORIO_SEDE_ESTADOS)[number];
+
+export const ROGATORIO_TIPOS_PRODUCCION = ['pericial', 'testimonial', 'confesional'] as const;
+export type RogatorioTipoProduccion = (typeof ROGATORIO_TIPOS_PRODUCCION)[number];
+
+export type RogatorioHito = {
+  id: string;
+  titulo: string;
+  completada: boolean;
+  fecha?: string | null;
+};
+
+/** Meta del ítem trámite `rogatorio_sede` (1:1 con oficio Ley 22.172). */
+export type RogatorioMeta = {
+  oficioId: string;
+  tipoProduccion: RogatorioTipoProduccion;
+  juzgadoOficiado?: string | null;
+  expedienteRogatoria?: string | null;
+  hitos: RogatorioHito[];
+};
+
 export const IMPUGNACION_INFORME_ESTADOS = [
   'presentada',
   'traslado_concedido',
@@ -211,6 +236,8 @@ export const SUBPROCESO_ROLES = [
   'notificacion_perito',
   'traslado_puntos',
   'exhorto_pericia',
+  'oficio_ley_22172',
+  'tramite_sede_rogatoria',
   'oficio_autenticidad',
   'oficio_informativa',
   'intimacion_informativa',
@@ -346,6 +373,8 @@ export type AudienciaPruebaMeta = {
   horaAudiencia?: string | null;
   sala?: string | null;
   motivoPostergacion?: string | null;
+  /** Producción en sede oficiada (Rogatorio Ley 22.172) — creación del par es manual */
+  extrañaJurisdiccion?: boolean;
   /** @deprecated migrado a ítems diligencia con vinculo.parentItemId */
   cedulasNotificacion?: CedulaNotificacionPruebaLegacy[];
 };
@@ -411,6 +440,8 @@ export type ControlPruebaItem = {
   documentalEnPoder?: DocumentalEnPoderMeta;
   /** Documental acompañada: impugnación de autenticidad */
   documental?: DocumentalPruebaMeta;
+  /** Trámite `rogatorio_sede`: producción en sede oficiada (Ley 22.172) */
+  rogatorio?: RogatorioMeta;
   /** Solo en ítems hijo (diligencia vinculada a prueba/audiencia) */
   vinculo?: SubprocesoVinculo;
 };
@@ -426,6 +457,11 @@ export type ControlPruebaExpediente = {
   notas?: string;
   pdfFileName?: string;
   pdfImportedAt?: string;
+  /**
+   * Pipeline version. `2` = Control de prueba V2 (movimientos/eventos en subcolecciones).
+   * Ausente o `1` = comportamiento V1 legacy.
+   */
+  controlPruebaVersion?: 1 | 2;
   actor?: string;
   demandado?: string;
   /** Nombres de terceros intervinientes (p. ej. co-demandados, garantes). */
