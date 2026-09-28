@@ -34,6 +34,12 @@ const SUBTAREAS_POR_TIPO: Record<string, readonly string[]> = {
     'Control de cumplimiento',
   ],
   inspeccion: ['Solicitud', 'Designación de fecha', 'Inspección judicial', 'Acta'],
+  constatacion_judicial: [
+    'Pedido / admisión',
+    'Orden de constatación',
+    'Actuario / juez delegado',
+    'Acta agregada',
+  ],
 };
 
 export function subtareasDefinicionPorTipo(tipo: string): string[] {
@@ -106,6 +112,7 @@ export const TIPO_ICONOS: Record<string, string> = {
   confesional: '🎙️',
   testimonial: '👤',
   inspeccion: '🔎',
+  constatacion_judicial: '🌐',
   oficio: '📨',
   oficio_electronico: '💻',
   cedula: '📬',

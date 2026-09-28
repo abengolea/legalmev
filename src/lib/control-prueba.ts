@@ -40,6 +40,7 @@ import {
   TIPOS_MEJOR_PROVEER,
   MEJOR_PROVEER_ESTADOS,
   PRUEBA_PARTES,
+  CONSTATACION_JUDICIAL_ESTADOS,
 } from '@/types/control-prueba';
 import { filtrarItemsImportados, type ImportFilterResult } from '@/lib/control-prueba-import-filter';
 import { buildImportMeta } from '@/lib/control-prueba-import-meta';
@@ -186,6 +187,7 @@ export const TIPO_LABELS: Record<string, string> = {
   informativa: 'Informativa',
   confesional: 'Confesional',
   inspeccion: 'Inspección',
+  constatacion_judicial: 'Constatación judicial',
   otra: 'Otra',
   indagatoria: 'Indagatoria',
   conciliacion: 'Conciliación',
@@ -428,7 +430,8 @@ export function esPruebaConFlujoComplejo(item: Pick<ControlPruebaItem, 'tipo'>):
     item.tipo === 'confesional' ||
     item.tipo === 'testimonial' ||
     item.tipo === 'documental_en_poder' ||
-    item.tipo === 'documental'
+    item.tipo === 'documental' ||
+    item.tipo === 'constatacion_judicial'
   );
 }
 
@@ -630,6 +633,9 @@ export function estadosParaItem(item: ControlPruebaItem): readonly string[] {
   if (esAudienciaOfrecida(item)) return PRUEBA_ESTADOS;
   if (item.tipo === 'informativa' && resolveCategoria(item) === 'prueba') return INFORMATIVA_ESTADOS;
   if (item.tipo === 'pericial' && resolveCategoria(item) === 'prueba') return estadosPericialPadre();
+  if (item.tipo === 'constatacion_judicial' && resolveCategoria(item) === 'prueba') {
+    return CONSTATACION_JUDICIAL_ESTADOS;
+  }
   if (esTramiteSedeRogatoria(item)) return estadosParaTramiteRogatorio();
   if (esMovimientoPericial(item)) return estadosParaMovimientoPericial(item);
   if (usaEstadosComunicacionEspeciales(item)) return estadosComunicacion(item);
@@ -662,6 +668,7 @@ export function defaultEstadoForItem(categoria: ItemCategoria, tipo?: string): C
   if (tipo === 'confesional' || tipo === 'testimonial') return 'pendiente_produccion';
   if (tipo === 'pericial') return 'pendiente_produccion';
   if (tipo === 'documental_en_poder') return 'pendiente_produccion';
+  if (tipo === 'constatacion_judicial') return 'pendiente_produccion';
   if (tipo === 'informativa') return 'pendiente';
   if (tipo === 'impugnacion_informe') return 'presentada';
   if (tipo && usaEstadosComunicacionEspeciales({ categoria: 'diligencia', tipo })) {

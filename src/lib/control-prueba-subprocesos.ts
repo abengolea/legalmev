@@ -28,6 +28,14 @@ import {
   intimacionDocumentalActiva,
 } from '@/lib/control-prueba-documental-poder';
 import { requiereFlujoAutenticidadDocumental } from '@/lib/control-prueba-documental-autenticidad';
+import {
+  ensureDelegacionConstatacionJudicial,
+  ensureVinculosConstatacionJudicialDocumental,
+  eliminarSubprocesosConstatacionDeDocumental,
+  inferirResolucionAutenticidadDocumental,
+  repararAutenticidadDocumentalSubprocesos,
+  TIPO_CONSTATACION_JUDICIAL,
+} from '@/lib/control-prueba-constatacion-judicial';
 import type { CedulaNotifMedio } from '@/types/control-prueba';
 import { restarDiasHabiles } from '@/lib/control-prueba-plazos';
 
@@ -71,6 +79,7 @@ export function parentTipoDeItem(item: ControlPruebaItem): ParentTipoSubproceso 
   if (item.tipo === 'pericial') return 'pericial';
   if (item.tipo === 'documental_en_poder') return 'documental_en_poder';
   if (item.tipo === 'documental') return 'documental';
+  if (item.tipo === 'constatacion_judicial') return 'constatacion_judicial';
   return null;
 }
 
@@ -625,6 +634,15 @@ function ensureVinculosAutenticidadDocumental(
     return { items: working, creados, alertas };
   }
 
+  if (inferirResolucionAutenticidadDocumental(padre) === 'constatacion_judicial') {
+    const constat = ensureVinculosConstatacionJudicialDocumental(working, padre.id);
+    return {
+      items: constat.items,
+      creados: [...creados, ...constat.creados],
+      alertas: [...alertas, ...constat.alertas],
+    };
+  }
+
   const destinatarios = destinatariosAutenticidadDocumental(padre);
   for (const dest of destinatarios) {
     const tkOficio = triggerKeyOficioAutenticidadDocumental(padre.id, dest);
@@ -908,7 +926,8 @@ function evaluarSubProcesosDocumentalEnPoder(ctx: SubprocesoEvalContext): Subpro
 
 /** Al salir de impugnada (cierre o revert): quita todos los oficios de autenticidad del padre. */
 function eliminarHijosAutenticidadDePadre(items: ControlPruebaItem[], parentId: string): ControlPruebaItem[] {
-  return items.filter((i) => {
+  let working = eliminarSubprocesosConstatacionDeDocumental(items, parentId);
+  return working.filter((i) => {
     if (!esOficioAutenticidadItem(i)) return true;
     if (i.vinculo?.parentItemId === parentId) return false;
     if (i.diligencia?.pruebaVinculadaId === parentId) return false;
@@ -976,8 +995,8 @@ function evaluarSubProcesosDocumentalAutenticidad(ctx: SubprocesoEvalContext): S
 /** Al cargar expediente: asegura oficios vinculados para documentales impugnadas
  *  y limpia oficios huérfanos si el documental ya no está impugnado. */
 export function hydrateAutenticidadDocumentalVinculos(items: ControlPruebaItem[]): ControlPruebaItem[] {
-  let result = items;
-  for (const item of items) {
+  let result = repararAutenticidadDocumentalSubprocesos(items);
+  for (const item of result) {
     if (item.tipo !== 'documental') continue;
     if (item.estado === 'autenticidad_impugnada') {
       result = ensureVinculosAutenticidadDocumental(result, item.id).items;
@@ -1024,6 +1043,9 @@ export function crearOficioAutenticidadManual(
   if (!padre || !requiereFlujoAutenticidadDocumental(padre.tipo) || padre.estado !== 'autenticidad_impugnada') {
     return { items, creado: null };
   }
+  if (inferirResolucionAutenticidadDocumental(padre) === 'constatacion_judicial') {
+    return { items, creado: null };
+  }
 
   let working = items;
   const dest = destinatario.trim() || padre.documental?.destinatarioOficio?.trim() || 'Oficiado';
@@ -1046,6 +1068,15 @@ export function crearOficioAutenticidadManual(
   return { items: [...working, creado], creado };
 }
 
+function evaluarSubProcesosConstatacionJudicial(ctx: SubprocesoEvalContext): SubprocesoEvalResult {
+  const padre = ctx.items.find((i) => i.id === ctx.itemId);
+  if (!padre || padre.tipo !== TIPO_CONSTATACION_JUDICIAL) {
+    return { items: ctx.items, creados: [], alertas: [] };
+  }
+  const deleg = ensureDelegacionConstatacionJudicial(ctx.items, padre.id);
+  return { items: deleg.items, creados: deleg.creados, alertas: deleg.alertas };
+}
+
 export function evaluarSubProcesosAutomaticos(ctx: SubprocesoEvalContext): SubprocesoEvalResult {
   const audiencia = evaluarSubProcesosAudiencia(ctx);
   const documentalPoder = evaluarSubProcesosDocumentalEnPoder({ ...ctx, items: audiencia.items });
@@ -1053,17 +1084,27 @@ export function evaluarSubProcesosAutomaticos(ctx: SubprocesoEvalContext): Subpr
     ...ctx,
     items: documentalPoder.items,
   });
-  const desistimiento = evaluarDesistimientoPrueba({
+  const constatacion = evaluarSubProcesosConstatacionJudicial({
     ...ctx,
     items: documentalAuth.items,
   });
+  const desistimiento = evaluarDesistimientoPrueba({
+    ...ctx,
+    items: constatacion.items,
+  });
   return {
     items: desistimiento.items,
-    creados: [...audiencia.creados, ...documentalPoder.creados, ...documentalAuth.creados],
+    creados: [
+      ...audiencia.creados,
+      ...documentalPoder.creados,
+      ...documentalAuth.creados,
+      ...constatacion.creados,
+    ],
     alertas: [
       ...audiencia.alertas,
       ...documentalPoder.alertas,
       ...documentalAuth.alertas,
+      ...constatacion.alertas,
       ...desistimiento.alertas,
     ],
   };

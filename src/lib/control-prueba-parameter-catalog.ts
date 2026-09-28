@@ -10,6 +10,7 @@ import {
   OFICIO_ELECTRONICO_ESTADOS,
   PERICIAL_ESTADOS,
   PRUEBA_ESTADOS,
+  CONSTATACION_JUDICIAL_ESTADOS,
 } from '@/types/control-prueba';
 import { getEstadoConfig, resolveCategoria } from '@/lib/control-prueba';
 import {
@@ -203,6 +204,23 @@ export const PARAMETER_CATALOG: ParameterCatalogEntry[] = [
       },
       { path: 'fechaProduccion', label: 'Fecha dictamen / producción', type: 'date' },
       { path: 'observaciones', label: 'Observaciones', type: 'textarea', rows: 3 },
+    ],
+  },
+  {
+    id: 'prueba-constatacion-judicial',
+    categoria: 'prueba',
+    tipos: ['constatacion_judicial'],
+    titulo: 'Resultado de constatación judicial',
+    fields: [
+      {
+        path: 'estado',
+        label: 'Estado',
+        type: 'select',
+        options: opts(CONSTATACION_JUDICIAL_ESTADOS),
+      },
+      { path: 'fechaLimite', label: 'Fecha fijada', type: 'date' },
+      { path: 'fechaProduccion', label: 'Fecha acta / producción', type: 'date' },
+      { path: 'observaciones', label: 'Observaciones / URL verificada', type: 'textarea', rows: 4 },
     ],
   },
   {

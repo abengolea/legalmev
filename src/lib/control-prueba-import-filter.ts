@@ -427,6 +427,11 @@ export function filtrarItemsImportados(
             autenticidadImpugnada: estadoResuelto === 'autenticidad_impugnada',
             fechaImpugnacion: estadoResuelto === 'autenticidad_impugnada' ? raw.fechaLimite ?? null : null,
             destinatarioOficio: raw.destinatarioOficio?.trim() || null,
+            resolucionAutenticidad:
+              raw.resolucionAutenticidad === 'constatacion_judicial' ||
+              raw.resolucionAutenticidad === 'oficio_externo'
+                ? raw.resolucionAutenticidad
+                : undefined,
           },
         }),
       ...(catFinal === 'prueba' &&

@@ -98,7 +98,13 @@ const ControlItemSchema = z.object({
     .boolean()
     .optional()
     .describe(
-      'true si la contraparte negó/impugnó la AUTENTICIDAD de documental ya acompañada (demanda/contestación). Dispara oficios de autenticidad (hijos del documental).',
+      'true si la contraparte negó/impugnó la AUTENTICIDAD de documental ya acompañada. Según el caso: oficio a tercero (banco, Andreani…) o constatación judicial (actuario / mandamiento delegado).',
+    ),
+  resolucionAutenticidad: z
+    .enum(['oficio_externo', 'constatacion_judicial'])
+    .optional()
+    .describe(
+      'Solo documental impugnada: oficio_externo = librar oficio a tercero; constatacion_judicial = verificar en el juzgado (actuario) o vía mandamiento/oficio de justicia a juez delegado (páginas web, capturas).',
     ),
   intimacionOrdenada: z
     .boolean()
@@ -239,7 +245,7 @@ Extraé ítems **únicamente** de:
 ## CATEGORÍAS Y UBICACIÓN EN EL TABLERO
 
 ### 1. prueba (Prueba ofrecida)
-Tipos válidos: documental, documental_en_poder, pericial, informativa, inspeccion, otra, **confesional**, **testimonial**
+Tipos válidos: documental, documental_en_poder, pericial, informativa, inspeccion, **constatacion_judicial**, otra, **confesional**, **testimonial**
 ofrecidaPor: **actor o demandado** (quien ofreció el medio). Excepción: pericial de oficio del tribunal → ofrecidaPor: tribunal.
 
 **A) documental** — Documentación **sustancial** que la parte **ya presentó** con demanda, contestación o ampliaciones (obra en autos).
@@ -250,8 +256,9 @@ ofrecidaPor: **actor o demandado** (quien ofreció el medio). Excepción: perici
 - Si en contestación/trámite la contraparte **niega o impugna la autenticidad**:
   - estadoSugerido: autenticidad_impugnada
   - impugnacionAutenticidad: true
-  - destinatarioOficio: entidad que debe informar (ej. otro juzgado, banco, registro, ARBA)
-  - agregar en oficiosAutenticidadPendientes con **yaLibrado: true** si el tribunal ya libró el oficio, **yaLibrado: false** si aún falta
+  - **resolucionAutenticidad**: oficio_externo (tercero informa) vs constatacion_judicial (actuario / mandamiento — típico en páginas web)
+  - destinatarioOficio: solo si oficio_externo (banco, Andreani, registro…). Para constatacion_judicial usar juzgado delegado en observaciones si aplica
+  - oficiosAutenticidadPendientes **solo** si oficio_externo, con yaLibrado true/false
   - **NO crear ítem informativa separado** — la documental negada queda en el mismo ítem documental
 - **Nunca** dejar documental ya acompañada en pendiente_produccion salvo que exista impugnación de autenticidad u otra obstáculo explícito en autos.
 
@@ -277,7 +284,8 @@ ofrecidaPor: **actor o demandado** (quien ofreció el medio). Excepción: perici
 - **NO** registrarla como diligencia tipo oficio suelta en Comunicaciones.
 - Los oficios **hijos** de autenticidad documental van aparte (oficiosAutenticidadPendientes / vinculo al documental), no como informativa.
 
-**D) pericial, inspeccion, otra** — Según auto de apertura.
+**D) pericial, inspeccion, constatacion_judicial, otra** — Según auto de apertura.
+- **constatacion_judicial**: medio probatorio donde el tribunal (actuario) o juez delegado constata un hecho (p. ej. autenticidad de sitio web). Modo directo en el juzgado vs delegado (mandamiento / oficio de justicia). ofrecidaPor: quien la ofreció.
 - "pericia de oficio", "pericia médica de oficio", "experticia de oficio", "experticia técnica", "pericia contable" = prueba **pericial** (categoria=prueba, tipo=pericial). **NO** es diligencia tipo oficio ni informativa.
 - Estados pericial: pendiente_produccion → perito_designado → puntos_trasladados → dictamen_presentado → en_discusion → valoracion_judicial / producida. Usá el más avanzado que conste en autos.
 

@@ -20,6 +20,10 @@ import {
 } from '@/lib/control-prueba-cedula-notif';
 import { esPruebaInformativa, usaFlujoOficio, oficioRelacionadoLabel } from '@/lib/control-prueba-oficio';
 import { requiereFlujoDocumentalEnPoder, esOficioInformativaAutenticidad } from '@/lib/control-prueba-documental-poder';
+import {
+  esConstatacionJudicialVinculada,
+  esMandamientoConstatacion,
+} from '@/lib/control-prueba-constatacion-judicial';
 import type { CedulaNotifMedio } from '@/types/control-prueba';
 import { ControlPruebaAudienciaPruebaBlock, muestraBloqueAudienciaPrueba } from '@/components/admin/ControlPruebaAudienciaPruebaBlock';
 import { ControlPruebaDocumentalEnPoderBlock } from '@/components/admin/ControlPruebaDocumentalEnPoderBlock';
@@ -422,6 +426,38 @@ export function ControlPruebaItemDetail({
               {item.vinculo?.vinculoLabel && (
                 <p className="text-[10px] text-muted-foreground">Vinculado a: {item.vinculo.vinculoLabel}</p>
               )}
+            </div>
+          )}
+          {esConstatacionJudicialVinculada(item) && (
+            <div className="sm:col-span-2 rounded-lg border border-teal-300 bg-teal-50/60 p-3 space-y-2">
+              <Label className="text-xs font-medium flex items-center gap-1.5">
+                <Link2 className="h-3.5 w-3.5" />
+                Constatación judicial vinculada
+              </Label>
+              <p className="text-[10px] text-muted-foreground">
+                Verificación de autenticidad por actuario del juzgado o, si está delegada, vía mandamiento / oficio de
+                justicia. No es un oficio a tercero (banco, empresa).
+              </p>
+              {item.constatacionJudicial?.modo === 'delegada' && (
+                <p className="text-[10px] text-muted-foreground">
+                  Modo delegada
+                  {item.constatacionJudicial.juzgadoDelegado
+                    ? ` — ${item.constatacionJudicial.juzgadoDelegado}`
+                    : ''}
+                  .
+                </p>
+              )}
+            </div>
+          )}
+          {esMandamientoConstatacion(item) && (
+            <div className="sm:col-span-2 rounded-lg border border-violet-300 bg-violet-50/60 p-3 space-y-2">
+              <Label className="text-xs font-medium flex items-center gap-1.5">
+                <Link2 className="h-3.5 w-3.5" />
+                Mandamiento — constatación delegada
+              </Label>
+              <p className="text-[10px] text-muted-foreground">
+                Comunicación al juez delegado para diligenciar la constatación (oficio de justicia / mandamiento).
+              </p>
             </div>
           )}
           {esCedulaIntimacionDocumental(item) && (

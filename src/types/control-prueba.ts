@@ -181,8 +181,27 @@ export const TIPOS_PRUEBA = [
   'pericial',
   'informativa',
   'inspeccion',
+  'constatacion_judicial',
   'otra',
 ] as const;
+
+/** Producción de constatación judicial (actuario / juez delegado). */
+export const CONSTATACION_JUDICIAL_ESTADOS = [
+  'pendiente_produccion',
+  'ordenada',
+  'fecha_fijada',
+  'realizada',
+  'acta_agregada',
+  'producida',
+  'desistida',
+  'no_admitida',
+] as const;
+export type ConstatacionJudicialEstado = (typeof CONSTATACION_JUDICIAL_ESTADOS)[number];
+
+export const CONSTATACION_JUDICIAL_MODOS = ['directa', 'delegada'] as const;
+export type ConstatacionJudicialModo = (typeof CONSTATACION_JUDICIAL_MODOS)[number];
+
+export type ResolucionAutenticidadDocumental = 'oficio_externo' | 'constatacion_judicial';
 
 export const TIPOS_DILIGENCIA = [
   'oficio',
@@ -224,6 +243,7 @@ export const PARENT_TIPOS_SUBPROCESO = [
   'pericial',
   'documental',
   'documental_en_poder',
+  'constatacion_judicial',
 ] as const;
 export type ParentTipoSubproceso = (typeof PARENT_TIPOS_SUBPROCESO)[number];
 
@@ -240,6 +260,9 @@ export const SUBPROCESO_ROLES = [
   'tramite_sede_rogatoria',
   'oficio_autenticidad',
   'oficio_informativa',
+  'constatacion_judicial_vinculada',
+  'mandamiento_constatacion',
+  'oficio_justicia_constatacion',
   'intimacion_informativa',
   'dictamen_pericial',
   'impugnacion_informe',
@@ -356,14 +379,26 @@ export type DocumentalEnPoderMeta = {
   intimacionOrdenada?: boolean;
 };
 
-/** Documental acompañada al escrito (demanda, contestación, ampliación). Si impugnan autenticidad → oficios a librar. */
+/** Documental acompañada al escrito (demanda, contestación, ampliación). Si impugnan autenticidad → oficio externo o constatación judicial. */
 export type DocumentalPruebaMeta = {
   autenticidadImpugnada?: boolean;
   fechaImpugnacion?: string | null;
+  /** Oficio a tercero (banco, registro…) vs constatación en/desde el juzgado */
+  resolucionAutenticidad?: ResolucionAutenticidadDocumental;
   /** @deprecated usar oficiosAutenticidad — se mantiene como alias del primer destinatario */
   destinatarioOficio?: string | null;
   /** Oficios para certificar autenticidad (documental negada), embebidos en el ítem documental */
   oficiosAutenticidad?: OficioAutenticidadPendiente[];
+};
+
+/** Prueba constatación judicial: en el juzgado (actuario) o delegada vía mandamiento / oficio de justicia. */
+export type ConstatacionJudicialMeta = {
+  modo?: ConstatacionJudicialModo;
+  /** Documental cuya autenticidad verifica (cuando se auto-vincula) */
+  documentalVinculadaId?: string | null;
+  juzgadoDelegado?: string | null;
+  objeto?: string | null;
+  urlReferencia?: string | null;
 };
 
 /** Confesional / testimonial: fijación de audiencia (cédulas = ítems diligencia vinculados) */
@@ -440,6 +475,8 @@ export type ControlPruebaItem = {
   documentalEnPoder?: DocumentalEnPoderMeta;
   /** Documental acompañada: impugnación de autenticidad */
   documental?: DocumentalPruebaMeta;
+  /** Medio constatación judicial */
+  constatacionJudicial?: ConstatacionJudicialMeta;
   /** Trámite `rogatorio_sede`: producción en sede oficiada (Ley 22.172) */
   rogatorio?: RogatorioMeta;
   /** Solo en ítems hijo (diligencia vinculada a prueba/audiencia) */

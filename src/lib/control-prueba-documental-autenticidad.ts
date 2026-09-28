@@ -1,6 +1,7 @@
 import type { ControlPruebaItem, DocumentalPruebaMeta, OficioAutenticidadPendiente } from '@/types/control-prueba';
 import { esCierrePrueba } from '@/lib/control-prueba-cierre';
 import { normalizeOficiosAutenticidad } from '@/lib/control-prueba-import-meta';
+import { inferirResolucionAutenticidadDocumental } from '@/lib/control-prueba-constatacion-judicial';
 
 export const TIPO_DOCUMENTAL = 'documental' as const;
 
@@ -57,6 +58,18 @@ export function ensureDocumentalMeta(item: ControlPruebaItem): ControlPruebaItem
 export function ensureOficiosAutenticidadDocumental(item: ControlPruebaItem): ControlPruebaItem {
   if (!requiereFlujoAutenticidadDocumental(item.tipo) || item.estado !== 'autenticidad_impugnada') {
     return item;
+  }
+  if (inferirResolucionAutenticidadDocumental(item) === 'constatacion_judicial') {
+    const prev = item.documental ?? {};
+    return {
+      ...item,
+      documental: {
+        ...prev,
+        autenticidadImpugnada: true,
+        resolucionAutenticidad: 'constatacion_judicial',
+        oficiosAutenticidad: [],
+      },
+    };
   }
   const prev = item.documental ?? {};
   const oficios = normalizeOficiosAutenticidad(prev.oficiosAutenticidad);
@@ -121,6 +134,8 @@ export function patchEstadoDocumentalAutenticidad(
       ...prev,
       autenticidadImpugnada: true,
       fechaImpugnacion: prev.fechaImpugnacion ?? new Date().toISOString().slice(0, 10),
+      resolucionAutenticidad:
+        prev.resolucionAutenticidad ?? inferirResolucionAutenticidadDocumental(item),
     };
     return patch;
   }
