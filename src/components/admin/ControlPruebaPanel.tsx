@@ -190,15 +190,6 @@ function expedienteDeepLink(id: string): string {
   return `${origin}${CONTROL_PRUEBA_PATH}?id=${encodeURIComponent(id)}`;
 }
 
-const EMPTY_FORM = {
-  caratula: '',
-  numeroExpediente: '',
-  juzgado: '',
-  fuero: '',
-  expedienteUrl: '',
-  notas: '',
-};
-
 type SaveStatus = 'idle' | 'pending' | 'saving' | 'saved' | 'error';
 
 function persistSnapshotFrom(
@@ -379,9 +370,7 @@ export function ControlPruebaPanel() {
   const [nuevoTerceroNombre, setNuevoTerceroNombre] = useState('');
   const pickerRef = useRef<HTMLDivElement>(null);
   const [hitosDraft, setHitosDraft] = useState<ExpedienteHito[]>([]);
-  const [createOpen, setCreateOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
-  const [createForm, setCreateForm] = useState(EMPTY_FORM);
   const [importOpen, setImportOpen] = useState(false);
   const [importDragOver, setImportDragOver] = useState(false);
   const importFileInputRef = useRef<HTMLInputElement>(null);
@@ -853,38 +842,6 @@ export function ControlPruebaPanel() {
     [expedienteDraft, toast],
   );
 
-  const handleCreate = async () => {
-    if (!createForm.caratula.trim()) {
-      toast({ variant: 'destructive', title: 'Completá la carátula' });
-      return;
-    }
-    setSaving(true);
-    try {
-      const res = await adminFetch('/api/admin/control-prueba', {
-        method: 'POST',
-        body: JSON.stringify(createForm),
-      });
-      const json = await safeResJson<{ ok?: boolean; expediente?: ControlPruebaExpediente; error?: string }>(res);
-      if (json.ok && json.expediente) {
-        setExpedientes((prev) => [json.expediente!, ...prev]);
-        selectExpediente(json.expediente.id);
-        setCreateOpen(false);
-        setCreateForm(EMPTY_FORM);
-        toast({
-          title: 'Expediente creado',
-          description: 'Quedó vacío. Importá un PDF para analizar la prueba o cargá las medidas a mano.',
-        });
-        void loadExpedientes();
-      } else {
-        toast({ variant: 'destructive', title: 'Error', description: json.error });
-      }
-    } catch {
-      toast({ variant: 'destructive', title: 'Error al crear' });
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const handleSave = useCallback(
     async (opts?: { silent?: boolean }) => {
       if (!selected) return false;
@@ -1326,7 +1283,6 @@ export function ControlPruebaPanel() {
   };
 
   const openImportDialog = () => setImportOpen(true);
-  const openCreateDialog = () => setCreateOpen(true);
   const openOnboarding = () => setOnboardingOpen(true);
 
   const handleDeleteExpediente = async () => {
@@ -2081,7 +2037,7 @@ export function ControlPruebaPanel() {
             Control de prueba
           </h2>
           <p className="text-sm text-muted-foreground mt-1">
-            Importá el PDF, analizá la prueba con IA y seguí su producción. Crear un expediente vacío no dispara el análisis.
+            Subí el PDF de la causa, analizá la prueba con IA y seguí su producción.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -2107,31 +2063,11 @@ export function ControlPruebaPanel() {
               <Sparkles className="mr-2 h-4 w-4" />
               Analizar expediente con IA
             </Button>
-            <ControlPruebaHelpHint label="Diferencia entre analizar con IA y crear a mano">
-              <p>
-                <strong>Analizar con IA</strong> sube el PDF, extrae el texto y, cuando lo pedís,
-                identifica las medidas. Los resultados se revisan y se guardan al confirmar.
-              </p>
-              <p className="mt-2">
-                <strong>Crear manualmente</strong> abre un expediente vacío. La prueba hay que
-                cargarla después, con un PDF o ítem por ítem.
-              </p>
+            <ControlPruebaHelpHint label="Cómo se crea un control de prueba">
+              El control se arma a partir del PDF de la causa. LegalMev extrae el texto y, cuando lo
+              pedís, identifica las medidas. Los resultados se revisan y se guardan al confirmar.
             </ControlPruebaHelpHint>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={openCreateDialog}
-            disabled={!canCreateNew}
-            title={
-              !canCreateNew
-                ? 'Alcanzaste el límite de controles disponibles'
-                : 'Creá un expediente vacío para cargar la prueba a mano'
-            }
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            Crear manualmente
-          </Button>
         </div>
       </div>
 
@@ -2239,52 +2175,28 @@ export function ControlPruebaPanel() {
 
       <div className="min-w-0 space-y-4">
           {!selected ? (
-            <div className="grid gap-4 md:grid-cols-2">
-              <Card className="border-primary/30 bg-primary/5">
-                <CardHeader>
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Sparkles className="h-4 w-4 text-primary" />
-                    Analizar expediente con IA
-                  </CardTitle>
-                  <CardDescription>
-                    Subí el PDF de una causa judicial para identificar automáticamente la prueba
-                    ofrecida y organizar su seguimiento.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Button
-                    onClick={openImportDialog}
-                    disabled={!canCreateNew && !selectedId}
-                    className="w-full sm:w-auto"
-                  >
-                    <FileUp className="mr-2 h-4 w-4" />
-                    Analizar expediente con IA
-                  </Button>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Plus className="h-4 w-4" />
-                    Crear expediente manualmente
-                  </CardTitle>
-                  <CardDescription>
-                    Creá un expediente vacío para cargar y controlar las medidas probatorias por tu
-                    cuenta.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Button
-                    variant="outline"
-                    onClick={openCreateDialog}
-                    disabled={!canCreateNew}
-                    className="w-full sm:w-auto"
-                  >
-                    Crear manualmente
-                  </Button>
-                </CardContent>
-              </Card>
-            </div>
+            <Card className="border-primary/30 bg-primary/5">
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-primary" />
+                  Analizar expediente con IA
+                </CardTitle>
+                <CardDescription>
+                  Subí el PDF de una causa judicial para identificar automáticamente la prueba
+                  ofrecida y organizar su seguimiento.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button
+                  onClick={openImportDialog}
+                  disabled={!canCreateNew && !selectedId}
+                  className="w-full sm:w-auto"
+                >
+                  <FileUp className="mr-2 h-4 w-4" />
+                  Analizar expediente con IA
+                </Button>
+              </CardContent>
+            </Card>
           ) : (
             <>
               {lastImportSummary && selected.pdfFileName === lastImportSummary.pdfFileName && (
@@ -3083,75 +2995,10 @@ export function ControlPruebaPanel() {
         onPartesRepresentadasChange={setImportPartesRepresentadas}
       />
 
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Crear expediente manualmente</DialogTitle>
-            <DialogDescription>
-              Se crea un expediente vacío. La prueba no se analiza sola: después podés importar un
-              PDF o cargar las medidas a mano.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3 py-2">
-            <Alert>
-              <AlertDescription className="text-xs">
-                Este camino no identifica la prueba automáticamente. Si tenés el PDF de la causa,
-                usá «Analizar expediente con IA».
-              </AlertDescription>
-            </Alert>
-            <div>
-              <Label>Carátula *</Label>
-              <Input
-                value={createForm.caratula}
-                onChange={(e) => setCreateForm((f) => ({ ...f, caratula: e.target.value }))}
-                placeholder="VERA c/ ICBC s/ HABEAS DATA"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label>Nº expediente</Label>
-                <Input
-                  value={createForm.numeroExpediente}
-                  onChange={(e) => setCreateForm((f) => ({ ...f, numeroExpediente: e.target.value }))}
-                  placeholder="FRO 014018"
-                />
-              </div>
-              <div>
-                <Label>Fuero</Label>
-                <Input
-                  value={createForm.fuero}
-                  onChange={(e) => setCreateForm((f) => ({ ...f, fuero: e.target.value }))}
-                  placeholder="FRO"
-                />
-              </div>
-            </div>
-            <div>
-              <Label>Link expediente virtual (MEV / PJN)</Label>
-              <Input
-                value={createForm.expedienteUrl}
-                onChange={(e) => setCreateForm((f) => ({ ...f, expedienteUrl: e.target.value }))}
-                placeholder="https://mev.scba.gov.ar/... (opcional, recomendado)"
-              />
-              <p className="text-[11px] text-muted-foreground mt-1">
-                Opcional. Sirve para abrir el expediente en un clic desde el control de prueba.
-              </p>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancelar</Button>
-            <Button onClick={() => void handleCreate()} disabled={saving}>
-              {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Crear
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       <ControlPruebaOnboardingDialog
         open={onboardingOpen}
         onOpenChange={setOnboardingOpen}
         onStartWithPdf={openImportDialog}
-        onCreateManual={openCreateDialog}
         canCreate={canCreateNew}
         quotaHint={
           !canCreateNew

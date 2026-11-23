@@ -43,7 +43,6 @@ type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onStartWithPdf: () => void;
-  onCreateManual: () => void;
   canCreate?: boolean;
   quotaHint?: string | null;
 };
@@ -52,7 +51,6 @@ export function ControlPruebaOnboardingDialog({
   open,
   onOpenChange,
   onStartWithPdf,
-  onCreateManual,
   canCreate = true,
   quotaHint,
 }: Props) {
@@ -89,11 +87,6 @@ export function ControlPruebaOnboardingDialog({
           ))}
         </ol>
 
-        <p className="text-xs text-muted-foreground">
-          Crear un expediente vacío no analiza la prueba. Para que LegalMev identifique las medidas
-          hay que importar el PDF y ejecutar el análisis.
-        </p>
-
         {quotaHint ? <p className="text-xs text-amber-800">{quotaHint}</p> : null}
 
         <DialogFooter className="flex-col gap-2 sm:flex-col sm:space-x-0">
@@ -109,21 +102,6 @@ export function ControlPruebaOnboardingDialog({
             <FileUp className="mr-2 h-4 w-4" />
             Comenzar con un PDF
           </Button>
-          <Button
-            variant="outline"
-            className="w-full"
-            onClick={() => {
-              markControlPruebaOnboardingSeen();
-              onOpenChange(false);
-              window.setTimeout(onCreateManual, 150);
-            }}
-            disabled={!canCreate}
-          >
-            Crear expediente manualmente
-          </Button>
-          <p className="text-[11px] text-center text-muted-foreground">
-            El expediente manual queda vacío: la prueba se incorpora después, con un PDF o a mano.
-          </p>
         </DialogFooter>
       </DialogContent>
     </Dialog>
