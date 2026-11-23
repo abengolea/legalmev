@@ -4,6 +4,7 @@ import { authorizeControlPrueba } from '@/lib/control-prueba-api-auth';
 import {
   assertControlPruebaExpedienteAccess,
   consumeControlPruebaQuota,
+  formatControlPruebaQuotaExhaustedError,
   type ControlPruebaTrial,
 } from '@/lib/control-prueba-access';
 import type { ControlPruebaItem } from '@/types/control-prueba';
@@ -88,7 +89,7 @@ export async function POST(request: NextRequest) {
           return NextResponse.json(
             {
               ok: false,
-              error: `Alcanzaste el límite de ${auth.access.limit ?? 10} controles este mes. Se renueva automáticamente.`,
+              error: formatControlPruebaQuotaExhaustedError(auth.access),
             },
             { status: 403 },
           );

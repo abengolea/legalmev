@@ -208,6 +208,18 @@ export async function resolveControlPruebaAccessForUser(
   return resolveControlPruebaAccess({ ...user, controlPruebaTrial: trial });
 }
 
+/** Mensaje al agotar el cupo: solo menciona renovación si hay fecha configurada. */
+export function formatControlPruebaQuotaExhaustedError(
+  access: Pick<ControlPruebaAccess, 'limit' | 'monthlyResetAt'>,
+): string {
+  const resetAt = access.monthlyResetAt ? new Date(access.monthlyResetAt) : null;
+  const hasRenewal = resetAt != null && !Number.isNaN(resetAt.getTime());
+  if (hasRenewal) {
+    return `Alcanzaste el límite de ${access.limit ?? CONTROL_PRUEBA_TRIAL_ADMIN_LIMIT} controles este mes. Se renueva automáticamente.`;
+  }
+  return `Alcanzaste el límite de ${access.limit ?? CONTROL_PRUEBA_TRIAL_DEFAULT_LIMIT} controles de prueba. Contactanos si necesitás más.`;
+}
+
 export async function consumeControlPruebaQuota(
   adminDb: Firestore,
   uid: string,
@@ -221,12 +233,9 @@ export async function consumeControlPruebaQuota(
     return { ok: true };
   }
   if (!access.canCreate) {
-    const isMonthly = Boolean(user.controlPruebaTrial?.monthlyResetAt);
     return {
       ok: false,
-      error: isMonthly
-        ? `Alcanzaste el límite de ${access.limit ?? CONTROL_PRUEBA_TRIAL_ADMIN_LIMIT} controles este mes. Se renueva automáticamente.`
-        : `Alcanzaste el límite de ${access.limit ?? CONTROL_PRUEBA_TRIAL_DEFAULT_LIMIT} controles de prueba. Contactanos si necesitás más.`,
+      error: formatControlPruebaQuotaExhaustedError(access),
     };
   }
 

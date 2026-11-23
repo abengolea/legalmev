@@ -7,9 +7,12 @@ import {
   normalizePartesRepresentadas,
   payloadPartesRepresentadas,
 } from '@/lib/control-prueba-partes-representadas';
-import { PARTE_LABELS, TIPO_LABELS, getEstadoConfig } from '@/lib/control-prueba';
+import { CATEGORIA_CONFIG, PARTE_LABELS, TIPO_LABELS, getEstadoConfig } from '@/lib/control-prueba';
+import { countItemsByParte, countItemsByTipo } from '@/lib/control-prueba-import-ux';
 import type { ControlPruebaItem, ItemCategoria, ParteRepresentadaPrueba, PruebaParte } from '@/types/control-prueba';
 import { ControlPruebaPartesRepresentadasPicker } from '@/components/admin/ControlPruebaPartesRepresentadasPicker';
+import { ControlPruebaHelpHint } from '@/components/admin/ControlPruebaHelpHint';
+import { ControlPruebaImportStepper } from '@/components/admin/ControlPruebaImportStepper';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -23,7 +26,6 @@ import {
 } from '@/components/ui/dialog';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import {
   Select,
   SelectContent,
@@ -122,6 +124,13 @@ export function ControlPruebaImportPreviewDialog({
   const actorLabel = preview.actor?.trim() || 'Actor';
   const demandadoLabel = preview.demandado?.trim() || 'Demandada';
   const partesNorm = normalizePartesRepresentadas(partesRepresentadas, preview.parteRepresentada);
+  const byTipo = countItemsByTipo(preview.items);
+  const byParte = countItemsByParte(preview.items);
+  const byCategoria = preview.items.reduce<Record<string, number>>((acc, item) => {
+    const cat = item.categoria ?? 'prueba';
+    acc[cat] = (acc[cat] ?? 0) + 1;
+    return acc;
+  }, {});
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -129,11 +138,68 @@ export function ControlPruebaImportPreviewDialog({
         <DialogHeader className="shrink-0 space-y-1.5 pr-6">
           <DialogTitle>Revisá el import antes de guardar</DialogTitle>
           <DialogDescription>
-            Indicá a quién representás (podés marcar varias), editá o eliminá ítems incorrectos y confirmá qué entra al control.
+            Indicá a quién representás, editá o eliminá ítems incorrectos y confirmá qué entra al control.
+            Nada se guarda hasta que confirmes.
           </DialogDescription>
         </DialogHeader>
 
+        <ControlPruebaImportStepper
+          className="shrink-0"
+          progress={{
+            hasFile: true,
+            extracting: false,
+            extracted: true,
+            analyzing: false,
+            hasPreview: true,
+            reviewing: !confirming,
+            confirming,
+          }}
+        />
+
+        <div className="shrink-0 rounded-lg border bg-muted/30 p-3 space-y-2">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <p className="text-sm font-medium">
+              {preview.items.length === 1
+                ? '1 medida probatoria detectada'
+                : `${preview.items.length} medidas probatorias detectadas`}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {selected.size} seleccionada{selected.size === 1 ? '' : 's'} para importar
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {(['prueba', 'diligencia', 'audiencia'] as const).map((cat) =>
+              (byCategoria[cat] ?? 0) > 0 ? (
+                <Badge key={cat} variant="outline" className="text-[10px]">
+                  {CATEGORIA_CONFIG[cat].titulo}: {byCategoria[cat]}
+                </Badge>
+              ) : null,
+            )}
+            {byParte.map((row) => (
+              <Badge key={row.parte} variant="secondary" className="text-[10px]">
+                {PARTE_LABELS[row.parte] ?? row.parte}: {row.count}
+              </Badge>
+            ))}
+            {byTipo.slice(0, 6).map((row) => (
+              <Badge key={row.tipo} variant="outline" className="text-[10px] font-normal">
+                {TIPO_LABELS[row.tipo] ?? row.tipo}: {row.count}
+              </Badge>
+            ))}
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            Los resultados generados mediante IA deben ser revisados por el profesional antes de
+            incorporarlos al seguimiento.
+          </p>
+        </div>
+
         <div className="shrink-0 rounded-lg border border-primary/20 bg-primary/5 p-3">
+          <div className="mb-1 flex items-center gap-1">
+            <p className="text-xs font-medium">Parte representada</p>
+            <ControlPruebaHelpHint label="Ayuda sobre la parte representada">
+              Marcá a quién representás en esta causa. El tablero prioriza la prueba de esas partes
+              al mostrar pendientes; igual podés revisar y corregir cada medida antes de confirmar.
+            </ControlPruebaHelpHint>
+          </div>
           <ControlPruebaPartesRepresentadasPicker
             value={partesNorm}
             onChange={handlePartesChange}
@@ -172,9 +238,15 @@ export function ControlPruebaImportPreviewDialog({
             )}
 
             <div className="flex items-center justify-between gap-2 sticky top-0 z-10 bg-background/95 backdrop-blur-sm py-1">
-              <p className="text-sm font-medium">
-                Ítems a importar ({selected.size}/{preview.items.length})
-              </p>
+              <div className="flex items-center gap-1">
+                <p className="text-sm font-medium">
+                  Ítems a importar ({selected.size}/{preview.items.length})
+                </p>
+                <ControlPruebaHelpHint label="Ayuda para revisar medidas">
+                  Podés desmarcar, editar la descripción, cambiar la parte o eliminar un ítem. Solo
+                  las medidas seleccionadas se incorporan al confirmar.
+                </ControlPruebaHelpHint>
+              </div>
               <label className="flex items-center gap-2 text-xs cursor-pointer">
                 <Checkbox checked={allSelected} onCheckedChange={(v) => toggleAll(Boolean(v))} />
                 Seleccionar todos
@@ -202,21 +274,33 @@ export function ControlPruebaImportPreviewDialog({
           </div>
         </div>
 
-        <DialogFooter className="shrink-0 gap-2 sm:gap-0 border-t pt-3">
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={confirming}>
-            Volver
-          </Button>
-          <Button
-            onClick={() => onConfirm([...selected])}
-            disabled={confirming || selected.size === 0}
-          >
-            {confirming ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <CheckCircle2 className="mr-2 h-4 w-4" />
-            )}
-            Confirmar import ({selected.size})
-          </Button>
+        <DialogFooter className="shrink-0 gap-2 sm:flex-row sm:items-center sm:justify-between border-t pt-3">
+          <div className="flex items-center gap-1 sm:mr-auto">
+            <p className="text-[11px] text-muted-foreground">
+              {selected.size} medida{selected.size === 1 ? '' : 's'} lista{selected.size === 1 ? '' : 's'} para incorporar.
+            </p>
+            <ControlPruebaHelpHint label="Ayuda para confirmar la importación">
+              Al confirmar, las medidas seleccionadas quedan guardadas en el expediente. Si volvés
+              atrás sin confirmar, el análisis no se incorpora al control.
+            </ControlPruebaHelpHint>
+          </div>
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
+            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={confirming}>
+              Volver
+            </Button>
+            <Button
+              className="min-w-[13rem] shadow-sm"
+              onClick={() => onConfirm([...selected])}
+              disabled={confirming || selected.size === 0}
+            >
+              {confirming ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <CheckCircle2 className="mr-2 h-4 w-4" />
+              )}
+              Confirmar e incorporar al control
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

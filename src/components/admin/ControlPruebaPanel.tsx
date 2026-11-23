@@ -7,6 +7,18 @@ import { cn, safeResJson } from '@/lib/utils';
 import { ControlPruebaItemsTable } from '@/components/admin/ControlPruebaItemsTable';
 import { ControlPruebaImportPreviewDialog } from '@/components/admin/ControlPruebaImportPreviewDialog';
 import { ControlPruebaPartesRepresentadasPicker } from '@/components/admin/ControlPruebaPartesRepresentadasPicker';
+import { ControlPruebaOnboardingDialog } from '@/components/admin/ControlPruebaOnboardingDialog';
+import { ControlPruebaImportStepper } from '@/components/admin/ControlPruebaImportStepper';
+import { ControlPruebaEmptyItemsState } from '@/components/admin/ControlPruebaEmptyItemsState';
+import { ControlPruebaTrialBanner } from '@/components/admin/ControlPruebaTrialBanner';
+import { ControlPruebaHelpHint } from '@/components/admin/ControlPruebaHelpHint';
+import {
+  hasControlPruebaOnboardingSeen,
+} from '@/lib/control-prueba-onboarding';
+import {
+  PDF_FILE_HELP,
+  pdfExtractErrorCopy,
+} from '@/lib/control-prueba-import-ux';
 import { useExpedienteIaConsent } from '@/components/ExpedienteIaConsentDialog';
 import { downloadBlob, exportControlPruebaExcel, exportControlPruebaJson, exportControlPruebaPdf, exportControlPruebaRevisionText, exportFilename } from '@/lib/control-prueba-export';
 import { patchItemConHistorial } from '@/lib/control-prueba-item-utils';
@@ -53,6 +65,8 @@ import {
   crearOficioReiteracion,
   evaluarOficioAclaracionAutomatico,
   evaluarOficioReiteracionAutomatico,
+  oficioPlazoVencido,
+  usaFlujoOficio,
 } from '@/lib/control-prueba-oficio';
 import { crearMovimientoPericial, estadoAgregadoPruebaChip, itemVisibleConFiltroEstado } from '@/lib/control-prueba-pericial-movimientos';
 import { patchEstadoPruebaOfrecida, esCierrePrueba } from '@/lib/control-prueba-cierre';
@@ -112,6 +126,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -140,7 +155,9 @@ import {
 } from '@/components/ui/dropdown-menu';
 import {
   Check,
+  CheckCircle2,
   ChevronDown,
+  CircleHelp,
   CloudOff,
   Download,
   ExternalLink,
@@ -332,7 +349,7 @@ function resetImportWizard() {
     importFuero: '',
     importJuzgado: '',
     importExpedienteUrl: '',
-    importMergeMode: 'replace' as 'append' | 'replace' | 'reconcile',
+    importMergeMode: 'reconcile' as 'append' | 'replace' | 'reconcile',
     importPartesRepresentadas: [] as ParteRepresentadaPrueba[],
     importStep: '',
     extracting: false,
@@ -351,7 +368,7 @@ export function ControlPruebaPanel() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
-  const [estadoFilter, setEstadoFilter] = useState<PruebaEstado | 'all'>('pendiente_produccion');
+  const [estadoFilter, setEstadoFilter] = useState<PruebaEstado | 'all'>('all');
   const [highlightItemId, setHighlightItemId] = useState<string | null>(null);
   const [filtroTipo, setFiltroTipo] = useState<string>('all');
   const [filtroParte, setFiltroParte] = useState<string>('all');
@@ -386,6 +403,12 @@ export function ControlPruebaPanel() {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [importStep, setImportStep] = useState('');
   const [importAnalysisError, setImportAnalysisError] = useState<string | null>(null);
+  const [importExtractError, setImportExtractError] = useState<{
+    code?: string;
+    message: string;
+  } | null>(null);
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
+  const boardRef = useRef<HTMLDivElement>(null);
   const [lastImportSummary, setLastImportSummary] = useState<{
     itemsAdded: number;
     pdfFileName: string;
@@ -462,6 +485,16 @@ export function ControlPruebaPanel() {
   useEffect(() => {
     void loadExpedientes();
   }, [loadExpedientes]);
+
+  const expedienteCount = expedientes.length;
+  const deepLinkId = searchParams.get('id');
+  useEffect(() => {
+    if (loading) return;
+    if (hasControlPruebaOnboardingSeen()) return;
+    if (expedienteCount > 0) return;
+    if (deepLinkId) return;
+    setOnboardingOpen(true);
+  }, [loading, expedienteCount, deepLinkId]);
 
   const syncExpedienteInUrl = useCallback(
     (id: string | null) => {
@@ -563,7 +596,7 @@ export function ControlPruebaPanel() {
   }, [selectedId]);
 
   useEffect(() => {
-    setEstadoFilter('pendiente_produccion');
+    setEstadoFilter('all');
     setFiltroTipo('all');
     setFiltroParte('all');
     setBusquedaItem('');
@@ -837,7 +870,10 @@ export function ControlPruebaPanel() {
         selectExpediente(json.expediente.id);
         setCreateOpen(false);
         setCreateForm(EMPTY_FORM);
-        toast({ title: 'Expediente creado' });
+        toast({
+          title: 'Expediente creado',
+          description: 'Quedó vacío. Importá un PDF para analizar la prueba o cargá las medidas a mano.',
+        });
         void loadExpedientes();
       } else {
         toast({ variant: 'destructive', title: 'Error', description: json.error });
@@ -977,11 +1013,15 @@ export function ControlPruebaPanel() {
     setExtracting(reset.extracting);
     setAnalyzing(reset.analyzing);
     setImportAnalysisError(null);
+    setImportExtractError(null);
+    setImportPreview(null);
+    setPreviewOpen(false);
   };
 
   const handleExtractPdf = async (file: File) => {
     setExtracting(true);
-    setImportStep('Extrayendo texto del PDF (sin IA)...');
+    setImportExtractError(null);
+    setImportStep('Extrayendo el texto del PDF. Esta etapa no usa inteligencia artificial.');
     setImportExtract(null);
     try {
       let textoCompleto: string;
@@ -1048,22 +1088,17 @@ export function ControlPruebaPanel() {
       setImportJuzgado(metadata.juzgado ?? '');
       toast({
         title: 'Texto extraído',
-        description: `${numPages} págs · ${texto.length.toLocaleString('es-AR')} caracteres. Revisá carátula y nº antes de usar IA.`,
+        description: `${numPages} págs · ${texto.length.toLocaleString('es-AR')} caracteres. El análisis con IA comienza cuando lo solicites.`,
       });
     } catch (err) {
       const code = err instanceof PdfExtractError ? err.code : undefined;
-      const message =
-        err instanceof PdfExtractError
-          ? err.message
-          : err instanceof Error
-            ? err.message
-            : 'No se pudo extraer texto';
+      const copy = pdfExtractErrorCopy(code);
+      setImportExtractError({ code, message: copy.description });
       toast({
         variant: 'destructive',
-        title: code === 'SCANNED_PDF' ? 'PDF sin texto legible' : 'Error al leer PDF',
-        description: message,
+        title: copy.title,
+        description: copy.recommendation,
       });
-      setImportFile(null);
     } finally {
       setExtracting(false);
       setImportStep('');
@@ -1085,6 +1120,7 @@ export function ControlPruebaPanel() {
     }
     setImportFile(file);
     setImportExtract(null);
+    setImportExtractError(null);
     setImportCaratula('');
     setImportNumeroExpediente('');
     setImportFuero('');
@@ -1111,7 +1147,7 @@ export function ControlPruebaPanel() {
     }
     setAnalyzing(true);
     setImportAnalysisError(null);
-    setImportStep('Analizando prueba ofrecida con IA (puede tardar 1–2 min)...');
+    setImportStep('Identificando las medidas probatorias con inteligencia artificial. Puede tardar uno o dos minutos.');
     try {
       const res = await adminFetch('/api/admin/control-prueba/analyze-text', {
         method: 'POST',
@@ -1256,17 +1292,12 @@ export function ControlPruebaPanel() {
         setImportPreview(null);
         closeImportDialog();
         toast({
-          title: 'Control de prueba armado',
-          description: `${json.import?.itemsAdded ?? 0} ítems importados${
-            json.import?.filter?.descartados
-              ? ` · ${json.import.filter.descartados} actos procesales descartados`
-              : ''
-          }${
-            json.import?.oficiosAutenticidad
-              ? ` · ${json.import.oficiosAutenticidad} oficios de autenticidad`
-              : ''
-          }.`,
+          title: 'El control de prueba está listo',
+          description: `Se incorporaron ${json.import?.itemsAdded ?? 0} medidas y diligencias al expediente.`,
         });
+        window.setTimeout(() => {
+          boardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 120);
         void loadExpedientes();
       } else {
         toast({ variant: 'destructive', title: 'Error al confirmar import', description: json.error });
@@ -1279,6 +1310,24 @@ export function ControlPruebaPanel() {
   };
 
   const importBusy = extracting || analyzing || confirmingImport;
+  const canCreateNew = quota == null || quota.canCreate;
+  const hasMedidasCargadas = draftItems.length > 0;
+  const filtrosOcultanResultados =
+    hasMedidasCargadas &&
+    (estadoFilter !== 'all' || filtroTipo !== 'all' || filtroParte !== 'all' || Boolean(busquedaItem.trim()));
+  const importProgress = {
+    hasFile: Boolean(importFile || importExtract),
+    extracting,
+    extracted: Boolean(importExtract),
+    analyzing,
+    hasPreview: Boolean(importPreview),
+    reviewing: previewOpen,
+    confirming: confirmingImport,
+  };
+
+  const openImportDialog = () => setImportOpen(true);
+  const openCreateDialog = () => setCreateOpen(true);
+  const openOnboarding = () => setOnboardingOpen(true);
 
   const handleDeleteExpediente = async () => {
     if (!selected || !confirm('¿Eliminar este control de prueba?')) return;
@@ -1346,6 +1395,15 @@ export function ControlPruebaPanel() {
         if (next.tipo === 'documental' || patch.documental) {
           next = ensureDocumentalMeta(next);
         }
+        if (usaFlujoOficio(next) && String(next.estado) === 'no_contestado') {
+          next = {
+            ...next,
+            diligencia: {
+              ...next.diligencia,
+              plazoVencido: Boolean(next.diligencia?.plazoVencido) || oficioPlazoVencido(next),
+            },
+          };
+        }
         return next;
       });
 
@@ -1364,14 +1422,18 @@ export function ControlPruebaPanel() {
       if (resultOficio.creado) {
         resultItems = resultOficio.items;
         nuevoOficioAclaracionId = resultOficio.creado.id;
-        alertasSubproceso.push('Se creó oficio de aclaración en Comunicaciones.');
+        alertasSubproceso.push(
+          'Pedido de aclaración creado. El anterior queda en el historial. Cuando esté en el expediente, actualizá con el PDF (reconciliar).',
+        );
       }
 
       const resultReiteracion = evaluarOficioReiteracionAutomatico(resultItems, id, anterior, patch);
       if (resultReiteracion.creado) {
         resultItems = resultReiteracion.items;
         nuevoOficioReiteracionId = resultReiteracion.creado.id;
-        alertasSubproceso.push('Se creó oficio de reiteración en Comunicaciones.');
+        alertasSubproceso.push(
+          'Pedido de reiteración creado. El anterior queda en el historial. Cuando esté en el expediente, actualizá con el PDF (reconciliar).',
+        );
       }
 
       if (resultItems.length !== prev.length) {
@@ -1508,7 +1570,7 @@ export function ControlPruebaPanel() {
       return result.items.map((item, index) => ({ ...item, orden: index + 1 }));
     });
     if (creado) {
-      toast({ title: 'Nueva cédula de notificación creada (reintento)' });
+      toast({ title: 'Nueva cédula de notificación creada' });
     }
   };
 
@@ -1535,7 +1597,10 @@ export function ControlPruebaPanel() {
       return result.items.map((item, index) => ({ ...item, orden: index + 1 }));
     });
     if (nuevoId) {
-      toast({ title: 'Oficio de aclaración creado en Comunicaciones' });
+      toast({
+        title: 'Oficio de aclaración creado',
+        description: 'El pedido anterior queda en el historial. Cuando esté en el expediente, actualizá con el PDF (reconciliar).',
+      });
       handleFocusItem(nuevoId);
     }
   };
@@ -1549,7 +1614,10 @@ export function ControlPruebaPanel() {
       return result.items.map((item, index) => ({ ...item, orden: index + 1 }));
     });
     if (nuevoId) {
-      toast({ title: 'Oficio de reiteración creado en Comunicaciones' });
+      toast({
+        title: 'Oficio de reiteración creado',
+        description: 'El pedido anterior queda en el historial. Cuando esté en el expediente, actualizá con el PDF (reconciliar).',
+      });
       handleFocusItem(nuevoId);
     }
   };
@@ -1904,9 +1972,29 @@ export function ControlPruebaPanel() {
           {[nombreParte, `${total} ítem${total === 1 ? '' : 's'}`].filter(Boolean).join(' · ')}
         </p>
         {total === 0 ? (
-          <p className="rounded-lg border border-dashed py-8 text-center text-sm text-muted-foreground">
-            Ningún ítem de esta parte coincide con los filtros activos.
-          </p>
+          <div className="rounded-lg border border-dashed py-8 text-center text-sm text-muted-foreground space-y-2 px-4">
+            {conteoTotalPorParteTab[grupoId] === 0 ? (
+              <p>Esta parte todavía no tiene medidas cargadas.</p>
+            ) : (
+              <>
+                <p>Ningún ítem de esta parte coincide con los filtros activos. El expediente sí tiene medidas; están ocultas por el filtro.</p>
+                {filtrosOcultanResultados && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setEstadoFilter('all');
+                      setFiltroTipo('all');
+                      setFiltroParte('all');
+                      setBusquedaItem('');
+                    }}
+                  >
+                    Limpiar filtros
+                  </Button>
+                )}
+              </>
+            )}
+          </div>
         ) : (
         <div className="overflow-x-auto">
           <div className="min-w-[1024px] space-y-3">
@@ -1985,65 +2073,64 @@ export function ControlPruebaPanel() {
 
   return (
     <div className="space-y-6">
-      {quota && (
-        <Alert>
-          <AlertDescription className="text-sm">
-            Prueba: {quota.used}/{quota.limit} controles este mes
-            {quota.remaining > 0
-              ? ` · te quedan ${quota.remaining}`
-              : ' · límite alcanzado; podés seguir editando los existentes'}
-            {quota.monthlyResetAt && (
-              <span className="text-muted-foreground">
-                {' '}
-                · se renueva el{' '}
-                {new Date(quota.monthlyResetAt).toLocaleDateString('es-AR', {
-                  day: '2-digit',
-                  month: 'short',
-                })}
-              </span>
-            )}
-          </AlertDescription>
-        </Alert>
-      )}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <ControlPruebaTrialBanner quota={quota} />
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h2 className="text-xl font-semibold font-headline flex items-center gap-2">
             <FileSearch className="h-5 w-5 text-primary" />
             Control de prueba
           </h2>
           <p className="text-sm text-muted-foreground mt-1">
-            Seguimiento dinámico de prueba ofrecida y producida, con links directos al expediente virtual MEV/PJN.
+            Importá el PDF, analizá la prueba con IA y seguí su producción. Crear un expediente vacío no dispara el análisis.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button variant="ghost" size="sm" onClick={openOnboarding}>
+            <CircleHelp className="mr-2 h-4 w-4" />
+            ¿Cómo funciona?
+          </Button>
           <Button variant="outline" size="sm" onClick={() => void loadExpedientes()} disabled={loading}>
             <RefreshCw className={cn('mr-2 h-4 w-4', loading && 'animate-spin')} />
             Actualizar
           </Button>
+          <div className="flex items-center gap-1">
+            <Button
+              size="sm"
+              onClick={openImportDialog}
+              disabled={!canCreateNew && !selectedId}
+              title={
+                !canCreateNew && !selectedId
+                  ? 'Alcanzaste el límite de controles disponibles'
+                  : 'Subí el PDF de una causa para identificar la prueba con IA'
+              }
+            >
+              <Sparkles className="mr-2 h-4 w-4" />
+              Analizar expediente con IA
+            </Button>
+            <ControlPruebaHelpHint label="Diferencia entre analizar con IA y crear a mano">
+              <p>
+                <strong>Analizar con IA</strong> sube el PDF, extrae el texto y, cuando lo pedís,
+                identifica las medidas. Los resultados se revisan y se guardan al confirmar.
+              </p>
+              <p className="mt-2">
+                <strong>Crear manualmente</strong> abre un expediente vacío. La prueba hay que
+                cargarla después, con un PDF o ítem por ítem.
+              </p>
+            </ControlPruebaHelpHint>
+          </div>
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setImportOpen(true)}
-            disabled={quota != null && !quota.canCreate && !selectedId}
+            onClick={openCreateDialog}
+            disabled={!canCreateNew}
             title={
-              quota != null && !quota.canCreate && !selectedId
-                ? 'Alcanzaste el límite mensual de controles'
-                : undefined
-            }
-          >
-            <FileUp className="mr-2 h-4 w-4" />
-            Importar PDF
-          </Button>
-          <Button
-            size="sm"
-            onClick={() => setCreateOpen(true)}
-            disabled={quota != null && !quota.canCreate}
-            title={
-              quota != null && !quota.canCreate ? 'Alcanzaste el límite mensual de controles' : undefined
+              !canCreateNew
+                ? 'Alcanzaste el límite de controles disponibles'
+                : 'Creá un expediente vacío para cargar la prueba a mano'
             }
           >
             <Plus className="mr-2 h-4 w-4" />
-            Nuevo expediente
+            Crear manualmente
           </Button>
         </div>
       </div>
@@ -2152,29 +2239,72 @@ export function ControlPruebaPanel() {
 
       <div className="min-w-0 space-y-4">
           {!selected ? (
-            <Card>
-              <CardContent className="py-16 text-center text-muted-foreground space-y-4">
-                <FileSearch className="mx-auto h-10 w-10 opacity-40" />
-                <p>Seleccioná un expediente, creá uno nuevo o importá un PDF de la causa.</p>
-                <Button onClick={() => setImportOpen(true)}>
-                  <Sparkles className="mr-2 h-4 w-4" />
-                  Importar PDF y armar control de prueba
-                </Button>
-              </CardContent>
-            </Card>
+            <div className="grid gap-4 md:grid-cols-2">
+              <Card className="border-primary/30 bg-primary/5">
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Sparkles className="h-4 w-4 text-primary" />
+                    Analizar expediente con IA
+                  </CardTitle>
+                  <CardDescription>
+                    Subí el PDF de una causa judicial para identificar automáticamente la prueba
+                    ofrecida y organizar su seguimiento.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Button
+                    onClick={openImportDialog}
+                    disabled={!canCreateNew && !selectedId}
+                    className="w-full sm:w-auto"
+                  >
+                    <FileUp className="mr-2 h-4 w-4" />
+                    Analizar expediente con IA
+                  </Button>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Plus className="h-4 w-4" />
+                    Crear expediente manualmente
+                  </CardTitle>
+                  <CardDescription>
+                    Creá un expediente vacío para cargar y controlar las medidas probatorias por tu
+                    cuenta.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Button
+                    variant="outline"
+                    onClick={openCreateDialog}
+                    disabled={!canCreateNew}
+                    className="w-full sm:w-auto"
+                  >
+                    Crear manualmente
+                  </Button>
+                </CardContent>
+              </Card>
+            </div>
           ) : (
             <>
               {lastImportSummary && selected.pdfFileName === lastImportSummary.pdfFileName && (
-                <Card className="border-primary/20 bg-primary/5">
-                  <CardContent className="py-4 text-sm">
-                    <p className="font-medium flex items-center gap-2">
-                      <Sparkles className="h-4 w-4 text-primary" />
-                      Importado: {lastImportSummary.pdfFileName}
-                    </p>
+                <Card className="border-emerald-200 bg-emerald-50/70">
+                  <CardContent className="py-4 text-sm space-y-3">
+                    <div className="flex items-start gap-2">
+                      <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-700" />
+                      <div>
+                        <p className="font-medium text-emerald-950">El control de prueba está listo.</p>
+                        <p className="text-muted-foreground mt-1">
+                          Se incorporaron {lastImportSummary.itemsAdded} medidas y diligencias al
+                          expediente. Ya podés consultar su estado, registrar avances y controlar las
+                          actuaciones pendientes.
+                        </p>
+                      </div>
+                    </div>
                     {lastImportSummary.resumen && (
-                      <p className="text-muted-foreground mt-1">{lastImportSummary.resumen}</p>
+                      <p className="text-muted-foreground">{lastImportSummary.resumen}</p>
                     )}
-                    <div className="mt-2 flex flex-wrap gap-2">
+                    <div className="flex flex-wrap gap-2">
                       {(lastImportSummary.byCategoria?.prueba ?? 0) > 0 && (
                         <Badge variant="outline">Prueba: {lastImportSummary.byCategoria!.prueba}</Badge>
                       )}
@@ -2185,6 +2315,13 @@ export function ControlPruebaPanel() {
                         <Badge variant="outline">Audiencias: {lastImportSummary.byCategoria!.audiencia}</Badge>
                       )}
                     </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => boardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                    >
+                      Ver tablero del expediente
+                    </Button>
                   </CardContent>
                 </Card>
               )}
@@ -2234,6 +2371,13 @@ export function ControlPruebaPanel() {
                             </Button>
                           )}
                         </div>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <p className="text-sm font-medium">Parte representada</p>
+                        <ControlPruebaHelpHint label="Ayuda sobre la parte representada">
+                          Marcá a quién representás. El badge de pendientes suma la prueba de esas
+                          partes; cada pestaña sigue mostrando su propio listado.
+                        </ControlPruebaHelpHint>
                       </div>
                       <ControlPruebaPartesRepresentadasPicker
                         value={partesRepresentadas}
@@ -2303,7 +2447,7 @@ export function ControlPruebaPanel() {
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
-                      <Button variant="outline" onClick={() => setImportOpen(true)} disabled={saving || !canEditSelected}>
+                      <Button variant="outline" onClick={openImportDialog} disabled={saving || !canEditSelected}>
                         <FileUp className="mr-2 h-4 w-4" />
                         Importar PDF
                       </Button>
@@ -2357,13 +2501,28 @@ export function ControlPruebaPanel() {
                 </CardHeader>
               </Card>
 
-              <div className="space-y-4">
+              <div ref={boardRef} id="control-prueba-tablero" className="space-y-4">
+                {!hasMedidasCargadas ? (
+                  <ControlPruebaEmptyItemsState
+                    onImportPdf={openImportDialog}
+                    onAddManual={() => addItem({ categoria: 'prueba' })}
+                    canEdit={canEditSelected}
+                  />
+                ) : (
+                <>
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <h3 className="text-base font-semibold">Control del expediente</h3>
-                    <p className="text-sm text-muted-foreground">
-                      Primero elegí la parte · después filtrá por estado de su prueba
-                    </p>
+                  <div className="flex items-start gap-1">
+                    <div>
+                      <h3 className="text-base font-semibold">Control del expediente</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Primero elegí la parte · después filtrá por estado de su prueba
+                      </p>
+                    </div>
+                    <ControlPruebaHelpHint label="Ayuda para actualizar estados">
+                      Cada medida tiene un estado procesal. Actualizalo cuando haya un avance
+                      (audiencia fijada, oficio contestado, prueba producida). Los filtros no
+                      eliminan medidas: si no ves un ítem, limpiá el estado o la búsqueda.
+                    </ControlPruebaHelpHint>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     {(estadoFilter !== 'all' ||
@@ -2652,13 +2811,7 @@ export function ControlPruebaPanel() {
                     {renderMejorProveerTab()}
                   </TabsContent>
                 </Tabs>
-
-                {draftItems.length === 0 && (
-                  <Card>
-                    <CardContent className="py-10 text-center text-muted-foreground text-sm">
-                      Sin ítems cargados. Importá un PDF o agregá prueba, diligencias o audiencias.
-                    </CardContent>
-                  </Card>
+                </>
                 )}
               </div>
 
@@ -2680,18 +2833,28 @@ export function ControlPruebaPanel() {
         </div>
 
       <Dialog open={importOpen} onOpenChange={(open) => !importBusy && (open ? setImportOpen(true) : closeImportDialog())}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Importar PDF de la causa</DialogTitle>
+            <DialogTitle>Analizar expediente con IA</DialogTitle>
+            <DialogDescription>
+              Subir el PDF extrae el texto. El análisis con IA empieza cuando lo solicitás. Los
+              resultados se revisan y se guardan únicamente al confirmar.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
-            <p className="text-sm text-muted-foreground">
-              <strong>Paso 1</strong> extrae texto localmente (sin costo de IA).{' '}
-              <strong>Paso 2</strong> analiza la prueba ofrecida solo cuando confirmás.
-            </p>
+            <ControlPruebaImportStepper progress={importProgress} />
 
             <div>
-              <Label>Paso 1 — Archivo PDF</Label>
+              <div className="flex items-center gap-1">
+                <Label>Archivo PDF</Label>
+                <ControlPruebaHelpHint label="Ayuda para importar el PDF">
+                  <p>{PDF_FILE_HELP.body}</p>
+                  <p className="mt-2">{PDF_FILE_HELP.warning}</p>
+                </ControlPruebaHelpHint>
+              </div>
+              <p className="mt-1 text-xs font-medium text-foreground">{PDF_FILE_HELP.title}</p>
+              <p className="text-xs text-muted-foreground">{PDF_FILE_HELP.body}</p>
+              <p className="mt-1 text-xs text-muted-foreground">{PDF_FILE_HELP.warning}</p>
               <div
                 role="button"
                 tabIndex={importBusy ? -1 : 0}
@@ -2749,6 +2912,15 @@ export function ControlPruebaPanel() {
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   {importStep}
                 </p>
+              )}
+              {importExtractError && !extracting && (
+                <Alert variant="destructive" className="mt-3">
+                  <AlertDescription className="space-y-1 text-xs">
+                    <p className="font-medium">{pdfExtractErrorCopy(importExtractError.code).title}</p>
+                    <p>{pdfExtractErrorCopy(importExtractError.code).description}</p>
+                    <p>{pdfExtractErrorCopy(importExtractError.code).recommendation}</p>
+                  </AlertDescription>
+                </Alert>
               )}
             </div>
 
@@ -2825,6 +2997,13 @@ export function ControlPruebaPanel() {
                   </div>
                 )}
 
+                <div className="flex items-center gap-1">
+                  <p className="text-xs font-medium">Parte representada</p>
+                  <ControlPruebaHelpHint label="Ayuda sobre la parte representada">
+                    Indicá a quién representás. Podés ajustarlo otra vez al revisar los resultados,
+                    antes de confirmar la importación.
+                  </ControlPruebaHelpHint>
+                </div>
                 <ControlPruebaPartesRepresentadasPicker
                   value={importPartesRepresentadas}
                   onChange={setImportPartesRepresentadas}
@@ -2857,32 +3036,38 @@ export function ControlPruebaPanel() {
             {importAnalysisError && !analyzing && (
               <Alert variant="destructive">
                 <AlertDescription className="text-xs leading-relaxed space-y-1">
-                  <p className="font-medium">Error en el análisis IA</p>
+                  <p className="font-medium">No se pudo completar el análisis</p>
                   <p>{importAnalysisError}</p>
                   <p className="text-muted-foreground">
-                    Detalle técnico: consola del navegador (F12) y terminal donde corre{' '}
-                    <code className="text-[10px]">npm run dev</code> — buscá{' '}
-                    <code className="text-[10px]">[control-prueba/analyze-text]</code>.
+                    Podés volver a intentar el análisis. Si el problema continúa, verificá que el PDF
+                    tenga las actuaciones de ofrecimiento de prueba.
                   </p>
                 </AlertDescription>
               </Alert>
             )}
           </div>
-          <DialogFooter className="gap-2 sm:gap-0">
+          <DialogFooter className="gap-2 sm:justify-between">
             <Button variant="outline" onClick={closeImportDialog} disabled={importBusy}>
               Cancelar
             </Button>
-            <Button
-              onClick={() => ensureConsent(() => void handleAnalyzeText())}
-              disabled={importBusy || !importExtract}
-            >
-              {analyzing ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Sparkles className="mr-2 h-4 w-4" />
+            <div className="flex flex-col-reverse gap-2 sm:flex-row">
+              {importPreview && !previewOpen && (
+                <Button variant="secondary" onClick={() => setPreviewOpen(true)} disabled={importBusy}>
+                  Revisar resultados
+                </Button>
               )}
-              Paso 2 — Revisar import (IA)
-            </Button>
+              <Button
+                onClick={() => ensureConsent(() => void handleAnalyzeText())}
+                disabled={importBusy || !importExtract}
+              >
+                {analyzing ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Sparkles className="mr-2 h-4 w-4" />
+                )}
+                {importPreview ? 'Volver a analizar con IA' : 'Analizar con IA'}
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -2901,9 +3086,19 @@ export function ControlPruebaPanel() {
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Nuevo control de prueba</DialogTitle>
+            <DialogTitle>Crear expediente manualmente</DialogTitle>
+            <DialogDescription>
+              Se crea un expediente vacío. La prueba no se analiza sola: después podés importar un
+              PDF o cargar las medidas a mano.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-2">
+            <Alert>
+              <AlertDescription className="text-xs">
+                Este camino no identifica la prueba automáticamente. Si tenés el PDF de la causa,
+                usá «Analizar expediente con IA».
+              </AlertDescription>
+            </Alert>
             <div>
               <Label>Carátula *</Label>
               <Input
@@ -2951,6 +3146,19 @@ export function ControlPruebaPanel() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ControlPruebaOnboardingDialog
+        open={onboardingOpen}
+        onOpenChange={setOnboardingOpen}
+        onStartWithPdf={openImportDialog}
+        onCreateManual={openCreateDialog}
+        canCreate={canCreateNew}
+        quotaHint={
+          !canCreateNew
+            ? 'Alcanzaste el límite de controles disponibles. Podés seguir editando los expedientes existentes.'
+            : null
+        }
+      />
 
       {consentDialog}
 

@@ -10,7 +10,8 @@ export default function ControlPruebaPage() {
         <div>
           <h1 className="text-3xl font-bold font-headline">Control de prueba</h1>
           <p className="text-muted-foreground">
-            Seguimiento de prueba ofrecida, diligencias, audiencias y medidas de mejor proveer.
+            Importá el PDF de la causa, analizá la prueba con inteligencia artificial y controlá su
+            producción. Versión de prueba en etapa de evaluación.
           </p>
         </div>
         <Suspense
